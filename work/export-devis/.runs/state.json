@@ -1,6 +1,6 @@
 {
   "T1": "done",
-  "T2": "blocked",
-  "T3": "skipped",
-  "CP-1": "skipped"
+  "T2": "done",
+  "T3": "pending",
+  "CP-1": "pending"
 }
