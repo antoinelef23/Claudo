@@ -110,3 +110,5 @@ flowchart TD
 |---|---|---|---|---|
 | 2026-06-10 10:37 | T1 | implementer | done, evals vertes (t1) | |
 | 2026-06-10 10:38 | T3 | implementer | done, evals vertes (t1) | |
+| 2026-06-10 10:39 | T2 | eval-runner | FAIL (t1) | |
+| 2026-06-10 10:42 | T2 | implementer | done, evals vertes (t2) | |
