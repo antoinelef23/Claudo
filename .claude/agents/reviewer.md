@@ -15,3 +15,8 @@ Tu prépares la revue humaine de l'Owner (et de l'Owner_N-1). Tu ne modifies rie
 
 ## Sortie
 Un rapport court : ✅ points conformes / ⚠️ écarts à arbitrer / ❌ bloquants, avec fichier:ligne. L'Owner décide — toi, tu éclaires.
+
+Termine IMPÉRATIVEMENT par une ligne seule, machine-parsable :
+- `VERDICT: PASS` — zéro écart. Sur un checkpoint `mode: auto`, cette ligne VALIDE le checkpoint sans humain : ne la rends que si tout est conforme, au moindre doute c'est WARN.
+- `VERDICT: WARN` — écarts à arbitrer par l'Owner (le checkpoint bascule en validation humaine).
+- `VERDICT: BLOCK` — bloquant, retour aux tâches.

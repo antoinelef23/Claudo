@@ -61,27 +61,60 @@ flowchart TD
 2. **On parallélise les tâches sans dépendance de fichier.** Deux tâches peuvent tourner en parallèle si leurs `files_touched` sont disjoints ET qu'aucune n'est `depends_on` de l'autre. Sinon : séquence stricte.
 3. **Tout point de non-retour est un checkpoint humain.** Génération de plan, merge, déploiement : l'agent propose, l'humain dispose (pattern Cognition).
 
-## Mode automatique — tout tourne en fond
+## Mode automatique — le run quasi-autonome
 
-Trois mécanismes câblés :
+L'objectif : entre deux décisions humaines, **rien ne nécessite un humain**. La décision humaine ne
+disparaît pas, elle se déplace : l'Owner décide UNE FOIS, à l'approbation du plan (quels checkpoints
+sont `auto`, lesquels restent `blocking`), puis le run avance seul jusqu'à la prochaine vraie décision.
 
-1. **Eval gate automatique** (`.claude/settings.json`) : hooks `Stop` + `SubagentStop` → dès qu'un agent veut terminer avec du code Python modifié, `make evals` s'exécute. Rouge = l'agent est renvoyé corriger automatiquement, avec la sortie d'erreur en contexte. Hook `PostToolUse` : ruff auto sur chaque fichier Python édité.
-2. **Orchestrateur de fond** (`scripts/orchestrate.py`) : parse tasks.md, construit le DAG, exécute les vagues de tâches **en parallèle** via `claude -p` (headless), gate d'evals + commit auto après chaque tâche (max 3 itérations puis escalade), **pause à chaque checkpoint** avec notification macOS.
-3. **Validation humaine** (`scripts/approve.sh`) : les checkpoints et le merge restent humains — c'est le contrat de la méthode (pattern Cognition), pas une limite technique.
+### Les niveaux d'autonomie
+
+| Niveau | Commande | Pauses humaines |
+|---|---|---|
+| L0 — plan | `--dry-run` | tout (rien ne tourne) |
+| L1 — supervisé | `--supervised` | TOUS les checkpoints (les modes `auto` sont ignorés) |
+| L2 — croisière *(défaut)* | — | uniquement les checkpoints `blocking` du plan approuvé |
+| Toujours | — | le **merge** : jamais automatique, le plan-lint refuse un CP final `auto` |
+
+### Les garde-fous qui rendent l'autonomie sûre
+
+1. **Plan-lint** (`--validate`, ou `make validate FEATURE=…`) : DAG acyclique, IDs de spec existants,
+   `done_when` présents, chemins parallèles disjoints, CP final blocking. Un plan qui ne lint pas ne
+   s'exécute pas — c'est ce qui permet à l'Owner d'approuver une fois et de laisser tourner.
+2. **Verdict structuré** : chaque implementer termine par `STATUS: done` ou `STATUS: blocked — <raison>`.
+   Un agent bloqué sur un trou de spec (OQ) ne passe jamais pour fini ; il note la question dans
+   spec.md §8 et seul son sous-arbre s'arrête.
+3. **Anti-gate-vide** : une tâche qui implémente des IDs de spec ÉCHOUE si aucune eval n'est collectée
+   (`pytest -m eval --collect-only`). Un `make evals` vert avec zéro eval ne valide rien.
+4. **Verify par tâche** : la commande `verify` de tasks.md matérialise le `done_when` — vérifiée
+   mécaniquement après chaque agent, avant les evals.
+5. **Confinement d'échec** : failed/blocked ne neutralise que les dépendants (`skipped`) ; les autres
+   branches continuent. Le run se termine TOUJOURS sur un bilan, jamais sur un abandon à mi-course.
+6. **Commits scopés** : seuls les `files_touched` de la tâche sont stagés (sous verrou) — deux agents
+   parallèles ne se polluent pas ; le hors-scope est signalé, pas commité.
+7. **Checkpoints `auto` documentés** : avant chaque checkpoint (auto ou non), le rapport `reviewer` est
+   généré dans `.runs/CP-n-review.md`. Auto = evals vertes ET `VERDICT: PASS` ; au moindre doute,
+   bascule en validation humaine.
+8. **Eval gate de session** (`.claude/settings.json`) : hooks `Stop`/`SubagentStop` → un agent ne peut
+   pas terminer avec du code modifié et des evals rouges ; `PostToolUse` → ruff sur chaque édition.
 
 ```bash
-# 1. Le plan doit être validé : status: approved dans le frontmatter de tasks.md
+# 1. Plan-lint, puis approbation Owner (status: approved + modes des CP)
+python3 scripts/orchestrate.py work/ma-feature --validate
+
 # 2. Voir le plan d'exécution sans rien lancer
 python3 scripts/orchestrate.py work/ma-feature --dry-run
 
 # 3. Lancer en fond (caffeinate empêche la mise en veille)
-caffeinate -i python3 scripts/orchestrate.py work/ma-feature > .runs/run.log 2>&1 &
+caffeinate -i python3 scripts/orchestrate.py work/ma-feature > work/ma-feature/.runs/run.log 2>&1 &
 
-# 4. À chaque notification CHECKPOINT : revue, puis
+# 4. À chaque notification CHECKPOINT blocking : lire .runs/CP-n-review.md, puis
 scripts/approve.sh CP-1 work/ma-feature
 ```
 
-Reprise sur incident : l'état est dans `<feature>/.runs/state.json` — relancer la même commande reprend où ça s'était arrêté. Prérequis : `claude` CLI authentifié, `uv` installé.
+Reprise sur incident : l'état est dans `<feature>/.runs/state.json` — relancer la même commande reprend
+où ça s'était arrêté (les nœuds `done` ne rejouent pas ; les `blocked` retentent après ta réponse aux OQ).
+Prérequis : `claude` CLI authentifié, `uv` installé.
 
 ## Démarrer une unité de travail
 

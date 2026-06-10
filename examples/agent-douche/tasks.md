@@ -40,6 +40,7 @@ flowchart TD
 - **files_touched :** `src/app/`, `pyproject.toml`, `.github/`, `tests/`
 - **prompt :** Initialise le service selon design.md ADR-1 : layout src/app avec modules vision/render/matching vides, settings Pydantic, CI du pipeline de référence, `make evals` branché sur `pytest -m eval`.
 - **done_when :** CI verte, healthcheck déployé sur env de dev
+- **verify :** `make -s test`
 
 ### T2 — Module vision : analyse de la photo
 - **agent :** implementer · **depends_on :** [T1] · **parallel_group :** B
@@ -47,6 +48,7 @@ flowchart TD
 - **anchored_on :** ADR-2 · **files_touched :** `src/app/vision/`, `tests/vision/`
 - **prompt :** Implémente l'analyse photo via Gemini : détection pièce/éléments, refus hors-sujet (INV-6), floutage visages (BHV-1c), stockage éphémère TTL 24 h (INV-4). Tests d'abord, dont les 30 images pièges d'EVAL-4.
 - **done_when :** tests vision verts + EVAL-4 verte + latence p95 ≤ 10 s sur banc local
+- **verify :** `uv run pytest -q tests/vision`
 
 ### T3 — Contrats catalogue/panier + mocks
 - **agent :** implementer · **depends_on :** [T1] · **parallel_group :** B *(∥ T2 : fichiers disjoints)*
@@ -71,6 +73,7 @@ flowchart TD
 
 ### CP-1 — CHECKPOINT : vertical slice de bout en bout
 - **trigger :** auto quand [T4, T5] done · **validator :** Owner
+- **mode :** blocking *(démo à un humain — candidat `auto` une fois le banc d'evals visuel fiabilisé)*
 - **reviews :** démo photo → 3 ambiances → produits (sur mocks), diff complet, rapport reviewer, EVAL-1/2/4/5
 - **on_reject :** retour tâches concernées ; trou de spec → amender spec.md d'abord
 
@@ -87,6 +90,7 @@ flowchart TD
 
 ### CP-2 — CHECKPOINT : données réelles
 - **trigger :** auto quand [T6, T7] done · **validator :** Owner + métier
+- **mode :** blocking *(donnée réelle + métier dans la boucle : jamais auto)*
 - **reviews :** démo sur catalogue réel, EVAL-3 (llm-judge ≥ 8/10), coût par rendu vs budget
 
 ### T8 — Panier + services (livraison, pose, devis)
@@ -101,6 +105,7 @@ flowchart TD
 
 ### CP-3 — CHECKPOINT : merge & rollout
 - **trigger :** auto quand T9 done · **validator :** Owner (revu par Owner_N-1)
+- **mode :** blocking *(merge : le plan-lint refuse `auto` ici)*
 - **reviews :** evals complètes, audit trail, checklist Adeo Global Ready, plan rollout 5 %
 - **on_accept :** merge (humain) + flag interne — **jamais automatique**
 

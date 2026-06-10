@@ -17,7 +17,7 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 ## Hard rules
 
 - **Eval gate** : pas d'eval verte, pas de merge. Les evals sont définies dans spec.md (section Evals) et exécutables via `make evals`.
-- **Checkpoint humain** : ne jamais exécuter un plan (tasks.md) sans validation explicite de l'Owner. Ne jamais merger, déployer, ou supprimer des données sans accord humain.
+- **Checkpoint humain** : ne jamais exécuter un plan (tasks.md) sans validation explicite de l'Owner. Ne jamais merger, déployer, ou supprimer des données sans accord humain. Un checkpoint peut être `mode: auto` (auto-validé si evals vertes + reviewer PASS) — mais ce choix appartient à l'Owner au moment d'approuver le plan, et le checkpoint final (merge) est toujours humain.
 - **Traçabilité** : chaque commit référence les IDs de la spec qu'il implémente (ex: `feat: matching produits [BHV-3, INV-2]`).
 - **Design ancré** : ne jamais inventer une architecture. S'adosser aux repos de référence listés dans design.md §2. Si aucun pattern de référence ne couvre le besoin, le signaler dans une ADR plutôt qu'improviser.
 - **Spec immuable en cours de tâche** : si l'implémentation révèle un trou dans la spec, on arrête, on amende la spec (commit séparé), puis on reprend.
