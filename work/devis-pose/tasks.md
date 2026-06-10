@@ -112,3 +112,5 @@ flowchart TD
 | 2026-06-10 10:38 | T3 | implementer | done, evals vertes (t1) | |
 | 2026-06-10 10:39 | T2 | eval-runner | FAIL (t1) | |
 | 2026-06-10 10:42 | T2 | implementer | done, evals vertes (t2) | |
+| 2026-06-10 15:07 | CP-1 | owner | checkpoint validé | |
+| 2026-06-10 15:08 | T4 | implementer | done, evals vertes (t1) | |
