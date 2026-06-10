@@ -64,3 +64,4 @@ flowchart TD
 |---|---|---|---|---|
 | 2026-06-10 15:17 | T2 | implementer | BLOCKED — OQ-1 (format contractuel d'export non décidé par le métier ; BHV-1/EVAL-1 non implémentables sans cette décision) | |
 | 2026-06-10 15:18 | T1 | implementer | done, evals vertes (t1) | |
+| 2026-06-10 15:21 | T2 | implementer | done, evals vertes (t1) | |
