@@ -53,10 +53,14 @@ ROOT = Path(__file__).resolve().parent.parent
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
 CLAUDE_ARGS = [
-    "--permission-mode", "acceptEdits", "--max-turns", "100",
+    "--permission-mode",
+    "acceptEdits",
+    "--max-turns",
+    "100",
     # headless : acceptEdits couvre les éditions, pas Bash — whitelist minimale pour
     # que l'implementer puisse exécuter ses tests (sinon il code à l'aveugle)
-    "--allowedTools", "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(git diff:*),Bash(git log:*)",
+    "--allowedTools",
+    "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(git diff:*),Bash(git log:*)",
 ]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
 
@@ -104,14 +108,19 @@ def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
         if dm:
             deps = [d.strip() for d in dm.group(1).split(",") if d.strip()]
         if is_cp:
-            tm = re.search(r"\*\*trigger\s*:?\*\*[^\n]*?quand\s+\[?([T\d\s,]+?)\]?\s+(?:sont\s+)?done", body)
+            tm = re.search(
+                r"\*\*trigger\s*:?\*\*[^\n]*?quand\s+\[?([T\d\s,]+?)\]?\s+(?:sont\s+)?done",
+                body,
+            )
             if tm:
                 deps = [d.strip() for d in tm.group(1).split(",") if d.strip()]
 
         pm = re.search(r"\*\*prompt\s*:?\*\*\s*\n?((?:\s*>.*\n?)+)", body)
         prompt = ""
         if pm:
-            prompt = "\n".join(l.strip().lstrip("> ") for l in pm.group(1).splitlines()).strip()
+            prompt = "\n".join(
+                line.strip().lstrip("> ") for line in pm.group(1).splitlines()
+            ).strip()
         if not prompt:
             pm = re.search(r"\*\*prompt\s*:?\*\*\s*([^\n]+)", body)
             if pm:
@@ -219,13 +228,19 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
         if n.is_checkpoint:
             continue
         if not n.done_when:
-            errors.append(f"{n.id} : done_when manquant (rien d'exécutable ne définit « fini »)")
+            errors.append(
+                f"{n.id} : done_when manquant (rien d'exécutable ne définit « fini »)"
+            )
         if not n.files:
-            errors.append(f"{n.id} : files_touched manquant ou sans backticks (parallélisme invérifiable)")
+            errors.append(
+                f"{n.id} : files_touched manquant ou sans backticks (parallélisme invérifiable)"
+            )
         if not n.prompt:
             warnings.append(f"{n.id} : prompt vide — l'implementer n'aura que le titre")
         if not n.verify:
-            warnings.append(f"{n.id} : pas de verify exécutable — le done_when ne sera pas vérifié mécaniquement")
+            warnings.append(
+                f"{n.id} : pas de verify exécutable — le done_when ne sera pas vérifié mécaniquement"
+            )
 
     # IDs de spec
     spec_path = feature / "spec.md"
@@ -235,7 +250,9 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
             for tok in n.implements:
                 for sid in SPEC_ID.findall(tok):
                     if sid not in spec_text:
-                        errors.append(f"{n.id} : implémente [{sid}] introuvable dans spec.md")
+                        errors.append(
+                            f"{n.id} : implémente [{sid}] introuvable dans spec.md"
+                        )
     else:
         errors.append("spec.md introuvable à côté de tasks.md")
 
@@ -243,10 +260,12 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
     anc = _ancestors(nodes)
     tasks = [n for n in nodes if not n.is_checkpoint]
     for i, a in enumerate(tasks):
-        for b in tasks[i + 1:]:
+        for b in tasks[i + 1 :]:
             if a.id in anc[b.id] or b.id in anc[a.id]:
                 continue  # ordonnées par le DAG
-            clash = [(fa, fb) for fa in a.files for fb in b.files if _paths_overlap(fa, fb)]
+            clash = [
+                (fa, fb) for fa in a.files for fb in b.files if _paths_overlap(fa, fb)
+            ]
             if clash:
                 errors.append(
                     f"{a.id} ∥ {b.id} : exécutables en parallèle mais files_touched se recouvrent "
@@ -256,15 +275,21 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
     # Checkpoints
     cps = [n for n in nodes if n.is_checkpoint]
     if not cps:
-        warnings.append("aucun checkpoint — un plan sans pause humaine viole CLAUDE.md (hard rules)")
+        warnings.append(
+            "aucun checkpoint — un plan sans pause humaine viole CLAUDE.md (hard rules)"
+        )
     dependents = {n.id: [m.id for m in nodes if n.id in m.depends_on] for n in nodes}
     for cp in cps:
         if not cp.depends_on:
-            warnings.append(f"{cp.id} : trigger non parsé — ajoute « trigger : auto quand [Tn, Tm] done »")
+            warnings.append(
+                f"{cp.id} : trigger non parsé — ajoute « trigger : auto quand [Tn, Tm] done »"
+            )
         is_sink = not dependents[cp.id]
         mentions_merge = "merge" in (cp.title + " ").lower()
         if cp.mode == "auto" and (is_sink or mentions_merge):
-            errors.append(f"{cp.id} : un checkpoint final/merge ne peut pas être mode auto — le merge est humain, toujours")
+            errors.append(
+                f"{cp.id} : un checkpoint final/merge ne peut pas être mode auto — le merge est humain, toujours"
+            )
 
     return errors, warnings
 
@@ -276,8 +301,13 @@ def notify(msg: str) -> None:
     print(f"🔔 {msg}", flush=True)
     try:
         subprocess.run(
-            ["osascript", "-e", f'display notification "{msg}" with title "Lab IA-natif" sound name "Glass"'],
-            capture_output=True, timeout=10,
+            [
+                "osascript",
+                "-e",
+                f'display notification "{msg}" with title "Lab IA-natif" sound name "Glass"',
+            ],
+            capture_output=True,
+            timeout=10,
         )
     except Exception:
         pass
@@ -290,7 +320,9 @@ def run_log(feature: Path, node: Node, agent: str, result: str) -> None:
 
 
 def run_evals() -> tuple[bool, str]:
-    p = subprocess.run(["make", "-s", "evals"], cwd=ROOT, capture_output=True, text=True)
+    p = subprocess.run(
+        ["make", "-s", "evals"], cwd=ROOT, capture_output=True, text=True
+    )
     return p.returncode == 0, (p.stdout + p.stderr)[-3000:]
 
 
@@ -300,7 +332,9 @@ def count_evals() -> int:
         return 0
     p = subprocess.run(
         ["uv", "run", "pytest", "-m", "eval", "--collect-only", "-q"],
-        cwd=ROOT, capture_output=True, text=True,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
     )
     return p.stdout.count("::")
 
@@ -314,11 +348,18 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         leftover = subprocess.run(
             ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True
         ).stdout
-        out_of_scope = [l for l in leftover.splitlines() if l and not l.startswith(("A ", "M ", "R ", "D "))]
+        out_of_scope = [
+            line
+            for line in leftover.splitlines()
+            if line and not line.startswith(("A ", "M ", "R ", "D "))
+        ]
         if out_of_scope:
-            print(f"⚠️  {node.id} : modifications hors files_touched laissées non commitées :", flush=True)
-            for l in out_of_scope[:10]:
-                print(f"     {l}", flush=True)
+            print(
+                f"⚠️  {node.id} : modifications hors files_touched laissées non commitées :",
+                flush=True,
+            )
+            for line in out_of_scope[:10]:
+                print(f"     {line}", flush=True)
         subprocess.run(["git", "commit", "-m", message], cwd=ROOT, capture_output=True)
 
 
@@ -343,7 +384,9 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         print(f"▶ {node.id} (tentative {attempt}/{MAX_EVAL_RETRIES})", flush=True)
         p = subprocess.run(
             ["claude", "-p", base_prompt + extra, *CLAUDE_ARGS],
-            cwd=ROOT, capture_output=True, text=True,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
         )
         if p.returncode != 0:
             print(p.stderr[-2000:], file=sys.stderr)
@@ -354,20 +397,31 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         if sm and sm.group(1).lower() == "blocked":
             reason = sm.group(2).strip(" —-:") or "raison non précisée"
             run_log(feature, node, "implementer", f"BLOCKED — {reason}")
-            notify(f"{node.id} bloquée : {reason} — réponse Owner attendue (spec.md §8)")
+            notify(
+                f"{node.id} bloquée : {reason} — réponse Owner attendue (spec.md §8)"
+            )
             return "blocked"
         if not sm:
-            print(f"⚠️  {node.id} : pas de ligne STATUS dans la réponse — on s'en remet aux evals", flush=True)
+            print(
+                f"⚠️  {node.id} : pas de ligne STATUS dans la réponse — on s'en remet aux evals",
+                flush=True,
+            )
 
         if node.verify:
-            v = subprocess.run(node.verify, shell=True, cwd=ROOT, capture_output=True, text=True)
+            v = subprocess.run(
+                node.verify, shell=True, cwd=ROOT, capture_output=True, text=True
+            )
             if v.returncode != 0:
                 extra = f"\n\n⛔ verify a échoué (`{node.verify}`) :\n{(v.stdout + v.stderr)[-2000:]}"
                 run_log(feature, node, "implementer", f"verify FAIL (t{attempt})")
                 continue
 
         ok, out = run_evals()
-        if ok and any(SPEC_ID.search(t) for t in node.implements) and count_evals() == 0:
+        if (
+            ok
+            and any(SPEC_ID.search(t) for t in node.implements)
+            and count_evals() == 0
+        ):
             ok = False
             out = (
                 "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée alors que la tâche "
@@ -376,7 +430,9 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             )
         if ok:
             run_log(feature, node, "implementer", f"done, evals vertes (t{attempt})")
-            scoped_commit(node, feature, f"feat({feature.name}): {node.id} {node.title} [auto]")
+            scoped_commit(
+                node, feature, f"feat({feature.name}): {node.id} {node.title} [auto]"
+            )
             return "done"
         extra = f"\n\n⛔ EVAL GATE ROUGE à la tentative précédente. Corrige :\n{out}"
         run_log(feature, node, "eval-runner", f"FAIL (t{attempt})")
@@ -396,7 +452,9 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path]:
         f"Produis le rapport de revue (✅/⚠️/❌ avec fichier:ligne) et termine IMPÉRATIVEMENT par une "
         f"ligne seule : « VERDICT: PASS » (aucun écart), « VERDICT: WARN » ou « VERDICT: BLOCK »."
     )
-    p = subprocess.run(["claude", "-p", prompt, *CLAUDE_ARGS], cwd=ROOT, capture_output=True, text=True)
+    p = subprocess.run(
+        ["claude", "-p", prompt, *CLAUDE_ARGS], cwd=ROOT, capture_output=True, text=True
+    )
     report.parent.mkdir(exist_ok=True)
     report.write_text(p.stdout or p.stderr, encoding="utf-8")
     vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", p.stdout)
@@ -406,7 +464,9 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path]:
 def wait_checkpoint(node: Node, feature: Path, dry: bool, supervised: bool) -> bool:
     approval = feature / ".approvals" / node.id
     if dry:
-        print(f"  [dry-run] CHECKPOINT {node.id} (mode {node.mode}) — attend {approval}")
+        print(
+            f"  [dry-run] CHECKPOINT {node.id} (mode {node.mode}) — attend {approval}"
+        )
         return True
 
     verdict, report = run_review(node, feature, dry)
@@ -415,11 +475,17 @@ def wait_checkpoint(node: Node, feature: Path, dry: bool, supervised: bool) -> b
     if node.mode == "auto" and not supervised:
         if verdict == "PASS" and evals_ok:
             approval.parent.mkdir(exist_ok=True)
-            approval.write_text(f"auto-approved (evals vertes + reviewer PASS) at={datetime.now().isoformat()}\n")
-            run_log(feature, node, "reviewer", "checkpoint auto-validé (PASS, evals vertes)")
+            approval.write_text(
+                f"auto-approved (evals vertes + reviewer PASS) at={datetime.now().isoformat()}\n"
+            )
+            run_log(
+                feature, node, "reviewer", "checkpoint auto-validé (PASS, evals vertes)"
+            )
             notify(f"{node.id} auto-validé — rapport : {report.relative_to(ROOT)}")
             return True
-        notify(f"{node.id} (auto) : reviewer {verdict} / evals {'vertes' if evals_ok else 'ROUGES'} → bascule en validation humaine")
+        notify(
+            f"{node.id} (auto) : reviewer {verdict} / evals {'vertes' if evals_ok else 'ROUGES'} → bascule en validation humaine"
+        )
 
     notify(
         f"CHECKPOINT {node.id} : validation Owner requise → scripts/approve.sh {node.id} {feature.relative_to(ROOT)} "
@@ -451,9 +517,19 @@ def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("feature", help="dossier de la feature (contient tasks.md)")
     ap.add_argument("--dry-run", action="store_true")
-    ap.add_argument("--validate", action="store_true", help="plan-lint : vérifie tasks.md et sort")
-    ap.add_argument("--supervised", action="store_true", help="force tous les checkpoints en blocking")
-    ap.add_argument("--force", action="store_true", help="ignorer status approved + erreurs de lint (déconseillé)")
+    ap.add_argument(
+        "--validate", action="store_true", help="plan-lint : vérifie tasks.md et sort"
+    )
+    ap.add_argument(
+        "--supervised",
+        action="store_true",
+        help="force tous les checkpoints en blocking",
+    )
+    ap.add_argument(
+        "--force",
+        action="store_true",
+        help="ignorer status approved + erreurs de lint (déconseillé)",
+    )
     args = ap.parse_args()
 
     feature = (ROOT / args.feature).resolve()
@@ -461,7 +537,9 @@ def main() -> int:
 
     errors, warnings = validate(feature, fm, nodes)
     if args.validate or errors or warnings:
-        print(f"Plan-lint — {len(nodes)} nœuds, status frontmatter : {fm.get('status', '∅')}")
+        print(
+            f"Plan-lint — {len(nodes)} nœuds, status frontmatter : {fm.get('status', '∅')}"
+        )
         for w in warnings:
             print(f"  ⚠️  {w}")
         for e in errors:
@@ -475,7 +553,9 @@ def main() -> int:
         return 1
 
     if fm.get("status") != "approved" and not (args.dry_run or args.force):
-        print(f"⛔ tasks.md a status '{fm.get('status')}' — un plan doit être 'approved' par l'Owner avant exécution.")
+        print(
+            f"⛔ tasks.md a status '{fm.get('status')}' — un plan doit être 'approved' par l'Owner avant exécution."
+        )
         return 1
 
     by_id = {n.id: n for n in nodes}
@@ -494,11 +574,15 @@ def main() -> int:
 
     while any(n.status == "pending" for n in nodes):
         ready = [
-            n for n in nodes
-            if n.status == "pending" and all(by_id[d].status == "done" for d in n.depends_on if d in by_id)
+            n
+            for n in nodes
+            if n.status == "pending"
+            and all(by_id[d].status == "done" for d in n.depends_on if d in by_id)
         ]
         if not ready:
-            print("⛔ Deadlock : aucune tâche prête. Vérifie le graphe depends_on (--validate).")
+            print(
+                "⛔ Deadlock : aucune tâche prête. Vérifie le graphe depends_on (--validate)."
+            )
             return 1
 
         cps = [n for n in ready if n.is_checkpoint]
@@ -516,7 +600,11 @@ def main() -> int:
                         skip_dependents(n, nodes)
                     save()
         for cp in cps:
-            cp.status = "done" if wait_checkpoint(cp, feature, args.dry_run, args.supervised) else "failed"
+            cp.status = (
+                "done"
+                if wait_checkpoint(cp, feature, args.dry_run, args.supervised)
+                else "failed"
+            )
             if cp.status == "failed":
                 skip_dependents(cp, nodes)
             save()
@@ -524,7 +612,9 @@ def main() -> int:
     bad = [n for n in nodes if n.status in ("failed", "blocked", "skipped")]
     print("\n=== Bilan ===")
     for n in nodes:
-        mark = {"done": "✅", "failed": "❌", "blocked": "🛑", "skipped": "⏭"}.get(n.status, "·")
+        mark = {"done": "✅", "failed": "❌", "blocked": "🛑", "skipped": "⏭"}.get(
+            n.status, "·"
+        )
         print(f"  {mark} {n.id} — {n.status}")
     if bad:
         notify(
@@ -532,7 +622,9 @@ def main() -> int:
             "réponds aux blocages puis relance (reprise via .runs/state.json)."
         )
         return 1
-    notify(f"🎉 {feature.name} : toutes les tâches sont done. Merge = décision humaine (CP final).")
+    notify(
+        f"🎉 {feature.name} : toutes les tâches sont done. Merge = décision humaine (CP final)."
+    )
     return 0
 
 
