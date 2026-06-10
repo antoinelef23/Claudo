@@ -52,7 +52,12 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
-CLAUDE_ARGS = ["--permission-mode", "acceptEdits", "--max-turns", "100"]
+CLAUDE_ARGS = [
+    "--permission-mode", "acceptEdits", "--max-turns", "100",
+    # headless : acceptEdits couvre les éditions, pas Bash — whitelist minimale pour
+    # que l'implementer puisse exécuter ses tests (sinon il code à l'aveugle)
+    "--allowedTools", "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(git diff:*),Bash(git log:*)",
+]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
 
 COMMIT_LOCK = threading.Lock()
