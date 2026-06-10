@@ -25,8 +25,8 @@ def test_eval_3_format_ex2():
 
     # BHV-3 : détail produits / pose sur des lignes séparées
     lignes = texte.splitlines()
-    lignes_produits = [l for l in lignes if "2375.00" in l]
-    lignes_pose = [l for l in lignes if "900.00" in l]
+    lignes_produits = [ligne for ligne in lignes if "2375.00" in ligne]
+    lignes_pose = [ligne for ligne in lignes if "900.00" in ligne]
     assert len(lignes_produits) == 1
     assert len(lignes_pose) == 1
     assert lignes_produits[0] != lignes_pose[0]
