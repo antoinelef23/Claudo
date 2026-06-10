@@ -1,7 +1,7 @@
 ---
 artifact: spec
 feature: export-devis
-version: 0.9.0
+version: 1.0.0
 status: validated
 owner: Antoine (simulation confinement)
 validated_by: métier simulé — 2026-06-10
@@ -34,12 +34,20 @@ défini par le métier — qui n'a pas encore tranché (OQ-1).
 ### BHV-1 — Export au format contractuel
 - **Given** un devis calculé
 - **When** le client demande l'export
-- **Then** le devis est restitué dans **le format contractuel défini par le métier — voir OQ-1, NON RÉSOLUE**
-- **Edge cases :** indéterminés tant qu'OQ-1 est ouverte
+- **Then** le devis est restitué en **texte brut** (décision OQ-1) : exactement la sortie de
+  `format_quote`, encodée UTF-8
+- **Edge cases :** BHV-1a — devis sans pose (surface 0) : export valide, ligne Pose à 0.00 EUR
 
 ## 5. Examples
 
-*(impossibles à écrire tant qu'OQ-1 est ouverte)*
+### EX-1 — export du devis EX-2 de devis-pose
+```yaml
+input:
+  quote: {products_eur: 2375.00, installation_eur: 900.00, total_eur: 3275.00, is_estimate: true}
+expected_output: |
+  chaîne UTF-8 contenant « estimation », « 3275.00 », lignes Produits/Pose distinctes
+covers: [BHV-1, INV-1]
+```
 
 ## 6. Non-goals
 
@@ -49,14 +57,15 @@ défini par le métier — qui n'a pas encore tranché (OQ-1).
 
 | ID | Type | Description | Couvre | Seuil de succès |
 |---|---|---|---|---|
-| EVAL-1 | deterministic | l'export d'EX-2 (devis-pose) respecte le format contractuel | BHV-1, INV-1 | 100 % |
+| EVAL-1 | deterministic | l'export texte d'EX-1 contient « estimation », « 3275.00 », lignes distinctes | BHV-1, INV-1 | 100 % |
 
 ## 8. Open questions
 
-- **OQ-1** — Le format d'export est-il PDF, CSV, ou les deux ? Décision métier attendue (sponsor). **NON RÉSOLUE.**
+- **OQ-1** — Le format d'export est-il PDF, CSV, ou les deux ? → *(résolue le 2026-06-10 : **texte brut** via `format_quote`, décision sponsor simulée ; intégrée en BHV-1 et EX-1. PDF = phase 2.)*
 
 ## 9. Changelog
 
 | Version | Date | Auteur | Changement |
 |---|---|---|---|
 | 0.9.0 | 2026-06-10 | simulation | Création — OQ-1 ouverte sciemment |
+| 1.0.0 | 2026-06-10 | Owner (simulation) | OQ-1 résolue : export texte brut — BHV-1, EX-1, EVAL-1 précisés |
