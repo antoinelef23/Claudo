@@ -108,3 +108,4 @@ flowchart TD
 
 | Date | Tâche | Agent | Résultat | Commit |
 |---|---|---|---|---|
+| 2026-06-10 10:37 | T1 | implementer | done, evals vertes (t1) | |
