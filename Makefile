@@ -2,7 +2,17 @@
 # Les cibles sont tolérantes : tant que le projet Python n'existe pas (pas de pyproject.toml),
 # elles no-op proprement pour ne pas casser les hooks sur le squelette vide.
 
-.PHONY: install lint test evals gate
+.PHONY: install lint test evals gate validate run
+
+# Plan-lint d'une feature : make validate FEATURE=work/ma-feature
+validate:
+	@test -n "$(FEATURE)" || { echo "usage: make validate FEATURE=work/ma-feature"; exit 1; }
+	@python3 scripts/orchestrate.py "$(FEATURE)" --validate
+
+# Run orchestré en avant-plan : make run FEATURE=work/ma-feature [SUPERVISED=1]
+run:
+	@test -n "$(FEATURE)" || { echo "usage: make run FEATURE=work/ma-feature"; exit 1; }
+	@caffeinate -i python3 scripts/orchestrate.py "$(FEATURE)" $(if $(SUPERVISED),--supervised,)
 
 install:
 	@if [ -f pyproject.toml ]; then uv sync; else echo "[install] pas de pyproject.toml — skip"; fi

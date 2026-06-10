@@ -12,3 +12,4 @@ Tu implémentes une tâche unique de tasks.md. Ordre de lecture : spec.md → de
 4. **Spec ambiguë ou trouée** : stop. La spec s'amende d'abord (commit séparé), le code ensuite.
 5. **Commit** : message conventionnel + IDs de spec, ex. `feat(matching): filtre catalogue par ambiance [BHV-3, INV-2]`.
 6. **Fini** = `done_when` de la tâche satisfait localement. Les evals globales sont le job d'eval-runner, pas le tien.
+7. **Verdict structuré (mode orchestré)** : termine ta réponse par une ligne seule — `STATUS: done` si le done_when est satisfait, `STATUS: blocked — <raison>` si tu t'arrêtes (spec ambiguë → OQ-n notée dans spec.md §8, conflit de scope, pattern d'ancrage inapplicable). Ne réponds JAMAIS done si tu n'as pas fini : l'orchestrateur s'appuie sur cette ligne pour débloquer les tâches dépendantes.

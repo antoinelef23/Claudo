@@ -73,6 +73,8 @@ covers: [BHV-1, INV-2]
 
 *Chaque eval est exécutable (`pytest -m eval`). Pas d'eval verte, pas de merge. Une eval référence les BHV/INV qu'elle couvre. Tout BHV et tout INV doit être couvert par au moins une eval.*
 
+*Convention exécutable : une eval = un test pytest marqué `@pytest.mark.eval` dont le nom contient l'ID en minuscules (ex. `test_eval_1_matching_exact`). C'est ce qui permet à l'orchestrateur de vérifier mécaniquement qu'une eval existe (anti-gate-vide : un `make evals` vert avec zéro eval collectée ne valide RIEN) et, à terme, la couverture eval ↔ spec.*
+
 | ID | Type | Description | Couvre | Seuil de succès |
 |---|---|---|---|---|
 | EVAL-1 | deterministic | <test exact entrée/sortie> | BHV-1, INV-1 | 100 % |
