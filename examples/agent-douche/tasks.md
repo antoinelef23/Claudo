@@ -44,7 +44,7 @@ flowchart TD
 
 ### T2 — Module vision : analyse de la photo
 - **agent :** implementer · **depends_on :** [T1] · **parallel_group :** B
-- **implements :** [BHV-1, BHV-1a, BHV-1b, BHV-1c, INV-4, INV-6]
+- **implements :** [BHV-1, BHV-1a, BHV-1b, BHV-1c, INV-4, INV-6, EVAL-4]
 - **anchored_on :** ADR-2 · **files_touched :** `src/app/vision/`, `tests/vision/`
 - **prompt :** Implémente l'analyse photo via Gemini : détection pièce/éléments, refus hors-sujet (INV-6), floutage visages (BHV-1c), stockage éphémère TTL 24 h (INV-4). Tests d'abord, dont les 30 images pièges d'EVAL-4.
 - **done_when :** tests vision verts + EVAL-4 verte + latence p95 ≤ 10 s sur banc local
@@ -59,14 +59,14 @@ flowchart TD
 
 ### T4 — Module render : 3 ambiances
 - **agent :** implementer · **depends_on :** [T2] · **parallel_group :** C
-- **implements :** [BHV-2, INV-2] · **anchored_on :** ADR-2, pattern jobs async Saleor
+- **implements :** [BHV-2, INV-2, EVAL-2, EVAL-6] · **anchored_on :** ADR-2, pattern jobs async Saleor
 - **files_touched :** `src/app/render/`, `tests/render/`
 - **prompt :** Génération asynchrone des 3 rendus (Cloud Tasks + worker), contrainte géométrique dans le prompt, statut pollable. EVAL-2 et EVAL-6 en local.
 - **done_when :** EVAL-2 verte, p95 ≤ 30 s sur banc de 50 photos
 
 ### T5 — Module matching : produits réels
 - **agent :** implementer · **depends_on :** [T3] · **parallel_group :** C *(∥ T4)*
-- **implements :** [BHV-3, BHV-3a, INV-1, INV-3] · **anchored_on :** ADR-3
+- **implements :** [BHV-3, BHV-3a, INV-1, INV-3, EVAL-1, EVAL-5] · **anchored_on :** ADR-3
 - **files_touched :** `src/app/matching/`, `tests/matching/`
 - **prompt :** LLM → attributs structurés ; matching = requête déterministe catalogue (jamais de réf générée). Substitution produit indisponible (BHV-3a).
 - **done_when :** EVAL-1 verte sur mocks, EVAL-5 verte
@@ -100,7 +100,7 @@ flowchart TD
 
 ### T9 — Banc d'evals complet + SLO + flag
 - **agent :** implementer puis eval-runner · **depends_on :** [T8]
-- **implements :** [§7 complet] · **files_touched :** `evals/`, monitoring, feature flag
+- **implements :** [EVAL-3, §7 complet] · **files_touched :** `evals/`, monitoring, feature flag
 - **done_when :** EVAL-1→6 vertes en CI, dashboards Twin Track en place, kill-switch testé
 
 ### CP-3 — CHECKPOINT : merge & rollout

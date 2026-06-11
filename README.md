@@ -110,6 +110,8 @@ caffeinate -i python3 scripts/orchestrate.py work/ma-feature > work/ma-feature/.
 
 # 4. À chaque notification CHECKPOINT blocking : lire .runs/CP-n-review.md, puis
 scripts/approve.sh CP-1 work/ma-feature
+# … ou rejeter avec une raison (réouvre les tâches visées, l'agent reçoit le commentaire) :
+scripts/reject.sh CP-1 work/ma-feature "le devis n'affiche pas la remise" T2
 ```
 
 Reprise sur incident : l'état est dans `<feature>/.runs/state.json` — relancer la même commande reprend
