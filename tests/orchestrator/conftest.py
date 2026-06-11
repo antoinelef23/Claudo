@@ -74,17 +74,27 @@ def sandbox(tmp_path: Path) -> Path:
     return sb
 
 
-def run_orch(sandbox: Path, *flags: str, feature: str = "work/feat"):
+def run_orch(
+    sandbox: Path,
+    *flags: str,
+    feature: str = "work/feat",
+    env_extra: dict | None = None,
+):
     env = {
         **os.environ,
         "LAB_ROOT": str(sandbox),
         "LAB_NO_NOTIFY": "1",
         "LAB_TASK_TIMEOUT": "60",
         "PATH": f"{sandbox / 'bin'}:{os.environ['PATH']}",
+        **(env_extra or {}),
     }
     return subprocess.run(
         [sys.executable, str(ORCH), feature, *flags],
-        cwd=sandbox, env=env, capture_output=True, text=True, timeout=120,
+        cwd=sandbox,
+        env=env,
+        capture_output=True,
+        text=True,
+        timeout=120,
     )
 
 

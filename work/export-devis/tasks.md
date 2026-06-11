@@ -5,8 +5,8 @@ version: 0.1.0
 status: approved
 generated_by: planner (simulé)
 approved_by: Antoine — 2026-06-10 (simulation confinement d'échec)
-spec: ./spec.md          # version : 0.9.0
-design: ./design.md      # version : 0.9.0
+spec: ./spec.md          # version : 1.0.0
+design: ./design.md      # version : 1.0.0
 ---
 
 # Tasks — Export du devis
