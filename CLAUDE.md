@@ -21,6 +21,7 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 - **Traçabilité** : chaque commit référence les IDs de la spec qu'il implémente (ex: `feat: matching produits [BHV-3, INV-2]`).
 - **Design ancré** : ne jamais inventer une architecture. S'adosser aux repos de référence listés dans design.md §2. Si aucun pattern de référence ne couvre le besoin, le signaler dans une ADR plutôt qu'improviser.
 - **Spec immuable en cours de tâche** : si l'implémentation révèle un trou dans la spec, on arrête, on amende la spec (commit séparé), puis on reprend.
+- **Amendement = passe de cohérence** : tout amendement de spec impose de mettre à jour les pointeurs `# version :` de design.md/tasks.md et de relire les docs dépendants (une note rédigée avant l'amendement peut être devenue fausse). Le plan-lint signale la dérive de version.
 
 ## Conventions
 
