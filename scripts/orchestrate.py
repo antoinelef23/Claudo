@@ -39,6 +39,7 @@ from __future__ import annotations
 
 import argparse
 import json
+import os
 import re
 import subprocess
 import sys
@@ -49,9 +50,11 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
-ROOT = Path(__file__).resolve().parent.parent
+# LAB_ROOT : surcharge pour les tests (sandbox) — défaut : la racine du repo
+ROOT = Path(os.environ.get("LAB_ROOT") or Path(__file__).resolve().parent.parent)
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
+TASK_TIMEOUT_S = int(os.environ.get("LAB_TASK_TIMEOUT", "2400"))  # mur par agent : 40 min
 CLAUDE_ARGS = [
     "--permission-mode",
     "acceptEdits",
@@ -61,10 +64,16 @@ CLAUDE_ARGS = [
     # que l'implementer puisse exécuter ses tests (sinon il code à l'aveugle)
     "--allowedTools",
     "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(git diff:*),Bash(git log:*)",
+    # sortie structurée : result + session_id (reprise des retries) + total_cost_usd (journal)
+    "--output-format",
+    "json",
 ]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
 
 COMMIT_LOCK = threading.Lock()
+LOG_LOCK = threading.Lock()
+COST_LOCK = threading.Lock()
+COST_TOTAL = {"usd": 0.0}
 
 
 @dataclass
@@ -299,6 +308,8 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
 
 def notify(msg: str) -> None:
     print(f"🔔 {msg}", flush=True)
+    if os.environ.get("LAB_NO_NOTIFY"):  # tests / CI
+        return
     try:
         subprocess.run(
             [
@@ -315,8 +326,56 @@ def notify(msg: str) -> None:
 
 def run_log(feature: Path, node: Node, agent: str, result: str) -> None:
     line = f"| {datetime.now():%Y-%m-%d %H:%M} | {node.id} | {agent} | {result} | |\n"
-    with (feature / "tasks.md").open("a", encoding="utf-8") as f:
+    with LOG_LOCK, (feature / "tasks.md").open("a", encoding="utf-8") as f:
         f.write(line)
+
+
+def journal(feature: Path, **event) -> None:
+    """Télémétrie du run : une ligne JSON par événement dans .runs/journal.jsonl."""
+    event["ts"] = datetime.now().isoformat(timespec="seconds")
+    path = feature / ".runs" / "journal.jsonl"
+    with LOG_LOCK:
+        path.parent.mkdir(exist_ok=True)
+        with path.open("a", encoding="utf-8") as fh:
+            fh.write(json.dumps(event, ensure_ascii=False) + "\n")
+
+
+def run_claude(prompt: str, resume: str | None = None) -> dict:
+    """Appel claude headless. Retourne {ok, text, session_id, cost_usd, error}.
+
+    Mur wall-clock TASK_TIMEOUT_S : un agent coincé ne bloque jamais sa vague
+    indéfiniment. Sortie --output-format json : texte du résultat, session_id
+    (pour reprendre la MÊME session au retry au lieu de repartir de zéro) et
+    coût, agrégé dans COST_TOTAL pour le bilan (métrique Twin Track).
+    """
+    cmd = ["claude", "-p", prompt, *CLAUDE_ARGS]
+    if resume:
+        cmd += ["--resume", resume]
+    try:
+        p = subprocess.run(
+            cmd, cwd=ROOT, capture_output=True, text=True, timeout=TASK_TIMEOUT_S
+        )
+    except subprocess.TimeoutExpired:
+        return {
+            "ok": False, "text": "", "session_id": None, "cost_usd": 0.0,
+            "error": f"timeout : agent tué après {TASK_TIMEOUT_S}s (LAB_TASK_TIMEOUT)",
+        }
+    if p.returncode != 0:
+        return {
+            "ok": False, "text": p.stdout, "session_id": None, "cost_usd": 0.0,
+            "error": p.stderr[-2000:] or p.stdout[-2000:],
+        }
+    text, session_id, cost = p.stdout, None, 0.0
+    try:
+        data = json.loads(p.stdout)
+        text = data.get("result") or ""
+        session_id = data.get("session_id")
+        cost = float(data.get("total_cost_usd") or 0.0)
+    except (json.JSONDecodeError, TypeError):
+        pass  # sortie non-JSON : on garde le texte brut
+    with COST_LOCK:
+        COST_TOTAL["usd"] += cost
+    return {"ok": True, "text": text, "session_id": session_id, "cost_usd": cost, "error": ""}
 
 
 def run_evals() -> tuple[bool, str]:
@@ -379,24 +438,40 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         print(f"  [dry-run] claude -p '<prompt {node.id}>' {' '.join(CLAUDE_ARGS)}")
         return "done"
 
+    real_ids = list(dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t)))
+    trace = f"[{', '.join(real_ids)}]" if real_ids else "[auto]"
+
+    session: str | None = None
     extra = ""
     for attempt in range(1, MAX_EVAL_RETRIES + 1):
         print(f"▶ {node.id} (tentative {attempt}/{MAX_EVAL_RETRIES})", flush=True)
-        p = subprocess.run(
-            ["claude", "-p", base_prompt + extra, *CLAUDE_ARGS],
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
+        t0 = time.monotonic()
+        if session:
+            # Retry dans la MÊME session : l'agent corrige son travail au lieu de refaire
+            prompt = (
+                f"Toujours sur la tâche {node.id} — {node.title}. Corrige sans tout réécrire :{extra}\n"
+                f"Termine par « STATUS: done » ou « STATUS: blocked — <raison> »."
+            )
+        else:
+            prompt = base_prompt + extra
+        r = run_claude(prompt, resume=session)
+        journal(
+            feature, event="task_attempt", id=node.id, attempt=attempt,
+            duration_s=round(time.monotonic() - t0, 1), cost_usd=r["cost_usd"],
+            session=r["session_id"], ok=r["ok"],
         )
-        if p.returncode != 0:
-            print(p.stderr[-2000:], file=sys.stderr)
+        if not r["ok"]:
+            print(r["error"], file=sys.stderr)
             run_log(feature, node, "implementer", f"erreur claude (t{attempt})")
+            session = None  # session inconnue/perdue : repartir propre
             continue
+        session = r["session_id"] or session
 
-        sm = re.search(r"STATUS:\s*(done|blocked)([^\n]*)", p.stdout, re.I)
+        sm = re.search(r"STATUS:\s*(done|blocked)([^\n]*)", r["text"], re.I)
         if sm and sm.group(1).lower() == "blocked":
             reason = sm.group(2).strip(" —-:") or "raison non précisée"
             run_log(feature, node, "implementer", f"BLOCKED — {reason}")
+            journal(feature, event="task_blocked", id=node.id, reason=reason)
             notify(
                 f"{node.id} bloquée : {reason} — réponse Owner attendue (spec.md §8)"
             )
@@ -417,11 +492,7 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 continue
 
         ok, out = run_evals()
-        if (
-            ok
-            and any(SPEC_ID.search(t) for t in node.implements)
-            and count_evals() == 0
-        ):
+        if ok and real_ids and count_evals() == 0:
             ok = False
             out = (
                 "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée alors que la tâche "
@@ -431,12 +502,15 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         if ok:
             run_log(feature, node, "implementer", f"done, evals vertes (t{attempt})")
             scoped_commit(
-                node, feature, f"feat({feature.name}): {node.id} {node.title} [auto]"
+                node, feature,
+                f"feat({feature.name}): {node.id} {node.title} {trace} [auto]",
             )
+            journal(feature, event="task_done", id=node.id, attempts=attempt)
             return "done"
         extra = f"\n\n⛔ EVAL GATE ROUGE à la tentative précédente. Corrige :\n{out}"
         run_log(feature, node, "eval-runner", f"FAIL (t{attempt})")
     notify(f"{node.id} : {MAX_EVAL_RETRIES} échecs d'evals — escalade Owner")
+    journal(feature, event="task_failed", id=node.id)
     return "failed"
 
 
@@ -452,13 +526,13 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path]:
         f"Produis le rapport de revue (✅/⚠️/❌ avec fichier:ligne) et termine IMPÉRATIVEMENT par une "
         f"ligne seule : « VERDICT: PASS » (aucun écart), « VERDICT: WARN » ou « VERDICT: BLOCK »."
     )
-    p = subprocess.run(
-        ["claude", "-p", prompt, *CLAUDE_ARGS], cwd=ROOT, capture_output=True, text=True
-    )
+    r = run_claude(prompt)
     report.parent.mkdir(exist_ok=True)
-    report.write_text(p.stdout or p.stderr, encoding="utf-8")
-    vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", p.stdout)
-    return (vm[-1] if vm else "WARN"), report
+    report.write_text(r["text"] or r["error"], encoding="utf-8")
+    vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", r["text"])
+    verdict = vm[-1] if vm else "WARN"
+    journal(feature, event="review", id=cp.id, verdict=verdict, cost_usd=r["cost_usd"], ok=r["ok"])
+    return verdict, report
 
 
 def wait_checkpoint(node: Node, feature: Path, dry: bool, supervised: bool) -> bool:
@@ -616,6 +690,11 @@ def main() -> int:
             n.status, "·"
         )
         print(f"  {mark} {n.id} — {n.status}")
+    print(f"  Σ coût agents : ${COST_TOTAL['usd']:.2f} (détail : .runs/journal.jsonl)")
+    journal(
+        feature, event="run_end", cost_usd_total=round(COST_TOTAL["usd"], 4),
+        statuses={n.id: n.status for n in nodes},
+    )
     if bad:
         notify(
             f"{feature.name} : run terminé avec {len(bad)} nœud(s) non done — "
