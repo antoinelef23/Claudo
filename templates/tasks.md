@@ -65,7 +65,9 @@ flowchart TD
   suffisent à trancher. Toute décision, intégration externe, donnée réelle ou merge = blocking.)*
 - **reviews :** démo locale, diff complet, evals [EVAL-1..3], écarts spec éventuels — le rapport
   `reviewer` est généré automatiquement dans `.runs/CP-n-review.md` avant chaque checkpoint
-- **on_reject :** retour aux tâches concernées avec commentaire ; si trou de spec → amender spec.md d'abord
+- **on_reject :** `scripts/reject.sh CP-n <feature> "raison" [Tn …]` — les tâches visées (défaut : toutes
+  celles du checkpoint) sont réouvertes avec la raison transmise à l'agent, le checkpoint se re-présente
+  (max 2 rejets, ensuite arrêt). Si trou de spec → amender spec.md d'abord (commit séparé).
 
 ### T4 — ...
 
@@ -81,6 +83,7 @@ flowchart TD
 | Checkpoint `auto` atteint | **automatique** | rapport reviewer ; PASS + evals vertes = validé ; sinon bascule blocking |
 | Checkpoint `blocking` atteint | **automatique** | rapport reviewer généré, notification Owner, exécution EN PAUSE |
 | Checkpoint validé (`approve.sh`) | **Owner** (humain) | reprise de l'exécution |
+| Checkpoint rejeté (`reject.sh` + raison) | **Owner** (humain) | réouverture des tâches visées avec le commentaire, re-présentation du checkpoint (max 2 rejets) |
 | Dernier checkpoint validé | **Owner** (humain) | merge — jamais automatique, plan-lint le garantit |
 
 ## Run log

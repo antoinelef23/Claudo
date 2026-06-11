@@ -28,9 +28,13 @@ test:
 	else echo "[test] pas de pyproject.toml — skip"; fi
 
 # Merge gate : pas d'eval verte, pas de merge (spec.md §7)
+# pytest sort 5 quand aucune eval n'est collectée : pas une erreur ici — c'est
+# l'orchestrateur (anti-gate-vide) qui décide si des evals DEVAIENT exister.
 evals:
 	@if [ -f pyproject.toml ] && ls tests evals 2>/dev/null | grep -q .; then \
-		uv run pytest -q -m eval; \
+		uv run pytest -q -m eval; rc=$$?; \
+		if [ $$rc -eq 5 ]; then echo "[evals] aucune eval collectée — rien à gater"; exit 0; fi; \
+		exit $$rc; \
 	else echo "[evals] pas encore d'evals — skip"; fi
 
 gate: lint test evals
