@@ -116,6 +116,19 @@ Reprise sur incident : l'état est dans `<feature>/.runs/state.json` — relance
 où ça s'était arrêté (les nœuds `done` ne rejouent pas ; les `blocked` retentent après ta réponse aux OQ).
 Prérequis : `claude` CLI authentifié, `uv` installé.
 
+### Télémétrie et limites
+
+- **Journal** : chaque run écrit `<feature>/.runs/journal.jsonl` — une ligne JSON par événement
+  (tentative, durée, **coût $ par agent**, verdict reviewer, bilan). C'est la source des métriques
+  Twin Track (coût complet, part de code IA) ; le bilan affiche le Σ coût du run.
+- **Retries avec mémoire** : un retry reprend la MÊME session agent (`--resume`) — l'agent corrige
+  son travail au lieu de repartir de zéro.
+- **Mur par agent** : `LAB_TASK_TIMEOUT` (défaut 2400 s) tue un agent coincé ; la tâche compte
+  comme tentative échouée, la vague continue.
+- **Env de test** : `LAB_ROOT` (sandbox), `LAB_NO_NOTIFY=1` (CI). La suite
+  `tests/orchestrator/` rejoue toute la mécanique (lint, vagues, confinement, reprise,
+  checkpoints auto, anti-gate-vide) en ~3 s avec un shim `claude` déterministe.
+
 ## Démarrer une unité de travail
 
 ```bash
