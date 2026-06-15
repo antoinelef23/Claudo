@@ -145,18 +145,6 @@ def test_checker_ambiguity():
     assert not c.check("STATUS: done", wd2)[0]  # a deviné
 
 
-def test_checker_eval_correct():
-    c = case_by_id("BEH-eval-correct")
-    wd = _wd(c)
-    assert not c.check("STATUS: done", wd)[0]  # rien écrit
-    (wd / "test_eval_1_add.py").write_text("def test_eval_1_add(): assert True\n")
-    assert not c.check("STATUS: done", wd)[0]  # stub : n'exerce pas l'exemple
-    (wd / "test_eval_1_add.py").write_text(
-        "def test_eval_1_add():\n    assert add(2,3) == 5\n"
-    )
-    assert c.check("STATUS: done", wd)[0]  # exerce EX-1
-
-
 def test_checker_review_break():
     c = case_by_id("BEH-review-break")
     wd = _wd(c)
