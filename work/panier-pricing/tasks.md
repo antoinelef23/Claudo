@@ -154,7 +154,7 @@ flowchart TD
   >   bas), TVA 20 % de 2500 = 500 (cas EX-2). N'écris que ce module et ses tests.
 - **done_when :** `uv run pytest -q tests/pricing_tax` vert (half-up sur la demie + arrondi unique)
 - **verify :** `uv run pytest -q tests/pricing_tax`
-- **status :** ☐ pending → ☐ running → ☐ done
+- **status :** ☑ pending → ☑ running → ☑ done
 
 ### T5 — pricing.py : composition, port/franco, réconciliation (+ EVAL-2 + EVAL-3)
 - **agent :** implementer · **depends_on :** [T2, T3, T4] · **parallel_group :** C *(composition — dépend des trois modules)*
@@ -293,3 +293,4 @@ flowchart TD
 | 2026-06-15 12:15 | T1 | implementer | done, evals vertes (t1) | |
 | 2026-06-15 12:16 | CP-1 | reviewer | checkpoint auto-validé (PASS, evals vertes) | |
 | 2026-06-15 12:18 | T2 | implementer | done, evals vertes (t1) | |
+| 2026-06-15 12:18 | T4 | implementer | done, evals vertes (t1) | |

@@ -2,3 +2,5 @@
 {"event": "task_done", "id": "T1", "attempts": 1, "ts": "2026-06-15T12:15:37"}
 {"event": "review", "id": "CP-1", "model": "claude-opus-4-8", "lens": "revue complète", "verdict": "PASS", "cost_usd": 0.6080385, "ok": true, "ts": "2026-06-15T12:16:54"}
 {"event": "task_attempt", "id": "T2", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 88.4, "cost_usd": 0.420657, "session": "b88cc215-0ec8-451f-92c0-dacc8a4c3107", "ok": true, "ts": "2026-06-15T12:18:23"}
+{"event": "task_done", "id": "T2", "attempts": 1, "ts": "2026-06-15T12:18:24"}
+{"event": "task_attempt", "id": "T4", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 104.6, "cost_usd": 0.46661220000000003, "session": "65875130-b12e-43ee-ae0b-3283ff9eb9fe", "ok": true, "ts": "2026-06-15T12:18:39"}
