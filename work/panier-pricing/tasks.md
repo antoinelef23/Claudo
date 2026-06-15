@@ -1,12 +1,12 @@
 ---
 artifact: tasks
 feature: panier-pricing
-version: 0.1.0
+version: 0.1.1
 status: approved         # proposed | approved | in_progress | done
 generated_by: planner
 approved_by: Antoine (Owner) — 2026-06-15 — test E2E produit complexe ; CP-1 auto, CP-2 + CP-3 blocking validés
-spec: ./spec.md          # version : 1.0.0
-design: ./design.md      # version : 1.0.0
+spec: ./spec.md          # version : 1.1.0
+design: ./design.md      # version : 1.1.0
 ---
 
 # Tasks — Moteur de tarification de panier
@@ -104,7 +104,7 @@ flowchart TD
 
 ### T3 — coupons.py : validité, dédoublonnage, cumul, plafond
 - **agent :** implementer · **depends_on :** [CP-1] · **parallel_group :** B *(∥ T2, T4 : fichiers source ET tests disjoints)*
-- **implements :** [BHV-4, BHV-5, BHV-6, BHV-6a, BHV-6b, BHV-8, BHV-9, INV-4, INV-6]
+- **implements :** [BHV-4, BHV-5, BHV-6, BHV-6a, BHV-6b, BHV-6c, BHV-8, BHV-9, INV-4, INV-6]
 - **anchored_on :** ADR-4 (plafond à chaque étape, jamais négatif) + ADR-2 (tri canonique interne)
 - **files_touched :** `src/pricing/coupons.py`, `tests/pricing_coupons/`
 - **prompt :**
@@ -210,7 +210,7 @@ flowchart TD
 
 ### T6 — EVAL-1 : exemples EX-1 à EX-8 (déterministe)
 - **agent :** implementer · **depends_on :** [CP-2] · **parallel_group :** D *(∥ T7, T8 : fichiers disjoints)*
-- **implements :** [EVAL-1, BHV-1, BHV-2, BHV-3, BHV-3a, BHV-3b, BHV-4, BHV-5, BHV-6, BHV-6b, BHV-7, BHV-8, BHV-10, BHV-11]
+- **implements :** [EVAL-1, BHV-1, BHV-2, BHV-3, BHV-3a, BHV-3b, BHV-4, BHV-5, BHV-6, BHV-6b, BHV-6c, BHV-7, BHV-8, BHV-10, BHV-11]
 - **anchored_on :** ADR-2 (pipeline canonique vérifié de bout en bout)
 - **files_touched :** `tests/pricing_evals/test_eval_1_examples.py`
 - **prompt :**
@@ -222,7 +222,9 @@ flowchart TD
   > vide (BHV-1), EX-2 ligne simple (BHV-2/BHV-10/BHV-11), EX-3 palier 5 % à qty=20 inclus + franco
   > (BHV-3/BHV-3a/BHV-7), EX-4 palier 10 % à qty=50 inclus (BHV-3b/BHV-7), EX-5 coupon PERCENT cumulable
   > (BHV-4), EX-6 FIXED plafonné total>0 (BHV-5/BHV-11), EX-7 exclusif bat le cumulable (BHV-6/BHV-6b),
-  > EX-8 coupon expiré ignoré (BHV-8). N'écris que ce fichier.
+  > EX-8 coupon expiré ignoré (BHV-8), EX-9 FREE_SHIPPING cumulé avec un coupon exclusif —
+  > franco offert ET remise marchandise exclusive appliquée, `applied_coupons` en ordre canonique
+  > (BHV-6c). N'écris que ce fichier.
 - **done_when :** EVAL-1 collectée + verte à 100 % (`uv run pytest -q -m eval tests/pricing_evals/test_eval_1_examples.py`)
 - **verify :** `uv run pytest -q -m eval tests/pricing_evals/test_eval_1_examples.py`
 - **status :** ☐ pending → ☐ running → ☐ done

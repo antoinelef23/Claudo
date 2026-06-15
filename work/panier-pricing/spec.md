@@ -1,7 +1,7 @@
 ---
 artifact: spec
 feature: panier-pricing
-version: 1.0.0
+version: 1.1.0
 status: validated
 owner: Antoine (test E2E — produit complexe)
 validated_by: métier simulé — 2026-06-15
@@ -117,12 +117,24 @@ Par ligne, en fonction de `qty` (le palier le plus élevé atteint s'applique) :
 
 ### BHV-6 — Cumul des coupons
 - **Given** plusieurs coupons valides
-- **Then** règle de cumul **déterministe** :
-  - **BHV-6a** — tous `stackable: true` : ils s'appliquent **tous**, dans l'ordre canonique
-    (`priority` croissant, puis `code` alphabétique), chacun sur la marchandise courante.
-  - **BHV-6b** — au moins un coupon `stackable: false` (exclusif) présent et valide : on
-    n'applique **qu'un seul** coupon — celui qui produit la **plus grosse remise** parmi tous
-    les coupons valides (égalité tranchée par `priority` le plus bas, puis `code`).
+- **Then** la règle de cumul **déterministe** sépare les coupons de **remise marchandise**
+  (`PERCENT`, `FIXED`) du coupon de **franco** (`FREE_SHIPPING`), qui suit sa propre règle (BHV-6c).
+  Le cumul/exclusivité ci-dessous ne gouverne **que** les coupons de remise marchandise :
+  - **BHV-6a** — tous les coupons de remise marchandise sont `stackable: true` : ils s'appliquent
+    **tous**, dans l'ordre canonique (`priority` croissant, puis `code` alphabétique), chacun sur
+    la marchandise courante.
+  - **BHV-6b** — au moins un coupon de remise marchandise `stackable: false` (exclusif) présent et
+    valide : on n'applique **qu'un seul** coupon de remise marchandise — celui qui produit la
+    **plus grosse remise** parmi les coupons de remise marchandise valides (égalité tranchée par
+    `priority` le plus bas, puis `code`). Un `FREE_SHIPPING` **n'entre jamais** dans ce comparatif
+    (sa remise marchandise est nulle par contrat §3 ; le valoriser à 0 le ferait perdre à tort).
+  - **BHV-6c** — **`FREE_SHIPPING` est indépendant du cumul marchandise.** Tout coupon
+    `FREE_SHIPPING` valide accorde le franco (`free_shipping = true`) et figure dans
+    `applied_coupons`, qu'un coupon de remise marchandise exclusif soit présent ou non. *(Rationale
+    métier : un code « livraison offerte » se cumule toujours avec un code de réduction ; et un
+    coupon dégénéré `FIXED value=0` ne doit jamais évincer un franco.)*
+- **Ordre de `applied_coupons` :** liste en **ordre canonique** (`priority` croissant, puis `code`),
+  qu'il s'agisse de coupons marchandise ou de franco — déterministe (INV-5).
 
 ### BHV-7 — Port et franco
 - **Given** marchandise finale `goods_final`
@@ -227,13 +239,28 @@ expected_output: { goods_subtotal: 1000, line_discounts: 0, coupon_discounts: 0,
 covers: [BHV-8]
 ```
 
+### EX-9 — FREE_SHIPPING cumulé avec un coupon exclusif (BHV-6c)
+```yaml
+input:
+  cart: {lines: [{sku: "A", qty: 2, unit_price_cents: 5000}]}
+  coupons:
+    - {code: "LIVRAISON", type: "FREE_SHIPPING", value: 0,    stackable: true,  priority: 5,  valid_from: 0, valid_to: 100}
+    - {code: "EXCL20",    type: "PERCENT",       value: 2000, stackable: false, priority: 20, valid_from: 0, valid_to: 100}
+  context: {shipping_cents: 500, free_shipping_threshold_cents: 50000, tax_bps: 2000, current_day: 10}
+# franco PAS atteint par la marchandise (8000 < 50000) -> seul le coupon LIVRAISON offre le port.
+# remise marchandise : exclusif EXCL20 appliqué (2000) ; FREE_SHIPPING indépendant (BHV-6c) -> port 0.
+# goods_final 8000 ; port 0 ; taxable 8000 ; TVA 1600 ; total 9600
+expected_output: { goods_subtotal: 10000, line_discounts: 0, coupon_discounts: 2000, goods_final: 8000, shipping: 0, tax: 1600, total: 9600, applied_coupons: ["LIVRAISON", "EXCL20"] }
+covers: [BHV-6c, BHV-7]
+```
+
 ## 8. Evals — merge gate
 
 *Convention : test pytest `@pytest.mark.eval`, nom contenant l'ID en minuscules (ex. `test_eval_1_...`).*
 
 | ID | Type | Description | Couvre | Seuil |
 |---|---|---|---|---|
-| EVAL-1 | deterministic | EX-1 à EX-8 vérifiés **exactement** (toutes clés de la ventilation) | BHV-1..BHV-11 | 100 % |
+| EVAL-1 | deterministic | EX-1 à EX-9 vérifiés **exactement** (toutes clés de la ventilation) | BHV-1..BHV-11 (dont BHV-6c) | 100 % |
 | EVAL-2 | property-based | sur **1000 paniers** aléatoires (seed fixe) : INV-1 (tout entier), INV-2 (`total>=0`, `goods_final>=0`), INV-3 (réconciliation exacte), INV-4 (remise totale ≤ goods_subtotal) tiennent toujours | INV-1, INV-2, INV-3, INV-4 | 100 % |
 | EVAL-3 | deterministic | **déterminisme & idempotence** : (a) deux appels identiques → ventilation identique ; (b) permuter l'ordre du tableau `coupons` → même résultat (INV-5) ; (c) dupliquer un coupon → même résultat qu'une occurrence (INV-6) | INV-5, INV-6, BHV-9 | 100 % |
 | EVAL-4 | deterministic | **arrondi half-up** : un cas dont la TVA tombe sur `x.5` centime arrondit à `x+1` ; aucun double arrondi (la TVA d'un panier multi-lignes == TVA calculée une fois sur la base totale) | INV-7, BHV-10 | 100 % |
@@ -255,3 +282,4 @@ covers: [BHV-8]
 | Version | Date | Auteur | Changement |
 |---|---|---|---|
 | 1.0.0 | 2026-06-15 | métier (simulé E2E) | Création — contrat v1 du moteur de tarification |
+| 1.1.0 | 2026-06-15 | Owner (amendement post-revue CP-2) | Clarifie l'interaction `FREE_SHIPPING` × cumul : BHV-6 ne gouverne que la remise marchandise, ajout BHV-6c (franco indépendant, toujours cumulable), ordre canonique de `applied_coupons`, ajout EX-9. Gap d'under-spécification remonté par le reviewer Opus (le code v1 écartait à tort un franco valide en présence d'un coupon exclusif). |

@@ -1,11 +1,11 @@
 ---
 artifact: design
 feature: panier-pricing
-version: 1.0.0
+version: 1.1.0
 status: validated
 owner: Antoine (test E2E — produit complexe)
 validated_by: technique simulé — 2026-06-15
-spec: ./spec.md          # version : 1.0.0
+spec: ./spec.md          # version : 1.1.0
 ---
 
 # Design — Moteur de tarification de panier
@@ -46,9 +46,11 @@ Six modules sous `src/pricing/` :
 - `tiers.py` — `line_discount(line) -> int` : remise d'**une** ligne selon le barème §4
   (arrondi vers le bas). Pur, ne dépend que de `model`.
 - `coupons.py` — `resolve_coupons(goods_after_lines, coupons, current_day) -> CouponOutcome` :
-  filtre la validité (BHV-8), dédoublonne par `code` (INV-6), applique la règle de cumul
-  (BHV-6a/6b), plafonne (BHV-5/INV-4). Retourne `(coupon_discounts, applied_codes, free_shipping)`.
-  Pur, ne dépend que de `model`.
+  filtre la validité (BHV-8), dédoublonne par `code` (INV-6), applique la règle de cumul des
+  coupons de remise marchandise (BHV-6a/6b) **en traitant `FREE_SHIPPING` séparément** (BHV-6c :
+  franco indépendant, toujours cumulable, jamais valorisé dans le comparatif exclusif), plafonne
+  (BHV-5/INV-4). Retourne `(coupon_discounts, applied_codes, free_shipping)`, `applied_codes` en
+  ordre canonique (`priority`, `code`). Pur, ne dépend que de `model`.
 - `tax.py` — `round_half_up(numerator, denominator) -> int` + `compute_tax(taxable_base, tax_bps)
   -> int` : TVA arrondie half-up **une seule fois** (INV-7). Pur, ne dépend que de `model`
   (ou de rien). **Isolé exprès** pour que la règle d'arrondi soit testable seule.
@@ -177,3 +179,4 @@ N/A en test E2E. (En vrai : `price` est pur → loguer l'entrée/sortie suffit �
 | Version | Date | Auteur | Changement |
 |---|---|---|---|
 | 1.0.0 | 2026-06-15 | technique (simulé) + design-scout | Création |
+| 1.1.0 | 2026-06-15 | technique (passe de cohérence) | Suit l'amendement spec v1.1.0 : §1 `coupons.py` précise le traitement séparé de `FREE_SHIPPING` (BHV-6c) et l'ordre canonique de `applied_codes`. Signatures §5 inchangées. |
