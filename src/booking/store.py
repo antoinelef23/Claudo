@@ -2,7 +2,7 @@
 
 from uuid import uuid4
 
-from .model import Booking, validate_slot
+from .model import Booking, overlaps, validate_slot
 
 
 class BookingStore:
@@ -14,12 +14,8 @@ class BookingStore:
         if reason:
             return {"rejected": reason}
 
-        for existing in self.confirmed(room_id):
-            if existing.start < end and start < existing.end:
-                return {"rejected": "overlap"}
-
         booking_id = str(uuid4())
-        self._bookings[booking_id] = Booking(
+        candidate = Booking(
             id=booking_id,
             room_id=room_id,
             start=start,
@@ -27,6 +23,11 @@ class BookingStore:
             holder=holder,
             status="confirmed",
         )
+        for existing in self.confirmed(room_id):
+            if overlaps(existing, candidate):
+                return {"rejected": "overlap"}
+
+        self._bookings[booking_id] = candidate
         return {"status": "confirmed", "id": booking_id}
 
     def cancel(self, booking_id: str) -> dict:
