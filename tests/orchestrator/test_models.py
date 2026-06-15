@@ -190,6 +190,13 @@ def test_checker_coc_scope():
 # ----------------------------------------------------- agrégation
 
 
+def test_golden_tasks_discoverable():
+    # régression : la détection cherchait check.sh à la racine de la tâche au lieu de goldeval/
+    found = eval_models.discover_golden(REPO)
+    names = {p.name for p in found}
+    assert "devis-calc" in names, f"tâche-or devis-calc non découverte ({names})"
+
+
 def test_aggregate_discriminates():
     results = [
         {
