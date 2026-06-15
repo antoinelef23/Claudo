@@ -22,6 +22,8 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 - **Design ancré** : ne jamais inventer une architecture. S'adosser aux repos de référence listés dans design.md §2. Si aucun pattern de référence ne couvre le besoin, le signaler dans une ADR plutôt qu'improviser.
 - **Spec immuable en cours de tâche** : si l'implémentation révèle un trou dans la spec, on arrête, on amende la spec (commit séparé), puis on reprend.
 - **Amendement = passe de cohérence** : tout amendement de spec impose de mettre à jour les pointeurs `# version :` de design.md/tasks.md et de relire les docs dépendants (une note rédigée avant l'amendement peut être devenue fausse). Le plan-lint signale la dérive de version.
+- **Forme adaptable, fond sacré** : le FOND de spec.md (contrat métier) et design.md (image technique) ne change que par amendement humain (commit séparé + bump `version:`). La FORME peut évoluer librement, y compris pour qu'un autre modèle comprenne mieux. `scripts/content_guard.py` (`make check-content`) rend la règle mécanique : un reformat qui altère le fond sans bump de version est rejeté. Pour aider un modèle qui comprend mal : ajuster d'ABORD le scaffolding (`models/profiles/`, agent `.md`), reformater spec/design en DERNIER recours seulement.
+- **Agents vivants** : les agents `.md` sont versionnés et évoluent à la vitesse des modèles — mais jamais en silence. Tout changement passe la boucle « évals → patch scaffolding → vérification (lève un score sans en régresser) → bump de version » (models/EVOLUTION.md). Un échec de chaîne de commandement est éliminatoire : on n'y remédie pas par du prompt.
 
 ## Conventions
 
