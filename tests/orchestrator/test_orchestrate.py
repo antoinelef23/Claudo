@@ -514,3 +514,29 @@ def test_eval_coverage_path_boundary(sandbox: Path) -> None:
         r.returncode == 1
     )  # tests/foobar hors scope tests/foo → couverture vide → failed
     assert state(sandbox)["T1"] == "failed"
+
+
+def test_remote_approvals_dir(sandbox: Path, tmp_path: Path) -> None:
+    # Approbation distante : le jeton vit dans un volume partagé (LAB_APPROVALS_DIR), pas dans
+    # le dossier local de la feature → l'orchestrateur le lit quand même et reprend.
+    shared = tmp_path / "shared_approvals"
+    shared.mkdir()
+    (shared / "CP-1").write_text("approved_by=remote\n")
+    write_tasks(
+        sandbox,
+        """
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+
+### CP-1 — CHECKPOINT : merge
+- **trigger :** auto quand [T1] done
+- **mode :** blocking
+""",
+    )
+    r = run_orch(sandbox, env_extra={"LAB_APPROVALS_DIR": str(shared)})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(sandbox)["CP-1"] == "done"

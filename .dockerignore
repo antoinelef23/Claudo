@@ -1,0 +1,18 @@
+# Garder l'image légère et SANS données : on n'embarque ni l'historique git, ni les venv/caches,
+# ni les artefacts de run, ni les features de travail (montées au runtime), ni le deck commercial.
+.git/
+.venv/
+**/__pycache__/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+node_modules/
+**/.runs/
+**/.approvals/
+work/
+*.pptx
+.env
+.env.*
+*.log
+.DS_Store
+docs/workflow-review-*.md

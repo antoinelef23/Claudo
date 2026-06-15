@@ -1,6 +1,6 @@
 # Miroir CI du merge gate local : pas d'eval verte, pas de merge — enforcé, pas conventionnel.
-# Reprend exactement `make gate` (lint + tests + evals), y compris la suite orchestrateur
-# (shim claude déterministe, aucun vrai agent requis).
+# Reprend `make ci` = lint NON mutant (ruff check + ruff format --check) + tests + evals, y
+# compris la suite orchestrateur (shim claude déterministe, aucun vrai agent requis).
 name: gate
 
 on:
@@ -18,4 +18,4 @@ jobs:
       - uses: astral-sh/setup-uv@v5
       - run: uv python install 3.12
       - run: make install
-      - run: make gate
+      - run: make ci

@@ -933,12 +933,21 @@ def parse_rejection(path: Path) -> dict:
     return info
 
 
+def approvals_dir(feature: Path) -> Path:
+    """Dossier des jetons d'approbation. LAB_APPROVALS_DIR le pointe vers un volume monté/partagé
+    → l'Owner peut approuver depuis une AUTRE machine (run hors-Mac, en conteneur)."""
+    d = os.environ.get("LAB_APPROVALS_DIR")
+    return Path(d) if d else feature / ".approvals"
+
+
 def wait_checkpoint(
     node: Node, feature: Path, dry: bool, supervised: bool
 ) -> tuple[str, dict]:
     """Retourne ("approved", {}) ou ("rejected", {reason, tasks})."""
-    approval = feature / ".approvals" / node.id
-    rejection = feature / ".approvals" / f"{node.id}.rejected"
+    base = approvals_dir(feature)
+    base.mkdir(parents=True, exist_ok=True)
+    approval = base / node.id
+    rejection = base / f"{node.id}.rejected"
     if dry:
         print(
             f"  [dry-run] CHECKPOINT {node.id} (mode {node.mode}) — attend {approval}"

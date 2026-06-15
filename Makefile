@@ -2,7 +2,7 @@
 # Les cibles sont tolérantes : tant que le projet Python n'existe pas (pas de pyproject.toml),
 # elles no-op proprement pour ne pas casser les hooks sur le squelette vide.
 
-.PHONY: install lint test evals gate validate run
+.PHONY: install lint lint-check test evals gate ci validate run
 
 # Plan-lint d'une feature : make validate FEATURE=work/ma-feature
 validate:
@@ -10,9 +10,11 @@ validate:
 	@python3 scripts/orchestrate.py "$(FEATURE)" --validate
 
 # Run orchestré en avant-plan : make run FEATURE=work/ma-feature [SUPERVISED=1]
+# `caffeinate` (macOS) empêche la veille pendant un run long ; absent ailleurs → on s'en passe.
 run:
 	@test -n "$(FEATURE)" || { echo "usage: make run FEATURE=work/ma-feature"; exit 1; }
-	@caffeinate -i python3 scripts/orchestrate.py "$(FEATURE)" $(if $(SUPERVISED),--supervised,)
+	@CAFF=$$(command -v caffeinate); \
+	$${CAFF:+$$CAFF -i} python3 scripts/orchestrate.py "$(FEATURE)" $(if $(SUPERVISED),--supervised,)
 
 # Garde-fou fond/forme : make check-content FEATURE=work/ma-feature
 # Échoue si le FOND de spec/design a changé sans bump de version (reformat ≠ amendement).
@@ -34,6 +36,12 @@ lint:
 		uv run ruff check --fix . && uv run ruff format .; \
 	else echo "[lint] pas de pyproject.toml — skip"; fi
 
+# Lint NON mutant pour la CI : échoue si le code n'est pas clean/formaté (jamais de --fix).
+lint-check:
+	@if [ -f pyproject.toml ]; then \
+		uv run ruff check . && uv run ruff format --check .; \
+	else echo "[lint-check] pas de pyproject.toml — skip"; fi
+
 test:
 	@if [ -f pyproject.toml ]; then \
 		uv run pytest -q -m "not eval"; \
@@ -51,3 +59,7 @@ evals:
 
 gate: lint test evals
 	@echo "✅ gate OK"
+
+# Gate de CI : identique mais lint NON mutant (échoue sur format non conforme au lieu de le corriger).
+ci: lint-check test evals
+	@echo "✅ ci OK"

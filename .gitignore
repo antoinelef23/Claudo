@@ -17,3 +17,7 @@ build/
 .mypy_cache/
 *.egg-info/
 .coverage
+
+# Artefacts de run de l'orchestrateur (état/journal/rapports + jetons d'approbation) — éphémères
+.runs/
+.approvals/

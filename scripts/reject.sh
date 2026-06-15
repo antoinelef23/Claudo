@@ -8,7 +8,8 @@ CP="${1:?usage: reject.sh CP-n <feature_dir> \"raison\" [Tn ...]}"
 FEATURE="${2:?usage: reject.sh CP-n <feature_dir> \"raison\" [Tn ...]}"
 REASON="${3:?donne une raison — elle est transmise telle quelle aux agents}"
 shift 3
-DIR="$(cd "$(dirname "$0")/.." && pwd)/$FEATURE/.approvals"
+# LAB_APPROVALS_DIR : volume partagé pour rejeter un run hors-Mac (sinon dossier local).
+DIR="${LAB_APPROVALS_DIR:-$(cd "$(dirname "$0")/.." && pwd)/$FEATURE/.approvals}"
 mkdir -p "$DIR"
 {
   echo "reason=$REASON"

@@ -560,6 +560,15 @@ roles = ["implementer"]
     assert [m.id for m in reg.models] == ["ok"]
 
 
+def test_approvals_dir_env_override(tmp_path: Path, monkeypatch):
+    # Hors-Mac : LAB_APPROVALS_DIR pointe les jetons d'approbation vers un volume partagé
+    feat = tmp_path / "work" / "f"
+    monkeypatch.delenv("LAB_APPROVALS_DIR", raising=False)
+    assert orchestrate.approvals_dir(feat) == feat / ".approvals"
+    monkeypatch.setenv("LAB_APPROVALS_DIR", str(tmp_path / "shared"))
+    assert orchestrate.approvals_dir(feat) == tmp_path / "shared"
+
+
 def test_checkpoint_injection_closes_sibling_bypass(tmp_path: Path):
     # H3 — une tâche post-checkpoint câblée à une sœur PRÉ-checkpoint se voit injecter le
     # checkpoint en dépendance : elle ne peut plus s'exécuter avant la validation humaine.
