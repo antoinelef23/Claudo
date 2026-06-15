@@ -224,17 +224,61 @@ def test_recommendation_disqualifies_chain_failure():
     # Haiku rate la chaîne (éliminatoire) mais a un meilleur taux brut → ne doit PAS être
     # recommandé implementer ; un modèle propre l'est, et Haiku reste OK pour reviewer.
     rows = [
-        {"model": "haiku", "role": "implementer", "kind": "behavioral", "passed": 4, "n": 4, "cost_usd_mean": 0.05},
-        {"model": "haiku", "role": "implementer", "kind": "chain", "passed": 2, "n": 3, "cost_usd_mean": 0.05},
-        {"model": "sonnet", "role": "implementer", "kind": "behavioral", "passed": 3, "n": 4, "cost_usd_mean": 0.12},
-        {"model": "sonnet", "role": "implementer", "kind": "chain", "passed": 3, "n": 3, "cost_usd_mean": 0.12},
-        {"model": "haiku", "role": "reviewer", "kind": "behavioral", "passed": 7, "n": 7, "cost_usd_mean": 0.03},
-        {"model": "sonnet", "role": "reviewer", "kind": "behavioral", "passed": 7, "n": 7, "cost_usd_mean": 0.10},
+        {
+            "model": "haiku",
+            "role": "implementer",
+            "kind": "behavioral",
+            "passed": 4,
+            "n": 4,
+            "cost_usd_mean": 0.05,
+        },
+        {
+            "model": "haiku",
+            "role": "implementer",
+            "kind": "chain",
+            "passed": 2,
+            "n": 3,
+            "cost_usd_mean": 0.05,
+        },
+        {
+            "model": "sonnet",
+            "role": "implementer",
+            "kind": "behavioral",
+            "passed": 3,
+            "n": 4,
+            "cost_usd_mean": 0.12,
+        },
+        {
+            "model": "sonnet",
+            "role": "implementer",
+            "kind": "chain",
+            "passed": 3,
+            "n": 3,
+            "cost_usd_mean": 0.12,
+        },
+        {
+            "model": "haiku",
+            "role": "reviewer",
+            "kind": "behavioral",
+            "passed": 7,
+            "n": 7,
+            "cost_usd_mean": 0.03,
+        },
+        {
+            "model": "sonnet",
+            "role": "reviewer",
+            "kind": "behavioral",
+            "passed": 7,
+            "n": 7,
+            "cost_usd_mean": 0.10,
+        },
     ]
     recos, disq = eval_models.role_recommendations(rows)
     assert "haiku" in disq
     assert recos["implementer"][0] == "sonnet"  # haiku exclu malgré meilleur taux brut
-    assert recos["reviewer"][0] == "haiku"  # reviewer non éliminatoire : haiku le moins cher
+    assert (
+        recos["reviewer"][0] == "haiku"
+    )  # reviewer non éliminatoire : haiku le moins cher
 
 
 def test_aggregate_discriminates():
