@@ -1,44 +1,46 @@
 #!/usr/bin/env bash
-# Eval-or CACHÉE : pièges sur les bornes de paliers et le clamp.
-# Robuste au nom de fichier : on cherche compute_total dans N'IMPORTE quel module du
-# répertoire (le contrat-fichier n'est pas l'objet du test ; les paliers le sont).
+# Verdict LOGIQUE (nom-agnostique) : un callable QUELCONQUE calcule-t-il les paliers + clamp ?
+# Indépendant du nom de fichier/fonction (verdict API séparé). Teste la logique, pas le contrat.
 set -uo pipefail
 python3 - <<'PY'
-import sys, importlib.util, pathlib
+import sys, importlib.util, pathlib, inspect
 sys.path.insert(0, ".")
 
-def load_fn(name):
+def funcs():
+    out = []
     for p in pathlib.Path(".").rglob("*.py"):
         if "goldeval" in p.parts:
             continue
         try:
-            spec = importlib.util.spec_from_file_location(p.stem, p)
-            mod = importlib.util.module_from_spec(spec)
-            spec.loader.exec_module(mod)
+            s = importlib.util.spec_from_file_location(p.stem, p)
+            m = importlib.util.module_from_spec(s)
+            s.loader.exec_module(m)
         except Exception:
             continue
-        if hasattr(mod, name):
-            return getattr(mod, name)
-    return None
+        out += [f for _, f in inspect.getmembers(m, inspect.isfunction)]
+    return out
 
-compute_total = load_fn("compute_total")
-if compute_total is None:
-    print("fonction compute_total introuvable dans le répertoire"); sys.exit(1)
+def approx(a, b): return abs(float(a) - b) < 0.01
 
-def a(x, y): return abs(float(x) - y) < 0.01
-
-# On teste les PALIERS et le CLAMP (la logique), pas la clé is_estimate (orthogonale).
 cases = [
-    ((1000, 0),    "products_eur", 1000.00),   # borne basse : 0 %
-    ((1000.01, 0), "products_eur", 950.01),     # juste au-dessus : 5 %
-    ((5000, 10),   "products_eur", 4750.00),    # borne haute du 5 % (inclusive)
-    ((5000, 10),   "installation_eur", 450.00),
-    ((5000.01, 0), "products_eur", 4500.01),    # juste au-dessus : 10 %
-    ((-100, -5),   "total_eur", 0.00),          # clamp INV-1
+    ((1000, 0), {"products_eur": 1000.00}),     # borne basse : 0 %
+    ((1000.01, 0), {"products_eur": 950.01}),    # juste au-dessus : 5 %
+    ((5000, 10), {"products_eur": 4750.00, "installation_eur": 450.00}),  # borne haute 5 % inclusive
+    ((5000.01, 0), {"products_eur": 4500.01}),   # juste au-dessus : 10 %
 ]
-for args, key, want in cases:
-    got = compute_total(*args)
-    if not a(got[key], want):
-        print(f"{args} {key}={got.get(key)} attendu {want}"); sys.exit(1)
-print("golden remise-paliers OK"); sys.exit(0)
+
+def works(fn):
+    try:
+        for args, exp in cases:
+            r = fn(*args)
+            for k, v in exp.items():
+                if not approx(r[k], v):
+                    return False
+        return float(fn(-100, -5)["total_eur"]) == 0.0  # clamp INV-1
+    except Exception:
+        return False
+
+ok = any(works(f) for f in funcs())
+print("logic OK" if ok else "logic FAIL : aucun callable ne calcule les paliers correctement")
+sys.exit(0 if ok else 1)
 PY

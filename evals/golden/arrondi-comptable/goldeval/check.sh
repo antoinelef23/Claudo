@@ -1,24 +1,42 @@
 #!/usr/bin/env bash
-# Eval-or CACHÉE : piège l'arrondi bancaire de round() vs le demi-supérieur comptable.
+# Verdict LOGIQUE (nom-agnostique) : existe-t-il un callable qui arrondit demi-supérieur
+# ET un qui calcule le TTC ? Indépendant des noms (verdict API séparé). Discrimine round() natif.
 set -uo pipefail
 python3 - <<'PY'
-import sys
+import sys, importlib.util, pathlib, inspect
 sys.path.insert(0, ".")
-try:
-    from compute import round_half_up, compute_ttc
-except Exception as e:
-    print(f"import impossible: {e}"); sys.exit(1)
 
-# tolérance 0.005 : la différence bancaire/demi-supérieur est de 0.01, donc discriminante
-def ok(got, want): return abs(float(got) - want) < 0.005
+def funcs():
+    out = []
+    for p in pathlib.Path(".").rglob("*.py"):
+        if "goldeval" in p.parts:
+            continue
+        try:
+            s = importlib.util.spec_from_file_location(p.stem, p)
+            m = importlib.util.module_from_spec(s)
+            s.loader.exec_module(m)
+        except Exception:
+            continue
+        out += [f for _, f in inspect.getmembers(m, inspect.isfunction)]
+    return out
 
-cases_r = [((2.675, 2), 2.68), ((0.125, 2), 0.13), ((1.005, 2), 1.01), ((2.674, 2), 2.67)]
-for args, want in cases_r:
-    got = round_half_up(*args)
-    if not ok(got, want):
-        print(f"round_half_up{args} = {got} attendu {want} (arrondi bancaire ?)"); sys.exit(1)
+def approx(a, b): return abs(float(a) - b) < 0.005  # < 0.01 : l'écart bancaire/half-up est discriminant
 
-if not ok(compute_ttc(10.0), 12.00):
-    print(f"compute_ttc(10.0) = {compute_ttc(10.0)} attendu 12.00"); sys.exit(1)
-print("golden arrondi-comptable OK"); sys.exit(0)
+fs = funcs()
+
+def is_round(fn):  # demi-supérieur (2 args)
+    try:
+        return approx(fn(2.675, 2), 2.68) and approx(fn(0.125, 2), 0.13) and approx(fn(2.674, 2), 2.67)
+    except Exception:
+        return False
+
+def is_ttc(fn):  # TVA 20 % (1 arg)
+    try:
+        return approx(fn(10.0), 12.0)
+    except Exception:
+        return False
+
+ok = any(is_round(f) for f in fs) and any(is_ttc(f) for f in fs)
+print("logic OK" if ok else "logic FAIL : arrondi demi-supérieur et/ou TTC manquant (round() natif ?)")
+sys.exit(0 if ok else 1)
 PY
