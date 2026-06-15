@@ -6,3 +6,5 @@
 {"event": "task_done", "id": "T1", "attempts": 1, "ts": "2026-06-15T11:45:12"}
 {"event": "review", "id": "CP-1", "model": "claude-opus-4-8", "lens": "revue complète", "verdict": "PASS", "cost_usd": 0.6709689999999999, "ok": true, "ts": "2026-06-15T11:46:32"}
 {"event": "task_attempt", "id": "T2", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 81.0, "cost_usd": 0.3704421, "session": "01108023-ccf3-46c8-8a13-7798652e9e95", "ok": true, "ts": "2026-06-15T11:47:53"}
+{"event": "task_done", "id": "T2", "attempts": 1, "ts": "2026-06-15T11:47:54"}
+{"event": "task_attempt", "id": "T4", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 85.5, "cost_usd": 0.35806049999999995, "session": "033e1b82-f605-4eab-9f92-f81ed775fdbe", "ok": true, "ts": "2026-06-15T11:47:58"}
