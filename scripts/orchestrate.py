@@ -528,7 +528,7 @@ def run_claude(
     Mur wall-clock TASK_TIMEOUT_S : un agent coincé ne bloque jamais sa vague
     indéfiniment. Sortie --output-format json : texte du résultat, session_id
     (pour reprendre la MÊME session au retry au lieu de repartir de zéro) et
-    coût, agrégé dans COST_TOTAL pour le bilan (métrique Twin Track).
+    coût, agrégé dans COST_TOTAL pour le bilan de delivery.
     model : --model passé tel quel (défaut CLI si None).
     """
     cmd = ["claude", "-p", prompt, *CLAUDE_ARGS]

@@ -1,7 +1,7 @@
 [project]
 name = "devis-lab"
 version = "0.1.0"
-description = "Lab IA-natif LMFR — feature de simulation devis-pose"
+description = "Lab IA-natif — feature de simulation devis-pose"
 requires-python = ">=3.12"
 dependencies = []
 

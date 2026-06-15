@@ -11,9 +11,9 @@ spec: ./spec.md          # version de spec couverte : <x.y.z>
 # Design — <Nom de la feature>
 
 > **Le COMMENT. L'architecture.** Principe fondateur : **on n'invente pas d'architecture, on s'adosse**.
-> Tout choix technique doit pointer soit vers un repo interne LMFR, soit vers une grande application
-> open source Python qui a prouvé le pattern en production. L'agent qui implémente cite le pattern
-> de référence (repo + chemin de fichier) dans son code review.
+> Tout choix technique doit pointer soit vers un repo interne de l'organisation, soit vers une grande
+> application open source Python qui a prouvé le pattern en production. L'agent qui implémente cite le
+> pattern de référence (repo + chemin de fichier) dans son code review.
 
 ## 1. Architecture overview
 
@@ -26,9 +26,9 @@ flowchart LR
 
 ## 2. Reference repositories — la fondation
 
-### 2.1 Repos internes LMFR *(à collecter AVANT toute décision — checklist Owner)*
+### 2.1 Repos internes de l'organisation *(à collecter AVANT toute décision — checklist Owner)*
 
-*Demander aux équipes LMFR leurs repos existants sur le périmètre. Pour chaque repo : ce qu'on en reprend (conventions, patterns, contrats d'API) et ce qu'on ne reprend PAS. L'agent `design-scout` produit cette analyse.*
+*Demander aux équipes propriétaires leurs repos existants sur le périmètre. Pour chaque repo : ce qu'on en reprend (conventions, patterns, contrats d'API) et ce qu'on ne reprend PAS. L'agent `design-scout` produit cette analyse.*
 
 | Repo | Équipe / contact | Accès J1 ? | Ce qu'on reprend | Ce qu'on écarte |
 |---|---|---|---|---|
@@ -36,9 +36,9 @@ flowchart LR
 
 **Checklist de collecte :**
 - ☐ Repos du domaine métier concerné (le code existant EST la doc du comportement actuel)
-- ☐ Repo des contrats d'API / schémas d'événements du SI LMFR
-- ☐ Repo Mozaïc + exemples d'intégration existants
-- ☐ Pipelines CI/CD de référence (Adeo Global Ready)
+- ☐ Repo des contrats d'API / schémas d'événements du SI
+- ☐ Repo du design system du projet + exemples d'intégration existants
+- ☐ Pipelines CI/CD de référence (référentiel de conformité applicable)
 - ☐ Conventions de l'équipe : lint, structure, nommage
 
 ### 2.2 Références open source Python *(les patterns éprouvés à grande échelle)*
@@ -57,8 +57,8 @@ flowchart LR
 | Runtime | Python 3.12, FastAPI, Pydantic v2 | <réf> |
 | Données | <PostgreSQL / BigQuery / …> | <réf> |
 | IA | <Vertex AI / Claude API, modèles, fallbacks> | <réf> |
-| Front | <Mozaïc + …> | repo Mozaïc interne |
-| Infra | GCP : <Cloud Run / GKE / …> | pipeline Adeo Global Ready |
+| Front | <design system du projet + …> | repo du design system (cf. design.md §6) |
+| Infra | <cloud : Cloud Run / GKE / Lambda / …> | pipeline du référentiel de conformité applicable |
 
 ## 4. ADRs — Architecture Decision Records
 
@@ -80,14 +80,14 @@ flowchart LR
 - Événements : <schémas + topic(s)>
 - Données : <diagramme ou lien vers migrations>
 
-## 6. Mozaïc & Adeo Global Ready
+## 6. Design system & conformité *(spécificités de l'organisation — à renseigner ici, jamais en dur dans le cœur)*
 
-- **Mozaïc :** composants utilisés, tokens, écarts éventuels (à faire valider).
-- **Adeo Global Ready :** ☐ CI conforme ☐ SAST/DAST ☐ gestion des secrets ☐ i18n ☐ RGPD/données perso ☐ accessibilité.
+- **Design system :** lequel (<nom>), composants utilisés, tokens, écarts éventuels (à faire valider). `N/A` si pas de front.
+- **Référentiel de conformité applicable :** <nom du référentiel> — ☐ CI conforme ☐ SAST/DAST ☐ gestion des secrets ☐ i18n ☐ RGPD/données perso ☐ accessibilité.
 
 ## 7. Observability & rollout
 
-- **Mesures :** lead time, part de code IA, défauts, coût complet (cf. Twin Track).
+- **Mesures :** lead time, part de code IA, défauts, coût complet.
 - **Rollout :** <feature flag, % de trafic, plan de rollback>.
 - **SLO :** <latence p95, dispo, budget erreur>.
 

@@ -1,6 +1,6 @@
 # Lab IA-natif — Workflow agentique
 
-> Squelette de repo pour le lab LMFR × SFEIR. Chaque unité de travail produit trois artefacts markdown versionnés : `spec.md` (le QUOI), `design.md` (le COMMENT), `tasks.md` (le DO). Ils remplacent user stories, specs fonctionnelles et tickets.
+> Squelette de repo pour un workflow de développement agentique, réutilisable sur n'importe quel projet. Chaque unité de travail produit trois artefacts markdown versionnés : `spec.md` (le QUOI), `design.md` (le COMMENT), `tasks.md` (le DO). Ils remplacent user stories, specs fonctionnelles et tickets. *(Les spécificités d'une organisation — design system, référentiel de conformité, repos internes — se déclarent par feature dans son `design.md`, jamais en dur dans le cœur.)*
 
 ## Structure du repo
 
@@ -144,7 +144,7 @@ harnais est testée en CI avec un shim `claude` déterministe (aucun coût) ; la
 
 - **Journal** : chaque run écrit `<feature>/.runs/journal.jsonl` — une ligne JSON par événement
   (tentative, durée, **coût $ par agent**, verdict reviewer, bilan). C'est la source des métriques
-  Twin Track (coût complet, part de code IA) ; le bilan affiche le Σ coût du run.
+  de delivery (coût complet, part de code IA) ; le bilan affiche le Σ coût du run.
 - **Retries avec mémoire** : un retry reprend la MÊME session agent (`--resume`) — l'agent corrige
   son travail au lieu de repartir de zéro.
 - **Mur par agent** : `LAB_TASK_TIMEOUT` (défaut 2400 s) tue un agent coincé ; la tâche compte
@@ -153,7 +153,7 @@ harnais est testée en CI avec un shim `claude` déterministe (aucun coût) ; la
   `tests/orchestrator/` rejoue toute la mécanique (lint, vagues, confinement, reprise,
   checkpoints auto, anti-gate-vide) en ~3 s avec un shim `claude` déterministe.
 
-### Gouvernance (pilote / Adeo Global Ready)
+### Gouvernance (pilote / conformité)
 
 - **Budget $/run** : `LAB_BUDGET_USD` (orchestrateur) et `--budget` (campagne d'éval) — le run
   s'arrête net avant la vague suivante si le coût dépasse le plafond, notifie, et reprend via

@@ -1,15 +1,15 @@
-# CLAUDE.md — Lab IA-natif LMFR
+# CLAUDE.md — Lab IA-natif
 
 ## Context
 
-Lab IA-natif Leroy Merlin France × SFEIR. On recrée des applications depuis zéro avec un workflow agentique. Un Owner unique pilote, les agents codent, l'humain valide. Toute ligne de code écrite à la main est une exception justifiée dans le commit.
+Lab IA-natif : workflow de développement agentique, réutilisable sur n'importe quel projet. On recrée des applications depuis zéro : un Owner unique pilote, les agents codent, l'humain valide. Toute ligne de code écrite à la main est une exception justifiée dans le commit. Les spécificités d'une organisation (design system, référentiel de conformité, repos de référence) ne sont JAMAIS codées en dur dans le workflow : elles se déclarent par feature, dans son `design.md`.
 
 ## The 3 artifacts — source of truth
 
 Chaque unité de travail vit dans `work/<feature>/` avec trois fichiers :
 
 1. **`spec.md`** — le QUOI. Contrat métier : invariants, comportements, exemples, evals. C'est le prompt principal de tout agent qui code. **Ne jamais implémenter quelque chose d'absent de la spec.** Si la spec est ambiguë : poser la question, ne pas deviner.
-2. **`design.md`** — le COMMENT. Stack, ADRs, repos de référence, intégration Mozaïc, conformité Adeo Global Ready. **Tout choix technique doit pointer vers un pattern d'un repo de référence** (interne LMFR ou open source).
+2. **`design.md`** — le COMMENT. Stack, ADRs, repos de référence, intégration au design system du projet, conformité au référentiel applicable. **Tout choix technique doit pointer vers un pattern d'un repo de référence** (repo interne de l'organisation ou open source). *(Le design system et le référentiel de conformité sont propres à chaque organisation : ils se renseignent dans design.md §6, jamais en dur dans le cœur.)*
 3. **`tasks.md`** — le DO. Plan d'exécution généré par l'agent, validé par l'Owner. Séquence via `depends_on`, parallélisme via `parallel_group`, checkpoints humains explicites.
 
 Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md.
@@ -41,8 +41,8 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 | PE | Product Engineer — fait vivre les 3 artefacts, anime les Vibe Workshops |
 | Vibe Workshop | Atelier 105 min qui produit spec.md v1.0 |
 | Eval | Test exécutable dérivé de la spec, condition de merge |
-| Mozaïc | Design system Adeo/LMFR |
-| Adeo Global Ready | Référentiel de conformité Adeo |
+| Design system | Le design system du projet — propre à l'organisation, déclaré dans design.md §6 |
+| Référentiel de conformité | Le standard de conformité/accessibilité applicable — déclaré dans design.md §6 |
 
 ## Agents
 

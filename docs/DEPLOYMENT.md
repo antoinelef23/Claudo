@@ -2,7 +2,7 @@
 
 > État : la **colonne d'orchestration** est mûre pour tourner **hors-Mac dans un sandbox jetable et
 > sans secret**, pour des features pures comme celles déjà éprouvées. Elle n'est PAS prête à tourner
-> sur une machine ayant accès à des credentials/prod, ni encore éprouvée sur une vraie feature LMFR.
+> sur une machine ayant accès à des credentials/prod, ni encore éprouvée sur une vraie feature de production.
 
 ## 0. Le modèle de menace (à lire avant tout)
 
@@ -82,25 +82,25 @@ construire si l'on veut approuver « depuis son téléphone » — non fourni.)
 déterministe, aucun vrai agent ni clé requis). `make gate` (local) garde l'auto-fix ; `make ci`
 échoue au lieu de corriger en silence.
 
-## 5. Forker pour une réutilisation externe
+## 5. Réutilisation externe (le cœur est générique)
 
-La colonne d'orchestration est générique ; le packaging actuel est spécifique LMFR. Pour un fork
-réutilisable hors LMFR :
+Le fonctionnement (orchestrateur, agents `.md`, templates, `CLAUDE.md`, README) **ne mentionne aucune
+organisation** : pas de design system ni de référentiel de conformité codés en dur. Les spécificités
+d'un client se déclarent **par feature, dans `design.md` §6** (nom du design system, référentiel
+applicable) et §2.1 (repos internes de l'organisation) — jamais dans le cœur.
 
-**À retirer / neutraliser :**
-- `LMFR - Dominique FDE.pptx` (deck commercial, 54 Mo) — `git rm`, déjà exclu de l'image via
-  `.dockerignore`.
-- `work/*` (features d'exemple/jetables) et `docs/workflow-review-*.md`.
-- Les spécificités LMFR de `CLAUDE.md` (Mozaïc, Adeo Global Ready, vocabulaire Owner/FDE/PE,
-  Vibe Workshop) et du template `design.md` §6 — à généraliser ou rendre optionnelles.
+**Brancher une organisation :** dans le `design.md` d'une feature, renseigner §6 (ex. tel design
+system, tel référentiel d'accessibilité/conformité) et §2.1 (repos internes + contacts). L'agent
+`design-scout` lit ces entrées et reste agnostique.
 
-**Générique, à garder tel quel :** `scripts/` (orchestrateur, content_guard, registry, eval_models,
-approve/reject, run_sandboxed), `.claude/agents/*`, `templates/*`, `models/*` (registre + EVOLUTION),
-`evals/`, `tests/`, `Makefile`, CI, `Dockerfile`.
+**Si vous clonez depuis un dépôt porteur d'un contexte client**, retirer en plus : tout deck/PDF
+commercial (`*.pptx`, déjà exclu de l'image via `.dockerignore`), les features d'exemple `work/*`
+et les revues `docs/workflow-review-*.md`.
 
-**À ajouter pour une diffusion :** un `LICENSE` (décision du propriétaire — non choisi ici), un README
-« getting started » générique (le README actuel mentionne le contexte LMFR), et idéalement extraire
-les bouts LMFR de `CLAUDE.md` dans un `CLAUDE.local.md` non versionné par le fork.
+**À ajouter pour une diffusion :** un `LICENSE` (décision du propriétaire — non choisi ici).
+
+**Générique, à garder tel quel :** `scripts/`, `.claude/agents/*`, `templates/*`, `models/*`,
+`evals/`, `tests/`, `Makefile`, CI, `Dockerfile`, `sandbox/`.
 
 ## 6. Reste à faire (non bloquant pour un sandbox jetable, requis pour « sérieux »)
 
@@ -109,4 +109,4 @@ les bouts LMFR de `CLAUDE.md` dans un `CLAUDE.local.md` non versionné par le fo
   prouver le chemin agent de bout en bout en sandbox (le `make ci` in-image utilise le shim).
 - Endpoint d'approbation distante ergonomique (au-delà du volume partagé).
 - Garde anti-injection de prompt sur le corps des artefacts (revue : M14) avant inputs non fiables.
-- 1 baptême sur une **vraie feature LMFR** avec humain en supervision.
+- 1 baptême sur une **vraie feature de production** avec humain en supervision.

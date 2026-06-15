@@ -5,8 +5,8 @@ version: 0.1.0
 status: proposed
 generated_by: planner
 approved_by: <Owner — EN ATTENTE DE VALIDATION>
-spec: ./spec.md          # version : 1.0.0
-design: ./design.md      # version : 0.1.0
+spec: ./spec.md # version : 1.0.0
+design: ./design.md # version : 0.1.0
 ---
 
 # Tasks — Agent Douche
@@ -17,19 +17,19 @@ design: ./design.md      # version : 0.1.0
 
 ```mermaid
 flowchart TD
-    T1[T1 Squelette service] --> T2[T2 Module vision]
-    T1 --> T3[T3 Mock catalogue + contrats]
-    T2 --> T4[T4 Module render]
-    T3 --> T5[T5 Module matching]
-    T4 --> CP1{{CP-1 Vertical slice}}
-    T5 --> CP1
-    CP1 --> T6[T6 Intégration catalogue réel]
-    CP1 --> T7[T7 Front Mozaïc]
-    T6 --> CP2{{CP-2 Données réelles}}
-    T7 --> CP2
-    CP2 --> T8[T8 Panier + services]
-    T8 --> T9[T9 Banc d'evals complet + SLO]
-    T9 --> CP3{{CP-3 Merge & flag}}
+ T1[T1 Squelette service] --> T2[T2 Module vision]
+ T1 --> T3[T3 Mock catalogue + contrats]
+ T2 --> T4[T4 Module render]
+ T3 --> T5[T5 Module matching]
+ T4 --> CP1{{CP-1 Vertical slice}}
+ T5 --> CP1
+ CP1 --> T6[T6 Intégration catalogue réel]
+ CP1 --> T7[T7 Front design system]
+ T6 --> CP2{{CP-2 Données réelles}}
+ T7 --> CP2
+ CP2 --> T8[T8 Panier + services]
+ T8 --> T9[T9 Banc d'evals complet + SLO]
+ T9 --> CP3{{CP-3 Merge & flag}}
 ```
 
 ## Tasks
@@ -80,13 +80,13 @@ flowchart TD
 ### T6 — Intégration catalogue/panier réels
 - **agent :** implementer · **depends_on :** [CP-1] · **parallel_group :** D
 - **implements :** [INV-1, INV-3] · **files_touched :** `src/app/clients/`, config env
-- **done_when :** EVAL-1 et EVAL-5 vertes sur API réelles (env de test LMFR)
+- **done_when :** EVAL-1 et EVAL-5 vertes sur API réelles (env de test)
 
-### T7 — Front Mozaïc
+### T7 — Front design system
 - **agent :** implementer · **depends_on :** [CP-1] · **parallel_group :** D *(∥ T6)*
-- **implements :** [BHV-1, BHV-2, BHV-3 — UI] · **anchored_on :** repo Mozaïc §2.1
+- **implements :** [BHV-1, BHV-2, BHV-3 — UI] · **anchored_on :** repo design system §2.1
 - **files_touched :** `front/`
-- **done_when :** parcours complet cliquable, a11y AA, composants Mozaïc standards
+- **done_when :** parcours complet cliquable, a11y AA, composants design system standards
 
 ### CP-2 — CHECKPOINT : données réelles
 - **trigger :** auto quand [T6, T7] done · **validator :** Owner + métier
@@ -101,12 +101,12 @@ flowchart TD
 ### T9 — Banc d'evals complet + SLO + flag
 - **agent :** implementer puis eval-runner · **depends_on :** [T8]
 - **implements :** [EVAL-3, §7 complet] · **files_touched :** `evals/`, monitoring, feature flag
-- **done_when :** EVAL-1→6 vertes en CI, dashboards Twin Track en place, kill-switch testé
+- **done_when :** EVAL-1→6 vertes en CI, dashboards de delivery en place, kill-switch testé
 
 ### CP-3 — CHECKPOINT : merge & rollout
 - **trigger :** auto quand T9 done · **validator :** Owner (revu par Owner_N-1)
 - **mode :** blocking *(merge : le plan-lint refuse `auto` ici)*
-- **reviews :** evals complètes, audit trail, checklist Adeo Global Ready, plan rollout 5 %
+- **reviews :** evals complètes, audit trail, checklist référentiel de conformité, plan rollout 5 %
 - **on_accept :** merge (humain) + flag interne — **jamais automatique**
 
 ## Trigger table
