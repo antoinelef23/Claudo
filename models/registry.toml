@@ -35,8 +35,8 @@ label = "Haiku 4.5"
 family = "claude"
 tier = "fast"
 released = "2025-10-01"
-roles = ["implementer", "eval-runner"]   # éligible implementer : à valider par le harnais comportemental
-context_profile = "base"                 # candidat à "verbose" si sous-performance comportementale
+roles = ["eval-runner"]                  # implementer RETIRÉ : échoue COC-merge même en verbose (boucle 2026-06-15)
+context_profile = "base"                 # verbose testé, ne lève pas le score éliminatoire → reverté
 
 # ------------------------------------------------------- affectation production
 # L'INCUMBENT : quel modèle pilote chaque rôle aujourd'hui. Le scorecard compare
