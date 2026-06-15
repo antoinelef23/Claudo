@@ -7,14 +7,17 @@
 # l'egress réseau (voir scripts/run_sandboxed.sh + docs/DEPLOYMENT.md).
 FROM python:3.12-slim
 
-# git (commits scopés) + node/npm (CLI claude) + build essentials minimaux
+# git (commits scopés) + make (le gate d'evals : l'orchestrateur lance `make evals`) +
+# node/npm (CLI claude) + curl/ca-certificates pour l'installeur uv
 RUN apt-get update && apt-get install -y --no-install-recommends \
-        git ca-certificates curl nodejs npm \
+        git make ca-certificates curl nodejs npm \
     && rm -rf /var/lib/apt/lists/*
 
 # uv (gestion des deps du lab) + CLI claude headless (le runtime des agents)
+# uv copié dans /usr/local/bin (pas un lien vers /root/.local, inaccessible au user non-root)
 RUN curl -LsSf https://astral.sh/uv/install.sh | sh \
-    && ln -s /root/.local/bin/uv /usr/local/bin/uv \
+    && cp /root/.local/bin/uv /root/.local/bin/uvx /usr/local/bin/ \
+    && chmod 755 /usr/local/bin/uv /usr/local/bin/uvx \
     && npm install -g @anthropic-ai/claude-code
 
 # Utilisateur non-root : l'agent ne tourne jamais en root dans le sandbox

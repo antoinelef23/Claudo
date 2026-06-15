@@ -89,6 +89,11 @@ def run_orch(
         "PATH": f"{sandbox / 'bin'}:{os.environ['PATH']}",
         **(env_extra or {}),
     }
+    # Hermétique : ne pas hériter d'un LAB_APPROVALS_DIR ambiant (ex. image sandbox qui le fixe)
+    # sauf si un test le fournit explicitement — sinon les jetons écrits par approve() (dans
+    # feature/.approvals) ne seraient pas lus par l'orchestrateur.
+    if not (env_extra and "LAB_APPROVALS_DIR" in env_extra):
+        env.pop("LAB_APPROVALS_DIR", None)
     return subprocess.run(
         [sys.executable, str(ORCH), feature, *flags],
         cwd=sandbox,
