@@ -209,17 +209,26 @@ def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
                         task / "goldeval", wd / "goldeval", dirs_exist_ok=True
                     )
                     # DEUX verdicts séparés (choix doctrine 2026-06-15) :
-                    api_ok, api_d = check_api_contract(task, wd)  # bon module/fonction nommés
-                    logic_ok, logic_d = check_logic(wd)  # calcul correct, nom-agnostique
+                    api_ok, api_d = check_api_contract(
+                        task, wd
+                    )  # bon module/fonction nommés
+                    logic_ok, logic_d = check_logic(
+                        wd
+                    )  # calcul correct, nom-agnostique
                     for kind, ok, detail in (
                         ("scorecard-api", api_ok, api_d),
                         ("scorecard-logic", logic_ok, logic_d),
                     ):
                         results.append(
                             {
-                                "kind": kind, "model": model, "task": task.name,
-                                "trial": trial, "role": "implementer", "passed": ok,
-                                "detail": detail, "cost_usd": r["cost_usd"],
+                                "kind": kind,
+                                "model": model,
+                                "task": task.name,
+                                "trial": trial,
+                                "role": "implementer",
+                                "passed": ok,
+                                "detail": detail,
+                                "cost_usd": r["cost_usd"],
                                 "duration_s": r["duration_s"],
                             }
                         )
@@ -243,13 +252,20 @@ def check_api_contract(task: Path, wd: Path) -> tuple[bool, str]:
     mod, fns = spec.get("module", ""), spec.get("functions", [])
     code = f"import sys; sys.path.insert(0,'.'); from {mod} import {', '.join(fns)}"
     p = subprocess.run(["python3", "-c", code], cwd=wd, capture_output=True, text=True)
-    return (p.returncode == 0, "contrat API respecté" if p.returncode == 0 else (p.stderr.strip().splitlines() or [""])[-1][:160])
+    return (
+        p.returncode == 0,
+        "contrat API respecté"
+        if p.returncode == 0
+        else (p.stderr.strip().splitlines() or [""])[-1][:160],
+    )
 
 
 def check_logic(wd: Path) -> tuple[bool, str]:
     """Le calcul est-il correct, INDÉPENDAMMENT du nom de fichier/fonction ? La goldeval
     (check.sh, nom-agnostique : scanne tous les callables) tranche."""
-    chk = subprocess.run(["bash", "goldeval/check.sh"], cwd=wd, capture_output=True, text=True)
+    chk = subprocess.run(
+        ["bash", "goldeval/check.sh"], cwd=wd, capture_output=True, text=True
+    )
     return (chk.returncode == 0, (chk.stdout + chk.stderr)[-160:].strip())
 
 
