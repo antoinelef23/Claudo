@@ -147,3 +147,5 @@ flowchart TD
 |---|---|---|---|---|
 | | | | | |
 | 2026-06-15 11:41 | T1 | implementer | done, evals vertes (t1) | |
+| 2026-06-15 11:43 | CP-1 | owner | checkpoint REJETÉ — Réutilise model.overlaps() dans store.book() au lieu de réimplémenter le test de chevauchement inline. Design §1 : le store applique INV-1 en s'appuyant sur model. Une seule définition de l'invariant, sinon EVAL-2 (qui teste overlaps()) et l'enforcement (la copie) peuvent diverger. | |
+| 2026-06-15 11:45 | T1 | implementer | done, evals vertes (t1) | |
