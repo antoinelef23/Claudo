@@ -56,9 +56,12 @@ def load_registry(root: Path | str) -> Registry:
         return Registry(root=root)
     data = tomllib.loads(path.read_text(encoding="utf-8"))
     keys = {f.name for f in fields(Model)}
+    # L12 — une entrée [[model]] sans `id` est ignorée (sinon TypeError fatal au démarrage de
+    # l'orchestrateur, alors qu'un fichier absent dégrade proprement sur le défaut CLI).
     models = [
         Model(**{k: v for k, v in entry.items() if k in keys})
         for entry in data.get("model", [])
+        if entry.get("id")
     ]
     return Registry(models=models, role_defaults=dict(data.get("roles", {})), root=root)
 

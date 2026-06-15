@@ -369,3 +369,105 @@ def test_anti_gate_vide(sandbox: Path) -> None:
     assert r.returncode == 1
     assert state(sandbox)["T1"] == "failed"
     assert "FAIL" in (sandbox / "work" / "feat" / "tasks.md").read_text()
+
+
+# ----------------------------------------------------- durcissement (revue 2026-06-15)
+
+
+def test_lint_rejects_unsafe_verify(sandbox: Path) -> None:
+    # H1 — un verify avec exécutable hors liste blanche / opérateur shell = erreur de lint
+    write_tasks(
+        sandbox,
+        """
+### T1 — verify dangereux
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `rm -rf /tmp/x`
+""",
+    )
+    r = run_orch(sandbox, "--validate")
+    assert r.returncode == 1
+    assert "verify" in r.stdout and "rejeté" in r.stdout
+
+
+def test_status_last_match_wins(sandbox: Path) -> None:
+    # M10 — deux lignes STATUS : c'est la DERNIÈRE qui tranche (comme le parseur VERDICT)
+    (sandbox / ".shim" / "T1.sh").write_text(
+        'printf "STATUS: blocked — faux positif recopié\\nSTATUS: done\\n"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — conclut done malgré une ligne blocked plus haut
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(sandbox)["T1"] == "done"
+
+
+def test_scoped_commit_does_not_sweep_unrelated_tests(sandbox: Path) -> None:
+    # H4/M12 — un fichier non lié sous tests/ ne doit JAMAIS être aspiré dans le commit
+    # de la tâche (l'ancien code stageait l'arbre tests/ en entier).
+    (sandbox / "tests").mkdir()
+    (sandbox / "tests" / "unrelated.py").write_text("# pas cette tâche\n")
+    (sandbox / ".shim" / "T1.sh").write_text(
+        'echo data > t1.txt\necho "STATUS: done"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — n'écrit que t1.txt
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `test -f t1.txt`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    import subprocess
+
+    def tracked(p: str) -> str:
+        return subprocess.run(
+            ["git", "ls-files", p], cwd=sandbox, capture_output=True, text=True
+        ).stdout
+
+    assert tracked("tests/unrelated.py").strip() == ""  # hors scope → non committé
+    assert "t1.txt" in tracked("t1.txt")  # dans le scope → committé
+
+
+def test_eval_coverage_scoped_to_task_paths(sandbox: Path) -> None:
+    # M3/M4 — la couverture par ID est restreinte aux chemins de test de la tâche : une
+    # eval_1 d'une AUTRE feature ne satisfait pas la couverture (collision de sous-chaîne).
+    collected = sandbox / "collected.txt"
+    collected.write_text("tests/autre_feature/test_eval_1_x.py::test_eval_1_x\n")
+    write_tasks(
+        sandbox,
+        """
+### T1 — couvre EVAL-1 dans son propre périmètre
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `tests/ma_feature/`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    env = {"LAB_EVALS_COLLECTED_FILE": str(collected)}
+    r = run_orch(sandbox, env_extra=env)
+    assert r.returncode == 1  # l'eval est hors périmètre → couverture vide → failed
+    assert state(sandbox)["T1"] == "failed"
+
+    collected.write_text("tests/ma_feature/test_eval_1_x.py::test_eval_1_x\n")
+    (sandbox / "work" / "feat" / ".runs" / "state.json").unlink()
+    r2 = run_orch(sandbox, env_extra=env)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert state(sandbox)["T1"] == "done"

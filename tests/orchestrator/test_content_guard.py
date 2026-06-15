@@ -134,3 +134,63 @@ def test_git_reformat_ok_but_content_change_blocked(tmp_path):
     )
     r = _run_guard(wd, "work/spec.md")
     assert r.returncode == 0, r.stdout
+
+
+# ----------------------------------------------------- durcissement (revue 2026-06-15)
+
+
+def test_changed_glossary_definition_is_detected():
+    # H6 — modifier la DÉFINITION d'un terme (pas seulement son nom canonique) est du fond
+    altered = SPEC_LIST.replace(
+        "| `quote` | estimation |", "| `quote` | facture ferme |"
+    )
+    changed = cg.diff_content(SPEC_LIST, altered)
+    assert any(k.startswith("GLOSS:") for k in changed), changed
+
+
+DESIGN_SIG = """---
+version: 1.0.0
+---
+## 5. Contracts & data
+
+```python
+def price(cart: dict, coupons: list, context: dict) -> dict: ...
+```
+"""
+
+
+def test_design_codeblock_is_fingerprinted():
+    # H5 — une signature dans un bloc de code (hors ADR) est du fond : la changer est détecté
+    altered = DESIGN_SIG.replace("-> dict", "-> float")
+    changed = cg.diff_content(DESIGN_SIG, altered)
+    assert any(k.startswith("CODE:") for k in changed), changed
+
+
+def test_design_codeblock_reformat_is_invisible():
+    # …mais un simple reformat (indentation, espaces) ne touche pas le fond
+    altered = DESIGN_SIG.replace(
+        "def price(cart: dict, coupons: list, context: dict) -> dict: ...",
+        "def price(cart: dict, coupons: list, context: dict) -> dict:\n    ...",
+    )
+    # le découpage en deux lignes garde les mêmes tokens normalisés → pas de changement de fond
+    changed = cg.diff_content(DESIGN_SIG, altered)
+    assert not any(v[0] and v[1] and v[0] != v[1] for v in changed.values()), changed
+
+
+def test_git_downgrade_does_not_authorize_fond_change(tmp_path):
+    # M6 — un fond modifié avec une version NON croissante (downgrade) reste bloqué
+    wd = tmp_path / "rd"
+    (wd / "work").mkdir(parents=True)
+    f = wd / "work" / "spec.md"
+    f.write_text(SPEC_LIST)  # version 1.0.0
+    _git(wd, "init", "-q")
+    _git(wd, "add", "-A")
+    _git(wd, "commit", "-qm", "v1")
+    f.write_text(
+        SPEC_LIST.replace("× 45.0", "× 50.0").replace(
+            "version: 1.0.0", "version: 0.9.0"
+        )
+    )
+    r = _run_guard(wd, "work/spec.md")
+    assert r.returncode == 1, r.stdout
+    assert "NON croissante" in r.stdout

@@ -35,7 +35,9 @@ def works(fn):
             for k, v in exp.items():
                 if not approx(r[k], v):
                     return False
-        return float(fn(-100, -5)["total_eur"]) >= 0  # INV-1 clamp
+        clamp_ok = float(fn(-100, -5)["total_eur"]) >= 0   # INV-1 clamp
+        est_ok = fn(1500, 10)["is_estimate"] is True       # INV-2 : is_estimate toujours True
+        return clamp_ok and est_ok
     except Exception:
         return False
 

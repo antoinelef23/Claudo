@@ -46,14 +46,39 @@ def _norm(s: str) -> str:
     return re.sub(r"\s+", " ", s).strip()
 
 
+def _norm_gloss(s: str) -> str:
+    """Normalisation agressive pour le glossaire : ne garde que les mots (lettres/chiffres,
+    accents et `_` compris), en minuscules. Rend la DÉFINITION d'un terme robuste à la forme
+    (table | liste | prose, ponctuation, parenthèses) tout en capturant son SENS — pas
+    seulement le nom canonique (H6 : sinon on peut inverser la définition d'un terme sans diff)."""
+    s = re.sub(r"[^\w\s]", " ", s, flags=re.UNICODE)
+    return re.sub(r"\s+", " ", s).strip().lower()
+
+
 def extract_content(text: str) -> dict[str, str]:
     """Empreinte de fond : {clé -> texte normalisé}. Robuste à la forme."""
     content: dict[str, list[str]] = {}
     current: str | None = None
     in_glossary = False
+    in_code = False
+    code_idx = 0
 
     for raw in text.splitlines():
         line = raw.rstrip()
+        if line.strip().startswith("```"):  # frontière de bloc de code clôturé
+            in_code = not in_code
+            if in_code and current is None:
+                code_idx += (
+                    1  # nouveau bloc HORS ID (ex. design §5 signatures, §1 diagramme)
+                )
+            continue
+        if in_code:
+            # H5 — contenu d'un bloc clôturé : sous un ID (EX/ADR) → continuation de cet ID ;
+            # sinon → CODE:n (signatures/contrats du design, jusqu'ici jamais empreintés).
+            if line.strip():
+                key = current if current is not None else f"CODE:{code_idx}"
+                content.setdefault(key, []).append(_norm(line))
+            continue
         stripped = _LEADING.sub("", line)
         m = _DEF.match(stripped)
         if m:  # une ligne qui INTRODUIT un ID (def, pas mention inline)
@@ -62,20 +87,18 @@ def extract_content(text: str) -> dict[str, str]:
             continue
         if _HEAD2.match(line):  # frontière de section
             current = None
-            in_glossary = (
-                "gloss—" in line.lower()
-                or "glossary" in line.lower()
-                or "glossaire" in line.lower()
-            )
+            low = line.lower()
+            in_glossary = "glossary" in low or "glossaire" in low
             continue
         # lignes de continuation rattachées à l'ID courant (Given/When/Then, YAML, ADR…)
         if current and line.strip():
             content[current].append(_norm(line))
             continue
-        # glossaire : noms canoniques (code), quelle que soit la forme (table OU liste)
+        # glossaire : une clé par nom canonique, valeur = ligne ENTIÈRE (nom + définition)
+        # normalisée agressivement → robuste à la forme, sensible au sens (H6).
         if in_glossary:
             for c in re.findall(r"`([^`]+)`", line):
-                content[f"GLOSS:{c}"] = [c]
+                content[f"GLOSS:{c}"] = [_norm_gloss(line)]
         # lignes KPI hors ID
         if _KPI.search(line):
             content.setdefault("KPI", []).append(_norm(line))
@@ -96,6 +119,13 @@ def diff_content(old: str, new: str) -> dict[str, tuple[str, str]]:
 def _version(text: str) -> str | None:
     m = re.search(r"^version:\s*([\w.\-]+)", text, re.M)
     return m.group(1) if m else None
+
+
+def _ver_tuple(v: str | None) -> tuple[int, ...] | None:
+    if not v:
+        return None
+    parts = re.findall(r"\d+", v)
+    return tuple(int(x) for x in parts) if parts else None
 
 
 def _focus(a: str, b: str, ctx: int = 25, tail: int = 70) -> tuple[str, str]:
@@ -150,7 +180,11 @@ def main() -> int:
         print(f"✅ {path} : fond identique — la forme peut évoluer librement.")
         return 0
 
-    bumped = _version(old) != _version(new)
+    ov, nv = _version(old), _version(new)
+    ot, nt = _ver_tuple(ov), _ver_tuple(nv)
+    # M6 — un amendement = un bump STRICTEMENT croissant. Un downgrade, une valeur égale ou
+    # malformée ne suffit pas (sinon « touche la ligne version: » défait la garde).
+    bumped = ot is not None and nt is not None and nt > ot
     print(
         f"{'✅' if bumped else '⛔'} {path} : {len(changed)} élément(s) de fond modifié(s) :"
     )
@@ -158,10 +192,14 @@ def main() -> int:
         fa, fb = _focus(av, ap)
         print(f"  • {k}\n      avant : {fa}\n      après : {fb}")
     if bumped:
-        print(
-            f"→ version bumpée ({_version(old)} → {_version(new)}) : amendement assumé, OK."
-        )
+        print(f"→ version bumpée ({ov} → {nv}) : amendement assumé, OK.")
         return 0
+    if ot is not None and nt is not None and nt <= ot and ov != nv:
+        print(
+            f"→ ⛔ version NON croissante ({ov} → {nv}) : un amendement exige un bump strictement\n"
+            "  supérieur. Un downgrade n'autorise pas un changement de fond."
+        )
+        return 1
     print(
         "→ ⛔ le FOND a changé SANS bump de version. Un reformat ne doit toucher que la FORME.\n"
         "  Si c'est volontaire (amendement métier/technique), bumpe `version:` + changelog\n"

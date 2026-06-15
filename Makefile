@@ -19,7 +19,7 @@ run:
 check-content:
 	@test -n "$(FEATURE)" || { echo "usage: make check-content FEATURE=work/ma-feature"; exit 1; }
 	@python3 scripts/content_guard.py --git "$(FEATURE)/spec.md"
-	@test -f "$(FEATURE)/design.md" && python3 scripts/content_guard.py --git "$(FEATURE)/design.md" || true
+	@if [ -f "$(FEATURE)/design.md" ]; then python3 scripts/content_guard.py --git "$(FEATURE)/design.md"; fi
 
 # Éval des modèles : make eval-models [LIVE=1] [LAYER=behavioral|chain|scorecard|all] [MODELS=a,b]
 # Sans LIVE : refuse (campagne facturée). LIVE=1 appelle les vrais modèles du registre.

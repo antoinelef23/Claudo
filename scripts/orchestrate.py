@@ -23,8 +23,9 @@ Garde-fous d'autonomie :
     n'est collectée (pas d'eval écrite = pas de done, même si `make evals` sort 0)
   - confinement d'échec : une tâche failed/blocked ne bloque que son sous-arbre de
     dépendants (skipped) ; les autres branches continuent
-  - commits scopés : on ne stage que les files_touched de la tâche (+ tests/, evals/,
-    le dossier feature) sous verrou — jamais de `git add -A` en vague parallèle
+  - commits scopés : on ne stage que les files_touched de la tâche + les artefacts de la
+    feature (spec/design/tasks), sous verrou ; tout fichier hors-scope déjà indexé est retiré
+    de l'index avant le commit — jamais d'arbre tests/ ou evals/ entier ni de `git add -A`
 
 Usage :
     python3 scripts/orchestrate.py examples/agent-douche --validate
@@ -41,6 +42,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -78,6 +80,39 @@ CLAUDE_ARGS = [
     "json",
 ]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
+
+# H1 — le `verify` d'une tâche est exécuté en shell ; il provient du plan (tasks.md), donc
+# potentiellement d'un modèle. On n'exécute QUE des vérificateurs vettés : pas de métacaractère
+# shell, et un exécutable de la liste blanche (après d'éventuelles assignations d'env VAR=val).
+VERIFY_CMDS = {
+    "uv",
+    "make",
+    "python",
+    "python3",
+    "pytest",
+    "test",
+    "true",
+    "ls",
+    "echo",
+}
+_SHELL_META = re.compile(r"[;&|`$><(){}]|\\\n")
+
+
+def verify_allowed(cmd: str) -> bool:
+    """True si `cmd` est un vérificateur sûr (liste blanche, aucun opérateur shell)."""
+    if not cmd or _SHELL_META.search(cmd):
+        return False
+    try:
+        toks = shlex.split(cmd)
+    except ValueError:
+        return False
+    i = 0
+    while i < len(toks) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[i]):
+        i += 1  # sauter les assignations d'env en tête (ex. PYTHONPATH=src)
+    if i >= len(toks):
+        return False
+    return toks[i].split("/")[-1] in VERIFY_CMDS
+
 
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
@@ -175,12 +210,20 @@ def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
 
         nodes.append(node)
 
-    # Chaque tâche dépend implicitement de tout checkpoint défini avant elle
+    # H3 — toute tâche placée après un checkpoint doit en dépendre, SAUF si elle dépend déjà
+    # d'un nœud situé au niveau ou après ce checkpoint. (L'ancienne règle n'injectait le
+    # checkpoint que pour les tâches SANS dépendance — une tâche câblée à une sœur d'AVANT le
+    # checkpoint s'exécutait alors avant la validation humaine : faille de gate silencieuse.)
+    pos = {n.id: i for i, n in enumerate(nodes)}
     last_cp: str | None = None
     for n in nodes:
         if n.is_checkpoint:
             last_cp = n.id
-        elif last_cp and last_cp not in n.depends_on and not n.depends_on:
+            continue
+        if not last_cp or last_cp in n.depends_on:
+            continue
+        cp_i = pos[last_cp]
+        if not any(pos.get(d, -1) >= cp_i for d in n.depends_on):
             n.depends_on.append(last_cp)
     return fm, nodes
 
@@ -270,6 +313,11 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
             warnings.append(
                 f"{n.id} : pas de verify exécutable — le done_when ne sera pas vérifié mécaniquement"
             )
+        elif not verify_allowed(n.verify):
+            errors.append(
+                f"{n.id} : verify `{n.verify}` rejeté — un vérificateur exécuté en shell ne peut "
+                f"contenir d'opérateur shell et doit invoquer un outil vetté {sorted(VERIFY_CMDS)}"
+            )
 
     # IDs de spec
     spec_path = feature / "spec.md"
@@ -325,6 +373,21 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
                     f"({clash[0][0]} ↔ {clash[0][1]}) — ajoute un depends_on ou sépare les chemins"
                 )
 
+    # H3 — défense en profondeur : aucune tâche ne doit pouvoir s'exécuter avant le checkpoint
+    # qui la précède textuellement. parse_tasks_md l'injecte déjà ; ceci attrape les plans où
+    # un depends_on manuel court-circuiterait un checkpoint (la validation humaine est sacrée).
+    posn = {n.id: i for i, n in enumerate(nodes)}
+    cp_pos = [(posn[n.id], n.id) for n in nodes if n.is_checkpoint]
+    for n in nodes:
+        if n.is_checkpoint:
+            continue
+        prior = [cid for (ci, cid) in cp_pos if ci < posn[n.id]]
+        if prior and prior[-1] not in anc[n.id]:
+            errors.append(
+                f"{n.id} : s'exécuterait avant le checkpoint {prior[-1]} (absent de ses ancêtres) — "
+                "une tâche post-checkpoint ne doit jamais tourner sans la validation humaine"
+            )
+
     # Checkpoints
     cps = [n for n in nodes if n.is_checkpoint]
     if not cps:
@@ -367,9 +430,11 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
                     f"{n.id} : modèle « {n.model} » absent du registre (models/registry.toml)"
                 )
             elif role not in m.roles:
-                warnings.append(
-                    f"{n.id} : modèle « {n.model} » non éligible au rôle {role} (registre : {m.roles})"
-                )
+                msg = f"{n.id} : modèle « {n.model} » non éligible au rôle {role} (registre : {m.roles})"
+                # M9 — un implementer ineligible TOURNERAIT quand même (la résolution ne filtre
+                # pas) : c'est une erreur bloquante. Le reviewer, lui, s'auto-corrige via
+                # eligible() dans pick_reviewer_models → simple avertissement.
+                (errors if role == "implementer" else warnings).append(msg)
 
     return errors, warnings
 
@@ -403,11 +468,15 @@ def notify(msg: str) -> None:
     if os.environ.get("LAB_NO_NOTIFY"):  # tests / CI : pas de notif macOS
         return
     try:
+        # H2 — msg peut contenir du texte émis par un modèle (raison de STATUS, titre de
+        # tâche) : on le passe en ARGUMENT à osascript (`on run {msg}`), jamais interpolé dans
+        # le source AppleScript — sinon un `"` + `do shell script` = exécution arbitraire.
         subprocess.run(
             [
                 "osascript",
                 "-e",
-                f'display notification "{msg}" with title "Lab IA-natif" sound name "Glass"',
+                'on run {msg}\ndisplay notification msg with title "Lab IA-natif" sound name "Glass"\nend run',
+                msg,
             ],
             capture_output=True,
             timeout=10,
@@ -518,27 +587,56 @@ def evals_collected() -> str:
 
 
 def scoped_commit(node: Node, feature: Path, message: str) -> None:
-    """Stage uniquement le périmètre de la tâche, sous verrou (vagues parallèles)."""
+    """Stage UNIQUEMENT les files_touched de la tâche + les artefacts de la feature
+    (spec/design/tasks), sous verrou.
+
+    H4/M12 — on ne stage JAMAIS les arbres `tests/`/`evals/` entiers ni le dossier feature
+    complet : en vague parallèle, la première tâche finie aspirerait sinon les fichiers en
+    cours d'une tâche sœur dans CE commit (traçabilité « 1 commit ↔ ses IDs » cassée). Tout
+    fichier hors-scope déjà indexé est RETIRÉ de l'index avant le commit (pas seulement signalé).
+    """
     with COMMIT_LOCK:
-        paths = [*node.files, "tests", "evals", str(feature.relative_to(ROOT))]
-        for p in paths:
-            subprocess.run(["git", "add", "--", p], cwd=ROOT, capture_output=True)
-        leftover = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True
-        ).stdout
-        out_of_scope = [
-            line
-            for line in leftover.splitlines()
-            if line and not line.startswith(("A ", "M ", "R ", "D "))
+        feat_rel = str(feature.relative_to(ROOT))
+        allowed = [
+            *node.files,
+            f"{feat_rel}/spec.md",
+            f"{feat_rel}/design.md",
+            f"{feat_rel}/tasks.md",
         ]
-        if out_of_scope:
+        for p in allowed:
+            subprocess.run(["git", "add", "--", p], cwd=ROOT, capture_output=True)
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        ).stdout.split()
+        allowed_norm = [a.rstrip("/") for a in allowed]
+        out = [
+            f
+            for f in staged
+            if not any(f == a or f.startswith(a + "/") for a in allowed_norm)
+        ]
+        if out:
             print(
-                f"⚠️  {node.id} : modifications hors files_touched laissées non commitées :",
+                f"⚠️  {node.id} : {len(out)} fichier(s) hors files_touched retiré(s) de l'index :",
                 flush=True,
             )
-            for line in out_of_scope[:10]:
-                print(f"     {line}", flush=True)
-        subprocess.run(["git", "commit", "-m", message], cwd=ROOT, capture_output=True)
+            for f in out[:10]:
+                print(f"     {f}", flush=True)
+            subprocess.run(
+                ["git", "restore", "--staged", "--", *out],
+                cwd=ROOT,
+                capture_output=True,
+            )
+        r = subprocess.run(
+            ["git", "commit", "-m", message], cwd=ROOT, capture_output=True, text=True
+        )
+        if r.returncode != 0 and "nothing to commit" in (r.stdout + r.stderr):
+            print(
+                f"⚠️  {node.id} : rien à committer dans le scope — aucun commit créé",
+                flush=True,
+            )
 
 
 def run_task(node: Node, feature: Path, dry: bool) -> str:
@@ -563,7 +661,27 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     trace = f"[{', '.join(real_ids)}]" if real_ids else "[auto]"
 
     mid = resolve_model("implementer", node.model, REGISTRY)
+    if REGISTRY.models and mid:  # M9 — un implementer ineligible ne doit pas tourner
+        m = REGISTRY.by_id(mid)
+        if m is not None and "implementer" not in m.roles:
+            notify(
+                f"{node.id} : modèle {mid} non éligible au rôle implementer (registre : {m.roles}) "
+                "— tâche bloquée (corrige le **model :** ou models/registry.toml)."
+            )
+            journal(
+                feature,
+                event="task_blocked",
+                id=node.id,
+                reason=f"modèle {mid} ineligible implementer",
+            )
+            return "blocked"
     base_prompt += REGISTRY.profile_text(mid)
+    if node.verify and not verify_allowed(node.verify):  # H1 — défense en profondeur
+        notify(
+            f"{node.id} : verify `{node.verify}` non vetté — tâche refusée (H1 ; corrige le plan)"
+        )
+        journal(feature, event="task_failed", id=node.id, reason="verify non vetté")
+        return "failed"
     session: str | None = None
     extra = ""
     for attempt in range(1, MAX_EVAL_RETRIES + 1):
@@ -596,9 +714,13 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             continue
         session = r["session_id"] or session
 
-        sm = re.search(r"STATUS:\s*(done|blocked)([^\n]*)", r["text"], re.I)
-        if sm and sm.group(1).lower() == "blocked":
-            reason = sm.group(2).strip(" —-:") or "raison non précisée"
+        # M10 — prendre la DERNIÈRE ligne STATUS autonome (comme le parseur VERDICT) : sinon
+        # une instruction « termine par STATUS: blocked » recopiée dans la prose inverserait
+        # le verdict. Ancré en début de ligne (tolère une puce/citation markdown).
+        sms = re.findall(r"(?im)^[\s>*\-]*STATUS:\s*(done|blocked)([^\n]*)$", r["text"])
+        sm = sms[-1] if sms else None
+        if sm and sm[0].lower() == "blocked":
+            reason = sm[1].strip(" —-:") or "raison non précisée"
             run_log(feature, node, "implementer", f"BLOCKED — {reason}")
             journal(feature, event="task_blocked", id=node.id, reason=reason)
             notify(
@@ -623,6 +745,19 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         ok, out = run_evals()
         if ok and real_ids:
             collected = evals_collected()
+            # M3/M4 — restreindre la couverture aux tests DU périmètre de la tâche. Sinon un
+            # EVAL-2 d'une AUTRE feature (même numéro) satisfait la couverture par collision de
+            # sous-chaîne, et l'anti-gate-vide n'est jamais par-tâche. Repli sur le dépôt entier
+            # si la tâche ne déclare aucun chemin de test (ex. une CLI sans eval propre).
+            scope = [
+                f.rstrip("/") for f in node.files if f.startswith(("tests/", "evals/"))
+            ]
+            if scope:
+                collected = "\n".join(
+                    ln
+                    for ln in collected.splitlines()
+                    if any(ln.strip().startswith(s) for s in scope)
+                )
             if "::" not in collected:
                 ok = False
                 out = (
@@ -924,7 +1059,17 @@ def main() -> int:
             wave = ", ".join(n.id for n in tasks)
             print(f"\n=== Vague parallèle : {wave} ===")
             with ThreadPoolExecutor(max_workers=MAX_PARALLEL) as ex:
-                futs = {ex.submit(run_task, n, feature, args.dry_run): n for n in tasks}
+                futs = {}
+                for n in tasks:
+                    # M13 — plafond vérifié AVANT chaque soumission (pas seulement entre vagues) :
+                    # borne le dépassement à ce qui tourne déjà, pas +MAX_PARALLEL agents.
+                    if BUDGET_USD and COST_TOTAL["usd"] >= BUDGET_USD:
+                        print(
+                            f"⛔ Budget atteint avant {n.id} — non lancée (reste pending)",
+                            flush=True,
+                        )
+                        continue
+                    futs[ex.submit(run_task, n, feature, args.dry_run)] = n
                 for fut in as_completed(futs):
                     n = futs[fut]
                     n.status = fut.result()
