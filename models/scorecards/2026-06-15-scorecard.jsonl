@@ -1,0 +1,9 @@
+{"kind": "scorecard", "model": "claude-haiku-4-5-20251001", "task": "devis-calc", "trial": 1, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.0640591, "duration_s": 30.8}
+{"kind": "scorecard", "model": "claude-haiku-4-5-20251001", "task": "devis-calc", "trial": 2, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.0626194, "duration_s": 32.0}
+{"kind": "scorecard", "model": "claude-haiku-4-5-20251001", "task": "devis-calc", "trial": 3, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.08365580000000002, "duration_s": 48.6}
+{"kind": "scorecard", "model": "claude-opus-4-8", "task": "devis-calc", "trial": 1, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.2777295, "duration_s": 30.2}
+{"kind": "scorecard", "model": "claude-opus-4-8", "task": "devis-calc", "trial": 2, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.2990965, "duration_s": 38.6}
+{"kind": "scorecard", "model": "claude-opus-4-8", "task": "devis-calc", "trial": 3, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.278899, "duration_s": 41.1}
+{"kind": "scorecard", "model": "claude-sonnet-4-6", "task": "devis-calc", "trial": 1, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.17425050000000003, "duration_s": 46.7}
+{"kind": "scorecard", "model": "claude-sonnet-4-6", "task": "devis-calc", "trial": 2, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.20412419999999998, "duration_s": 65.8}
+{"kind": "scorecard", "model": "claude-sonnet-4-6", "task": "devis-calc", "trial": 3, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.16712429999999998, "duration_s": 48.7}
