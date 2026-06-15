@@ -126,3 +126,4 @@ flowchart TD
 | 2026-06-15 15:00 | T1 | implementer | done, evals vertes (t1) | |
 | 2026-06-15 15:02 | CP-1 | reviewer | checkpoint auto-validé (PASS, evals vertes) | |
 | 2026-06-15 15:02 | T4 | implementer | done, evals vertes (t1) | |
+| 2026-06-15 15:02 | T2 | implementer | done, evals vertes (t1) | |
