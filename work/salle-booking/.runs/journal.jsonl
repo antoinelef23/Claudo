@@ -8,3 +8,5 @@
 {"event": "task_attempt", "id": "T2", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 81.0, "cost_usd": 0.3704421, "session": "01108023-ccf3-46c8-8a13-7798652e9e95", "ok": true, "ts": "2026-06-15T11:47:53"}
 {"event": "task_done", "id": "T2", "attempts": 1, "ts": "2026-06-15T11:47:54"}
 {"event": "task_attempt", "id": "T4", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 85.5, "cost_usd": 0.35806049999999995, "session": "033e1b82-f605-4eab-9f92-f81ed775fdbe", "ok": true, "ts": "2026-06-15T11:47:58"}
+{"event": "task_done", "id": "T4", "attempts": 1, "ts": "2026-06-15T11:47:58"}
+{"event": "task_attempt", "id": "T3", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 195.9, "cost_usd": 0.5216297999999999, "session": "30b35797-e2c6-48ae-93a9-e5839edc3481", "ok": true, "ts": "2026-06-15T11:49:48"}
