@@ -208,33 +208,49 @@ def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
                     shutil.copytree(
                         task / "goldeval", wd / "goldeval", dirs_exist_ok=True
                     )
-                    chk = subprocess.run(
-                        ["bash", "goldeval/check.sh"],
-                        cwd=wd,
-                        capture_output=True,
-                        text=True,
-                    )
-                    passed = chk.returncode == 0
-                    results.append(
-                        {
-                            "kind": "scorecard",
-                            "model": model,
-                            "task": task.name,
-                            "trial": trial,
-                            "role": "implementer",
-                            "passed": passed,
-                            "detail": (chk.stdout + chk.stderr)[-200:].strip(),
-                            "cost_usd": r["cost_usd"],
-                            "duration_s": r["duration_s"],
-                        }
-                    )
+                    # DEUX verdicts séparés (choix doctrine 2026-06-15) :
+                    api_ok, api_d = check_api_contract(task, wd)  # bon module/fonction nommés
+                    logic_ok, logic_d = check_logic(wd)  # calcul correct, nom-agnostique
+                    for kind, ok, detail in (
+                        ("scorecard-api", api_ok, api_d),
+                        ("scorecard-logic", logic_ok, logic_d),
+                    ):
+                        results.append(
+                            {
+                                "kind": kind, "model": model, "task": task.name,
+                                "trial": trial, "role": "implementer", "passed": ok,
+                                "detail": detail, "cost_usd": r["cost_usd"],
+                                "duration_s": r["duration_s"],
+                            }
+                        )
                     print(
-                        f"  [scorecard] {model} · {task.name} #{trial} : {'✅' if passed else '❌'}",
+                        f"  [scorecard] {model} · {task.name} #{trial} : "
+                        f"api {'✅' if api_ok else '❌'} · logic {'✅' if logic_ok else '❌'}",
                         flush=True,
                     )
                 finally:
                     shutil.rmtree(wd, ignore_errors=True)
     return results
+
+
+def check_api_contract(task: Path, wd: Path) -> tuple[bool, str]:
+    """Le modèle a-t-il produit le module et les fonctions EXACTEMENT nommés par le contrat ?
+    Lit goldeval/contract.json {module, functions}. Import strict depuis le module nommé."""
+    cj = task / "goldeval" / "contract.json"
+    if not cj.exists():
+        return True, "pas de contrat déclaré"
+    spec = json.loads(cj.read_text(encoding="utf-8"))
+    mod, fns = spec.get("module", ""), spec.get("functions", [])
+    code = f"import sys; sys.path.insert(0,'.'); from {mod} import {', '.join(fns)}"
+    p = subprocess.run(["python3", "-c", code], cwd=wd, capture_output=True, text=True)
+    return (p.returncode == 0, "contrat API respecté" if p.returncode == 0 else (p.stderr.strip().splitlines() or [""])[-1][:160])
+
+
+def check_logic(wd: Path) -> tuple[bool, str]:
+    """Le calcul est-il correct, INDÉPENDAMMENT du nom de fichier/fonction ? La goldeval
+    (check.sh, nom-agnostique : scanne tous les callables) tranche."""
+    chk = subprocess.run(["bash", "goldeval/check.sh"], cwd=wd, capture_output=True, text=True)
+    return (chk.returncode == 0, (chk.stdout + chk.stderr)[-160:].strip())
 
 
 def aggregate(results: list[dict]) -> list[dict]:
@@ -317,7 +333,7 @@ def role_recommendations(rows: list[dict]) -> tuple[dict, set]:
     }
     by_role: dict[str, list[dict]] = {}
     for r in rows:
-        if r["kind"] in ("behavioral", "chain", "scorecard"):
+        if r["kind"] in ("behavioral", "chain") or r["kind"].startswith("scorecard"):
             by_role.setdefault(r["role"], []).append(r)
     out: dict[str, tuple] = {}
     for role, rs in by_role.items():
