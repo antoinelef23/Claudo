@@ -1,6 +1,6 @@
 """Résolution des coupons : validité, dédoublonnage, cumul, plafond.
 
-Implémente BHV-4, BHV-5, BHV-6, BHV-6a, BHV-6b, BHV-8, BHV-9, INV-4, INV-6.
+Implémente BHV-4, BHV-5, BHV-6, BHV-6a, BHV-6b, BHV-6c, BHV-8, BHV-9, INV-4, INV-6.
 Pur — ne dépend que de pricing.model.
 """
 
@@ -38,32 +38,44 @@ def resolve_coupons(
     if not deduped:
         return CouponOutcome(coupon_discounts=0, applied_codes=[], free_shipping=False)
 
-    # (3) Règle de cumul déterministe (BHV-6a / BHV-6b)
-    has_exclusive = any(not c.stackable for c in deduped)
+    # (3) BHV-6c : séparer FREE_SHIPPING des coupons de remise marchandise (PERCENT/FIXED).
+    # La règle de cumul/exclusivité ne gouverne QUE les coupons de remise marchandise.
+    # Les FREE_SHIPPING valides accordent toujours le franco, indépendamment du cumul.
+    free_shipping_coupons = [c for c in deduped if c.type == "FREE_SHIPPING"]
+    discount_coupons = [c for c in deduped if c.type != "FREE_SHIPPING"]
 
-    if not has_exclusive:
+    # (4) Règle de cumul déterministe sur les seuls coupons de remise (BHV-6a / BHV-6b)
+    has_exclusive = any(not c.stackable for c in discount_coupons)
+
+    if not discount_coupons:
+        to_apply_discount: list[Coupon] = []
+    elif not has_exclusive:
         # BHV-6a : tous stackable → appliquer tous dans l'ordre canonique (déjà trié)
-        to_apply = deduped
+        to_apply_discount = discount_coupons
     else:
-        # BHV-6b : au moins un exclusif → un seul coupon, le plus avantageux
+        # BHV-6b : au moins un exclusif → un seul coupon de remise, le plus avantageux.
+        # FREE_SHIPPING n'entre jamais dans ce comparatif (BHV-6c).
         def _estimate(c: Coupon) -> int:
             if c.type == "PERCENT":
                 return goods_after_lines * c.value // 10000
-            if c.type == "FIXED":
-                return min(c.value, goods_after_lines)
-            return 0  # FREE_SHIPPING : remise monétaire nulle
+            return min(c.value, goods_after_lines)  # FIXED
 
-        # Tri : remise desc (-), priority asc, code asc
-        best = min(deduped, key=lambda c: (-_estimate(c), c.priority, c.code))
-        to_apply = [best]
+        best = min(discount_coupons, key=lambda c: (-_estimate(c), c.priority, c.code))
+        to_apply_discount = [best]
 
-    # (4) Appliquer les coupons sélectionnés, plafonner à chaque étape (ADR-4)
+    # (5) Réassembler tous les coupons à appliquer en ordre canonique (priority, code)
+    all_to_apply = sorted(
+        free_shipping_coupons + to_apply_discount,
+        key=lambda c: (c.priority, c.code),
+    )
+
+    # (6) Appliquer, plafonner à chaque étape (ADR-4)
     coupon_discounts = 0
     applied_codes: list[str] = []
     free_shipping = False
     current_goods = goods_after_lines
 
-    for c in to_apply:
+    for c in all_to_apply:
         if c.type == "FREE_SHIPPING":
             free_shipping = True
             applied_codes.append(c.code)

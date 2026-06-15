@@ -216,3 +216,63 @@ def test_bhv6a_free_shipping_and_percent_combined():
     assert result.coupon_discounts == 100
     assert result.free_shipping is True
     assert set(result.applied_codes) == {"PCT10", "SHIP"}
+
+
+def test_bhv6c_free_shipping_always_applied_with_exclusive():
+    """BHV-6c : FREE_SHIPPING valide accordé même en présence d'un coupon exclusif (EX-9).
+
+    Le cumul/exclusivité ne gouverne que les remises marchandise PERCENT/FIXED.
+    LIVRAISON (priority=5) précède EXCL20 (priority=20) dans applied_codes (ordre canonique).
+    """
+    c_livraison = Coupon(
+        code="LIVRAISON",
+        type="FREE_SHIPPING",
+        value=0,
+        stackable=True,
+        priority=5,
+        valid_from=0,
+        valid_to=100,
+    )
+    c_excl = Coupon(
+        code="EXCL20",
+        type="PERCENT",
+        value=2000,
+        stackable=False,
+        priority=20,
+        valid_from=0,
+        valid_to=100,
+    )
+    # goods=10000 : EXCL20 seul pour la remise (exclusif) ; LIVRAISON toujours actif (BHV-6c)
+    result = resolve_coupons(10000, [c_livraison, c_excl], current_day=10)
+    assert result.coupon_discounts == 2000
+    assert result.free_shipping is True
+    assert result.applied_codes == ["LIVRAISON", "EXCL20"]
+
+
+def test_bhv6c_free_shipping_not_valued_in_exclusive_contest():
+    """BHV-6c : un FREE_SHIPPING ne doit jamais entrer dans la sélection exclusive.
+
+    Sans cette règle, un FIXED value=0 évincerait le FREE_SHIPPING (estimate 0 vs 0,
+    tiebreak priority/code). Avec la séparation, le FREE_SHIPPING est toujours appliqué.
+    """
+    c_fs = Coupon(
+        code="FREESHIP",
+        type="FREE_SHIPPING",
+        value=0,
+        stackable=True,
+        priority=1,
+        valid_from=0,
+        valid_to=100,
+    )
+    c_excl_zero = Coupon(
+        code="ZERO",
+        type="FIXED",
+        value=0,
+        stackable=False,
+        priority=2,
+        valid_from=0,
+        valid_to=100,
+    )
+    result = resolve_coupons(1000, [c_fs, c_excl_zero], current_day=10)
+    assert result.free_shipping is True
+    assert "FREESHIP" in result.applied_codes
