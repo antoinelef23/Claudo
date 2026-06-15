@@ -19,3 +19,6 @@
 {"event": "task_attempt", "id": "T6", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 175.5, "cost_usd": 0.5650624500000001, "session": "963b3c11-c8ca-44a2-bc77-97ad07d6de8e", "ok": true, "ts": "2026-06-15T12:44:28"}
 {"event": "task_done", "id": "T6", "attempts": 1, "ts": "2026-06-15T12:44:29"}
 {"event": "task_attempt", "id": "T7", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 181.4, "cost_usd": 0.6193280999999999, "session": "a803dcdb-0cc8-4f66-bc30-8bf7a861bf7d", "ok": true, "ts": "2026-06-15T12:44:33"}
+{"event": "task_done", "id": "T7", "attempts": 1, "ts": "2026-06-15T12:44:34"}
+{"event": "review", "id": "CP-3", "model": "claude-opus-4-8", "lens": "revue complète", "verdict": "WARN", "cost_usd": 1.4407074999999998, "ok": true, "ts": "2026-06-15T12:47:43"}
+{"event": "run_end", "cost_usd_total": 9.4504, "statuses": {"T1": "done", "CP-1": "done", "T2": "done", "T3": "done", "T4": "done", "T5": "done", "CP-2": "done", "T6": "done", "T7": "done", "T8": "done", "CP-3": "done"}, "ts": "2026-06-15T12:49:44"}
