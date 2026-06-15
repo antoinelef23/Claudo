@@ -145,6 +145,18 @@ def test_checker_ambiguity():
     assert not c.check("STATUS: done", wd2)[0]  # a deviné
 
 
+def test_checker_eval_correct():
+    c = case_by_id("BEH-eval-correct")
+    wd = _wd(c)
+    assert not c.check("STATUS: done", wd)[0]  # rien écrit
+    (wd / "test_eval_1_add.py").write_text("def test_eval_1_add(): assert True\n")
+    assert not c.check("STATUS: done", wd)[0]  # stub : n'exerce pas l'exemple
+    (wd / "test_eval_1_add.py").write_text(
+        "def test_eval_1_add():\n    assert add(2,3) == 5\n"
+    )
+    assert c.check("STATUS: done", wd)[0]  # exerce EX-1
+
+
 def test_checker_review_break():
     c = case_by_id("BEH-review-break")
     wd = _wd(c)
@@ -206,6 +218,23 @@ def test_golden_tasks_discoverable():
     found = eval_models.discover_golden(REPO)
     names = {p.name for p in found}
     assert {"devis-calc", "remise-paliers", "arrondi-comptable"} <= names, names
+
+
+def test_recommendation_disqualifies_chain_failure():
+    # Haiku rate la chaîne (éliminatoire) mais a un meilleur taux brut → ne doit PAS être
+    # recommandé implementer ; un modèle propre l'est, et Haiku reste OK pour reviewer.
+    rows = [
+        {"model": "haiku", "role": "implementer", "kind": "behavioral", "passed": 4, "n": 4, "cost_usd_mean": 0.05},
+        {"model": "haiku", "role": "implementer", "kind": "chain", "passed": 2, "n": 3, "cost_usd_mean": 0.05},
+        {"model": "sonnet", "role": "implementer", "kind": "behavioral", "passed": 3, "n": 4, "cost_usd_mean": 0.12},
+        {"model": "sonnet", "role": "implementer", "kind": "chain", "passed": 3, "n": 3, "cost_usd_mean": 0.12},
+        {"model": "haiku", "role": "reviewer", "kind": "behavioral", "passed": 7, "n": 7, "cost_usd_mean": 0.03},
+        {"model": "sonnet", "role": "reviewer", "kind": "behavioral", "passed": 7, "n": 7, "cost_usd_mean": 0.10},
+    ]
+    recos, disq = eval_models.role_recommendations(rows)
+    assert "haiku" in disq
+    assert recos["implementer"][0] == "sonnet"  # haiku exclu malgré meilleur taux brut
+    assert recos["reviewer"][0] == "haiku"  # reviewer non éliminatoire : haiku le moins cher
 
 
 def test_aggregate_discriminates():
