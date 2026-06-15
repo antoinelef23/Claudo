@@ -50,8 +50,13 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+from registry import load_registry, resolve_model
+
 # LAB_ROOT : surcharge pour les tests (sandbox) — défaut : la racine du repo
 ROOT = Path(os.environ.get("LAB_ROOT") or Path(__file__).resolve().parent.parent)
+REGISTRY = load_registry(
+    ROOT
+)  # affectation modèle×rôle (vide si pas de models/registry.toml)
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
 MAX_CP_REJECTS = 2  # au-delà : le checkpoint passe failed, reprise manuelle
@@ -93,6 +98,7 @@ class Node:
     mode: str = "blocking"  # checkpoints : blocking | auto
     status: str = "pending"  # pending | running | done | failed | blocked | skipped
     rework: str = ""  # commentaire Owner après rejet de checkpoint (transmis à l'agent)
+    model: str = ""  # override de modèle de tâche (sinon : défaut de rôle du registre)
 
 
 def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
@@ -156,6 +162,9 @@ def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
         mm = re.search(r"\*\*mode\s*:?\*\*\s*(auto|blocking)", body)
         if mm:
             node.mode = mm.group(1)
+        mom = re.search(r"\*\*model\s*:?\*\*\s*`?([\w.\-]+)`?", body)
+        if mom:
+            node.model = mom.group(1)
 
         nodes.append(node)
 
@@ -328,6 +337,22 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
                 f"{cp.id} : un checkpoint final/merge ne peut pas être mode auto — le merge est humain, toujours"
             )
 
+    # Modèles : un override de tâche doit désigner un modèle éligible pour son rôle
+    if REGISTRY.models:
+        for n in nodes:
+            if not n.model:
+                continue
+            role = "reviewer" if n.is_checkpoint else "implementer"
+            m = REGISTRY.by_id(n.model)
+            if m is None:
+                warnings.append(
+                    f"{n.id} : modèle « {n.model} » absent du registre (models/registry.toml)"
+                )
+            elif role not in m.roles:
+                warnings.append(
+                    f"{n.id} : modèle « {n.model} » non éligible au rôle {role} (registre : {m.roles})"
+                )
+
     return errors, warnings
 
 
@@ -368,15 +393,20 @@ def journal(feature: Path, **event) -> None:
             fh.write(json.dumps(event, ensure_ascii=False) + "\n")
 
 
-def run_claude(prompt: str, resume: str | None = None) -> dict:
+def run_claude(
+    prompt: str, resume: str | None = None, model: str | None = None
+) -> dict:
     """Appel claude headless. Retourne {ok, text, session_id, cost_usd, error}.
 
     Mur wall-clock TASK_TIMEOUT_S : un agent coincé ne bloque jamais sa vague
     indéfiniment. Sortie --output-format json : texte du résultat, session_id
     (pour reprendre la MÊME session au retry au lieu de repartir de zéro) et
     coût, agrégé dans COST_TOTAL pour le bilan (métrique Twin Track).
+    model : --model passé tel quel (défaut CLI si None).
     """
     cmd = ["claude", "-p", prompt, *CLAUDE_ARGS]
+    if model:
+        cmd += ["--model", model]
     if resume:
         cmd += ["--resume", resume]
     try:
@@ -493,6 +523,8 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     )
     trace = f"[{', '.join(real_ids)}]" if real_ids else "[auto]"
 
+    mid = resolve_model("implementer", node.model, REGISTRY)
+    base_prompt += REGISTRY.profile_text(mid)
     session: str | None = None
     extra = ""
     for attempt in range(1, MAX_EVAL_RETRIES + 1):
@@ -506,12 +538,13 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             )
         else:
             prompt = base_prompt + extra
-        r = run_claude(prompt, resume=session)
+        r = run_claude(prompt, resume=session, model=mid)
         journal(
             feature,
             event="task_attempt",
             id=node.id,
             attempt=attempt,
+            model=mid,
             duration_s=round(time.monotonic() - t0, 1),
             cost_usd=r["cost_usd"],
             session=r["session_id"],
@@ -600,7 +633,9 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path]:
         f"Produis le rapport de revue (✅/⚠️/❌ avec fichier:ligne) et termine IMPÉRATIVEMENT par une "
         f"ligne seule : « VERDICT: PASS » (aucun écart), « VERDICT: WARN » ou « VERDICT: BLOCK »."
     )
-    r = run_claude(prompt)
+    mid = resolve_model("reviewer", cp.model, REGISTRY)
+    prompt += REGISTRY.profile_text(mid)
+    r = run_claude(prompt, model=mid)
     report.parent.mkdir(exist_ok=True)
     report.write_text(r["text"] or r["error"], encoding="utf-8")
     vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", r["text"])
@@ -609,6 +644,7 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path]:
         feature,
         event="review",
         id=cp.id,
+        model=mid,
         verdict=verdict,
         cost_usd=r["cost_usd"],
         ok=r["ok"],
@@ -743,6 +779,15 @@ def main() -> int:
 
     by_id = {n.id: n for n in nodes}
     print(f"Plan : {len(nodes)} nœuds — " + ", ".join(n.id for n in nodes))
+    if REGISTRY.models:
+        roles_used = {
+            "implementer": resolve_model("implementer", "", REGISTRY),
+            "reviewer": resolve_model("reviewer", "", REGISTRY),
+        }
+        print(
+            "Modèles (registre) : "
+            + ", ".join(f"{r}={m or 'défaut CLI'}" for r, m in roles_used.items())
+        )
 
     rejections: dict[str, int] = {}
     state_f = feature / ".runs" / "state.json"

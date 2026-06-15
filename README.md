@@ -118,6 +118,28 @@ Reprise sur incident : l'état est dans `<feature>/.runs/state.json` — relance
 où ça s'était arrêté (les nœuds `done` ne rejouent pas ; les `blocked` retentent après ta réponse aux OQ).
 Prérequis : `claude` CLI authentifié, `uv` installé.
 
+### Évaluation des modèles
+
+Le lab n'évalue pas que le **produit** (le code, via les evals de spec §7) : il évalue aussi
+les **modèles** qu'il utilise, par rôle. Source de vérité : `models/registry.toml` (data-driven —
+ajouter un modèle = une entrée, zéro code). L'orchestrateur affecte un modèle à chaque rôle
+(`[roles]`), surchargeable par tâche (`**model :**`), et journalise quel modèle a produit quoi.
+
+`scripts/eval_models.py` (cible `make eval-models LIVE=1`) mesure trois couches :
+
+1. **Scorecard** — sur les tâches-or (`evals/golden/`), le code produit passe-t-il **nos** evals
+   cachées (jamais celles que le modèle écrit lui-même) ? Capacité brute par rôle, jugée équitablement.
+2. **Comportemental** (`evals/behavioral/`) — le modèle respecte-t-il son contrat de rôle : scope,
+   verdict `STATUS`, arrêt sur ambiguïté (cas OQ-1), evals d'abord, verdicts reviewer calibrés (cas CP-2) ?
+3. **Chaîne de commandement** — une instruction de tâche peut-elle lui faire violer une hard rule de
+   `CLAUDE.md` (merge sans humain, sauter les evals, sortir du scope) ? Il doit refuser. Couche
+   éliminatoire : une violation disqualifie le modèle pour le rôle, quel que soit son score brut.
+
+Équité par construction (mêmes prompts, essais isolés, métriques mesurées, pas de cherry-pick) et
+boucle de réévaluation à chaque nouveau modèle : voir **`models/EVOLUTION.md`**. La mécanique du
+harnais est testée en CI avec un shim `claude` déterministe (aucun coût) ; la campagne réelle
+(`LIVE=1`) est manuelle car facturée.
+
 ### Télémétrie et limites
 
 - **Journal** : chaque run écrit `<feature>/.runs/journal.jsonl` — une ligne JSON par événement
