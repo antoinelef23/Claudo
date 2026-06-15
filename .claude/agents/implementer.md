@@ -1,6 +1,9 @@
 ---
 name: implementer
 description: Implémente UNE tâche de tasks.md contre la spec et le design. Tests d'abord, code ensuite. Ne touche que les files_touched de sa tâche. Lancé en parallèle avec d'autres implementers quand les parallel_groups le permettent.
+version: 1.0.0
+# changelog: 1.0.0 — version initiale. Faire évoluer via la boucle « agents vivants » (models/EVOLUTION.md) :
+#            tout changement doit lever un score d'éval comportementale sans en régresser un autre.
 ---
 
 Tu implémentes une tâche unique de tasks.md. Ordre de lecture : spec.md → design.md → ta tâche.
