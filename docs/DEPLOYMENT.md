@@ -26,15 +26,27 @@ LAB_BUDGET_USD=20 scripts/run_sandboxed.sh work/ma-feature
 `--no-new-privileges`, pids/mémoire bornés**, ne montant QUE la feature + un volume d'approbations.
 L'image (`.dockerignore`) n'embarque ni l'historique git, ni les secrets, ni le deck commercial.
 
-### Le maillon à durcir : l'egress réseau
-Par défaut Docker donne un **accès sortant complet** → exfiltration ou `pip install` malveillant
-possibles depuis le code de l'agent. `--network none` ne marche pas (la CLI claude doit joindre
-l'API). En production :
-- réseau Docker dédié + pare-feu/proxy **n'autorisant que `api.anthropic.com`** (et le miroir de
-  paquets interne si besoin), via `LAB_DOCKER_NETWORK=ma-net-filtree scripts/run_sandboxed.sh …` ;
-- ou un egress-proxy (Squid/allowlist) sur l'hôte.
-Tant que l'egress n'est pas restreint, considérer le sandbox comme « confiné en écriture/credentials
-mais pas en exfiltration ».
+### Egress allowlisté (fourni et validé)
+Par défaut Docker donne un **accès sortant complet** → exfiltration ou install malveillant possibles
+depuis le code de l'agent. `--network none` ne marche pas (la CLI claude doit joindre l'API). La
+solution fournie (portable, marche sur Docker Desktop) : un réseau **`--internal`** (sans internet)
++ un **proxy tinyproxy allowlisté** qui ne laisse sortir que vers `anthropic.com`.
+
+```bash
+scripts/sandbox_net.sh up                 # crée lab-internal (sans egress) + lab-egress + le proxy
+LAB_DOCKER_NETWORK=lab-internal LAB_EGRESS_PROXY=lab-egress-proxy:8888 \
+  ANTHROPIC_API_KEY=sk-... LAB_BUDGET_USD=10 scripts/run_sandboxed.sh work/ma-feature
+scripts/sandbox_net.sh down                # nettoyage
+```
+
+Le sandbox tourne alors sur `lab-internal` (aucun egress direct) et ne joint l'extérieur QUE via le
+proxy. Allowlist dans `sandbox/filter` (une regex de domaine par ligne — ajouter un miroir de paquets
+interne ici si un run doit installer des deps au runtime, déconseillé).
+
+**Validé** (2026-06-15, depuis un conteneur sur `lab-internal`) :
+- `api.anthropic.com` via proxy → HTTP 405 (TLS atteint l'API réelle) ✅ autorisé ;
+- `example.com` / `github.com` via proxy → curl exit 7 ✅ refusés par le proxy ;
+- sans proxy sur l'internal → curl exit 6 ✅ aucun egress (pas même de DNS).
 
 ## 2. Variables d'environnement
 
@@ -92,7 +104,9 @@ les bouts LMFR de `CLAUDE.md` dans un `CLAUDE.local.md` non versionné par le fo
 
 ## 6. Reste à faire (non bloquant pour un sandbox jetable, requis pour « sérieux »)
 
-- Egress allowlist effectif (cf. §1) — **le plus important**.
+- ~~Egress allowlist~~ ✅ fourni et validé (cf. §1 : `scripts/sandbox_net.sh`).
+- 1 **run live `claude -p` dans le conteneur** (avec ANTHROPIC_API_KEY) — reste à exécuter pour
+  prouver le chemin agent de bout en bout en sandbox (le `make ci` in-image utilise le shim).
 - Endpoint d'approbation distante ergonomique (au-delà du volume partagé).
 - Garde anti-injection de prompt sur le corps des artefacts (revue : M14) avant inputs non fiables.
 - 1 baptême sur une **vraie feature LMFR** avec humain en supervision.

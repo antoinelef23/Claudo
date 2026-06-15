@@ -16,3 +16,4 @@ work/
 *.log
 .DS_Store
 docs/workflow-review-*.md
+sandbox/

@@ -1,0 +1,3 @@
+# Allowlist d'egress (regex POSIX étendue, matchée sur le host). FilterDefaultDeny=Yes →
+# tout ce qui n'est pas listé ici est REFUSÉ. Ajouter une ligne par domaine de confiance.
+(^|\.)anthropic\.com$

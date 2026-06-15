@@ -37,6 +37,7 @@ exec docker run --rm \
   -e LAB_BUDGET_USD="${LAB_BUDGET_USD:-20}" \
   -e LAB_TASK_TIMEOUT="${LAB_TASK_TIMEOUT:-2400}" \
   ${LAB_GCHAT_WEBHOOK:+-e LAB_GCHAT_WEBHOOK} \
+  ${LAB_EGRESS_PROXY:+-e HTTPS_PROXY=http://$LAB_EGRESS_PROXY -e HTTP_PROXY=http://$LAB_EGRESS_PROXY -e NO_PROXY=localhost,127.0.0.1} \
   -v "$PWD/$FEATURE":"/lab/$FEATURE" \
   -v "$APPROVALS_HOST":/approvals \
   "$IMAGE" "$FEATURE"
