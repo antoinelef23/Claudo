@@ -1,0 +1,48 @@
+# Registre des modèles du lab — SOURCE DE VÉRITÉ, data-driven.
+#
+# Ajouter un modèle = une entrée [[model]]. L'orchestrateur et le harnais d'éval
+# le prennent en compte SANS modification de code (conçu pour l'évolution des modèles).
+# Après chaque nouveau modèle : `make eval-models LIVE=1` puis arbitrage — voir models/EVOLUTION.md.
+#
+# Les métriques (coût, latence, taux de passage) ne sont PAS dans ce fichier :
+# elles sont MESURÉES par le harnais (équité), pas déclarées. Ici : identité,
+# éligibilité par rôle, profil de contexte.
+
+schema_version = 1
+
+# ------------------------------------------------------------------ candidats
+[[model]]
+id = "claude-opus-4-8"          # passé tel quel à `claude --model` (alias "opus" accepté aussi)
+label = "Opus 4.8"
+family = "claude"
+tier = "frontier"               # frontier | balanced | fast (descriptif)
+released = ""                   # à compléter
+roles = ["planner", "implementer", "reviewer"]
+context_profile = "base"
+
+[[model]]
+id = "claude-sonnet-4-6"
+label = "Sonnet 4.6"
+family = "claude"
+tier = "balanced"
+released = ""
+roles = ["planner", "implementer", "reviewer", "eval-runner"]
+context_profile = "base"
+
+[[model]]
+id = "claude-haiku-4-5-20251001"
+label = "Haiku 4.5"
+family = "claude"
+tier = "fast"
+released = "2025-10-01"
+roles = ["implementer", "eval-runner"]   # éligible implementer : à valider par le harnais comportemental
+context_profile = "base"                 # candidat à "verbose" si sous-performance comportementale
+
+# ------------------------------------------------------- affectation production
+# L'INCUMBENT : quel modèle pilote chaque rôle aujourd'hui. Le scorecard compare
+# les challengers à cette ligne de base. Modifié uniquement sur preuve chiffrée.
+[roles]
+planner = "claude-opus-4-8"
+implementer = "claude-sonnet-4-6"
+reviewer = "claude-opus-4-8"
+eval-runner = "claude-haiku-4-5-20251001"

@@ -20,6 +20,7 @@ ORCH = REPO / "scripts" / "orchestrate.py"
 
 SHIM = """#!/usr/bin/env bash
 # Shim claude pour les tests orchestrateur — déterministe, instantané.
+[ -n "${LAB_ROOT:-}" ] && echo "$@" >> "$LAB_ROOT/.shim/argv.log"
 PROMPT="$2"
 ID=""
 if echo "$PROMPT" | grep -q "agent reviewer"; then
@@ -102,3 +103,13 @@ def approve(sandbox: Path, cp: str, feature: str = "work/feat") -> None:
     d = sandbox / feature / ".approvals"
     d.mkdir(parents=True, exist_ok=True)
     (d / cp).write_text("approved_by=test\n")
+
+
+def write_registry(sandbox: Path, toml: str) -> None:
+    (sandbox / "models").mkdir(exist_ok=True)
+    (sandbox / "models" / "registry.toml").write_text(toml)
+
+
+def argv_log(sandbox: Path) -> str:
+    p = sandbox / ".shim" / "argv.log"
+    return p.read_text() if p.exists() else ""

@@ -14,6 +14,11 @@ run:
 	@test -n "$(FEATURE)" || { echo "usage: make run FEATURE=work/ma-feature"; exit 1; }
 	@caffeinate -i python3 scripts/orchestrate.py "$(FEATURE)" $(if $(SUPERVISED),--supervised,)
 
+# Éval des modèles : make eval-models [LIVE=1] [LAYER=behavioral|chain|scorecard|all] [MODELS=a,b]
+# Sans LIVE : refuse (campagne facturée). LIVE=1 appelle les vrais modèles du registre.
+eval-models:
+	@python3 scripts/eval_models.py --layer $(or $(LAYER),all) $(if $(LIVE),--live,) $(if $(MODELS),--models $(MODELS),)
+
 install:
 	@if [ -f pyproject.toml ]; then uv sync; else echo "[install] pas de pyproject.toml — skip"; fi
 
