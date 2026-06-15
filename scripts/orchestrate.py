@@ -60,6 +60,7 @@ REGISTRY = load_registry(
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
 MAX_CP_REJECTS = 2  # au-delà : le checkpoint passe failed, reprise manuelle
+BUDGET_USD = float(os.environ.get("LAB_BUDGET_USD", "0") or 0)  # 0 = pas de plafond
 TASK_TIMEOUT_S = int(
     os.environ.get("LAB_TASK_TIMEOUT", "2400")
 )  # mur par agent : 40 min
@@ -99,6 +100,9 @@ class Node:
     status: str = "pending"  # pending | running | done | failed | blocked | skipped
     rework: str = ""  # commentaire Owner après rejet de checkpoint (transmis à l'agent)
     model: str = ""  # override de modèle de tâche (sinon : défaut de rôle du registre)
+    reviewers: int = (
+        1  # taille du panel de reviewers (checkpoint) — ≥2 = vote majoritaire
+    )
 
 
 def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
@@ -165,6 +169,9 @@ def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
         mom = re.search(r"\*\*model\s*:?\*\*\s*`?([\w.\-]+)`?", body)
         if mom:
             node.model = mom.group(1)
+        rm = re.search(r"\*\*reviewers\s*:?\*\*\s*(\d+)", body)
+        if rm:
+            node.reviewers = max(1, int(rm.group(1)))
 
         nodes.append(node)
 
@@ -337,6 +344,17 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
                 f"{cp.id} : un checkpoint final/merge ne peut pas être mode auto — le merge est humain, toujours"
             )
 
+    # Séparation des devoirs : un même modèle ne devrait pas implémenter ET arbitrer seul
+    if REGISTRY.models:
+        impl = REGISTRY.role_default("implementer")
+        rev = REGISTRY.role_default("reviewer")
+        if impl and impl == rev:
+            warnings.append(
+                f"séparation des devoirs : reviewer et implementer pointent le même modèle ({impl}) — "
+                "un checkpoint auto ne pourra pas s'auto-valider (basculera en humain). "
+                "Assigne un modèle reviewer distinct dans models/registry.toml."
+            )
+
     # Modèles : un override de tâche doit désigner un modèle éligible pour son rôle
     if REGISTRY.models:
         for n in nodes:
@@ -359,9 +377,30 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
 # ---------------------------------------------------------------- exécution
 
 
+def _gchat(msg: str) -> None:
+    """Notification Google Chat (opt-in). No-op si LAB_GCHAT_WEBHOOK absent ; ne crashe jamais.
+    Permet à une squad (et pas seulement l'Owner devant son Mac) de voir checkpoints/blocages."""
+    url = os.environ.get("LAB_GCHAT_WEBHOOK")
+    if not url:
+        return
+    try:
+        import json as _json
+        import urllib.request
+
+        req = urllib.request.Request(
+            url,
+            data=_json.dumps({"text": f"[Lab IA-natif] {msg}"}).encode(),
+            headers={"Content-Type": "application/json"},
+        )
+        urllib.request.urlopen(req, timeout=10)
+    except Exception:
+        pass
+
+
 def notify(msg: str) -> None:
     print(f"🔔 {msg}", flush=True)
-    if os.environ.get("LAB_NO_NOTIFY"):  # tests / CI
+    _gchat(msg)
+    if os.environ.get("LAB_NO_NOTIFY"):  # tests / CI : pas de notif macOS
         return
     try:
         subprocess.run(
@@ -621,35 +660,81 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     return "failed"
 
 
-def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path]:
-    """Dossier de revue par l'agent reviewer. Retourne (PASS|WARN|BLOCK, chemin du rapport)."""
+REVIEW_LENSES = [
+    "correction : le code fait-il ce que la spec dit (INV/BHV), valeurs et bornes comprises",
+    "conformité spec/design : traçabilité, scope, respect des ADRs, pas de scope creep",
+    "cas limites & robustesse : entrées extrêmes, erreurs, le livrable s'exécute-t-il vraiment",
+]
+
+
+def pick_reviewer_models(cp: Node, n: int) -> list[str | None]:
+    """n modèles pour le panel. Séparation des devoirs : on préfère un modèle reviewer
+    DIFFÉRENT de l'implementer (un modèle ne doit pas valider seul son propre travail)."""
+    impl = resolve_model("implementer", "", REGISTRY)
+    base = resolve_model("reviewer", cp.model, REGISTRY)
+    pool = [m.id for m in REGISTRY.eligible("reviewer")] or ([base] if base else [None])
+    # priorité aux modèles ≠ implementer, puis le reste
+    ordered = [m for m in pool if m != impl] + [m for m in pool if m == impl]
+    if base in ordered:  # garder le défaut de rôle en tête s'il est admissible
+        ordered = [base] + [m for m in ordered if m != base]
+    return [ordered[i % len(ordered)] for i in range(n)]
+
+
+def _aggregate_verdict(verdicts: list[str]) -> str:
+    if any(v == "BLOCK" for v in verdicts):
+        return "BLOCK"
+    if sum(v == "PASS" for v in verdicts) > len(verdicts) / 2:  # majorité stricte
+        return "PASS"
+    return "WARN"
+
+
+def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
+    """Panel de reviewers. Retourne (verdict_agrégé, rapport, self_review_only).
+    self_review_only = True si tous les panelistes tournent sur le modèle de l'implementer
+    (séparation des devoirs impossible → l'auto-validation sera refusée)."""
     report = feature / ".runs" / f"{cp.id}-review.md"
     if dry:
-        print(f"  [dry-run] reviewer → {report}")
-        return "PASS", report
-    prompt = (
-        f"Tu agis comme l'agent reviewer (.claude/agents/reviewer.md). Feature : {feature}. "
-        f"Checkpoint {cp.id} — {cp.title}. Tâches couvertes : {', '.join(cp.depends_on) or 'toutes'}. "
-        f"Produis le rapport de revue (✅/⚠️/❌ avec fichier:ligne) et termine IMPÉRATIVEMENT par une "
-        f"ligne seule : « VERDICT: PASS » (aucun écart), « VERDICT: WARN » ou « VERDICT: BLOCK »."
-    )
-    mid = resolve_model("reviewer", cp.model, REGISTRY)
-    prompt += REGISTRY.profile_text(mid)
-    r = run_claude(prompt, model=mid)
+        print(f"  [dry-run] reviewer×{cp.reviewers} → {report}")
+        return "PASS", report, False
+
+    n = cp.reviewers
+    models = pick_reviewer_models(cp, n)
+    impl = resolve_model("implementer", "", REGISTRY)
+    verdicts: list[str] = []
+    sections: list[str] = []
+    for i, mid in enumerate(models):
+        lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "revue complète"
+        prompt = (
+            f"Tu agis comme l'agent reviewer (.claude/agents/reviewer.md). Feature : {feature}. "
+            f"Checkpoint {cp.id} — {cp.title}. Tâches couvertes : {', '.join(cp.depends_on) or 'toutes'}. "
+            f"ANGLE DE REVUE imposé : {lens}. "
+            f"Produis le rapport (✅/⚠️/❌ avec fichier:ligne) et termine IMPÉRATIVEMENT par une "
+            f"ligne seule : « VERDICT: PASS », « VERDICT: WARN » ou « VERDICT: BLOCK »."
+        ) + REGISTRY.profile_text(mid)
+        r = run_claude(prompt, model=mid)
+        vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", r["text"])
+        v = vm[-1] if vm else "WARN"
+        verdicts.append(v)
+        sections.append(
+            f"## Paneliste {i + 1} — {mid or 'défaut CLI'} — angle : {lens}\nVERDICT: {v}\n\n{r['text'] or r['error']}"
+        )
+        journal(
+            feature,
+            event="review",
+            id=cp.id,
+            model=mid,
+            lens=lens,
+            verdict=v,
+            cost_usd=r["cost_usd"],
+            ok=r["ok"],
+        )
+
+    agg = _aggregate_verdict(verdicts)
+    self_only = impl is not None and all(m == impl for m in models)
     report.parent.mkdir(exist_ok=True)
-    report.write_text(r["text"] or r["error"], encoding="utf-8")
-    vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", r["text"])
-    verdict = vm[-1] if vm else "WARN"
-    journal(
-        feature,
-        event="review",
-        id=cp.id,
-        model=mid,
-        verdict=verdict,
-        cost_usd=r["cost_usd"],
-        ok=r["ok"],
-    )
-    return verdict, report
+    header = f"# Revue {cp.id} — panel de {n} — verdict agrégé : {agg} ({', '.join(verdicts)})\n\n"
+    report.write_text(header + "\n\n---\n\n".join(sections), encoding="utf-8")
+    return agg, report, self_only
 
 
 def parse_rejection(path: Path) -> dict:
@@ -674,23 +759,29 @@ def wait_checkpoint(
         )
         return "approved", {}
 
-    verdict, report = run_review(node, feature, dry)
+    verdict, report, self_only = run_review(node, feature, dry)
     evals_ok, _ = run_evals()
 
     if node.mode == "auto" and not supervised:
-        if verdict == "PASS" and evals_ok:
+        if self_only:
+            notify(
+                f"{node.id} (auto) : séparation des devoirs impossible (reviewer = modèle de l'implementer) "
+                "→ validation humaine requise. Configure un modèle reviewer distinct dans models/registry.toml."
+            )
+        elif verdict == "PASS" and evals_ok:
             approval.parent.mkdir(exist_ok=True)
             approval.write_text(
-                f"auto-approved (evals vertes + reviewer PASS) at={datetime.now().isoformat()}\n"
+                f"auto-approved (evals vertes + panel reviewer PASS) at={datetime.now().isoformat()}\n"
             )
             run_log(
                 feature, node, "reviewer", "checkpoint auto-validé (PASS, evals vertes)"
             )
             notify(f"{node.id} auto-validé — rapport : {report.relative_to(ROOT)}")
             return "approved", {}
-        notify(
-            f"{node.id} (auto) : reviewer {verdict} / evals {'vertes' if evals_ok else 'ROUGES'} → bascule en validation humaine"
-        )
+        else:
+            notify(
+                f"{node.id} (auto) : panel {verdict} / evals {'vertes' if evals_ok else 'ROUGES'} → bascule en validation humaine"
+            )
 
     notify(
         f"CHECKPOINT {node.id} : décision Owner → scripts/approve.sh {node.id} {feature.relative_to(ROOT)} "
@@ -802,6 +893,18 @@ def main() -> int:
             state_f.write_text(json.dumps({n.id: n.status for n in nodes}, indent=2))
 
     while any(n.status == "pending" for n in nodes):
+        if BUDGET_USD and COST_TOTAL["usd"] >= BUDGET_USD:
+            notify(
+                f"⛔ Budget atteint : ${COST_TOTAL['usd']:.2f} ≥ ${BUDGET_USD:.2f} (LAB_BUDGET_USD) — "
+                "arrêt avant la vague suivante. Relance après revue (reprise via .runs/state.json)."
+            )
+            journal(
+                feature,
+                event="budget_stop",
+                spent_usd=round(COST_TOTAL["usd"], 4),
+                cap_usd=BUDGET_USD,
+            )
+            return 1
         ready = [
             n
             for n in nodes

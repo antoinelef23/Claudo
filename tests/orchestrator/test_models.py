@@ -10,9 +10,13 @@ import subprocess
 import sys
 from pathlib import Path
 
-from .conftest import argv_log, run_orch, write_registry
+from .conftest import approve, argv_log, run_orch, write_registry
 
 REPO = Path(__file__).resolve().parents[2]
+
+
+def state(sandbox: Path) -> dict:
+    return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
 
 
 def _load(mod_name: str, rel: str):
@@ -25,6 +29,10 @@ def _load(mod_name: str, rel: str):
 
 cases = _load("cases", "evals/behavioral/cases.py")
 eval_models = _load("eval_models", "scripts/eval_models.py")
+sys.path.insert(
+    0, str(REPO / "scripts")
+)  # pour le `from registry import` d'orchestrate
+orchestrate = _load("orchestrate", "scripts/orchestrate.py")
 
 REGISTRY_TOML = """schema_version = 1
 [[model]]
@@ -236,6 +244,134 @@ def test_aggregate_discriminates():
     assert rows["good"]["pass_rate"] == 1.0
     assert rows["bad"]["pass_rate"] == 0.0
     assert rows["good"]["n"] == 4
+
+
+# ----------------------------------------------------- P2 : gouvernance
+
+
+def test_aggregate_verdict_panel():
+    assert orchestrate._aggregate_verdict(["PASS", "PASS", "WARN"]) == "PASS"
+    assert orchestrate._aggregate_verdict(["PASS", "WARN", "WARN"]) == "WARN"
+    assert orchestrate._aggregate_verdict(["PASS", "BLOCK", "PASS"]) == "BLOCK"
+
+
+def test_pick_reviewer_models_prefers_non_implementer():
+    # registre réel : implementer=sonnet, reviewer=opus → le panel doit éviter sonnet en tête
+    cp = orchestrate.Node(id="CP-1", title="x", is_checkpoint=True)
+    impl = orchestrate.resolve_model("implementer", "", orchestrate.REGISTRY)
+    models = orchestrate.pick_reviewer_models(cp, 3)
+    assert len(models) == 3
+    assert (
+        models[0] != impl
+    )  # séparation des devoirs : pas l'implementer en premier arbitre
+
+
+def test_gchat_no_crash_when_unreachable(monkeypatch):
+    monkeypatch.setenv("LAB_GCHAT_WEBHOOK", "http://127.0.0.1:9/nope")
+    assert orchestrate._gchat("test") is None  # avale l'erreur réseau, ne lève jamais
+
+
+def test_budget_stops_run(sandbox: Path) -> None:
+    # chaque appel shim coûte 0.001$ ; plafond 0.0005$ → stop après la 1re vague
+    (sandbox / "work" / "feat" / "tasks.md").write_text("""---
+status: approved
+---
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+
+### T2 — B (ne doit jamais tourner : budget épuisé avant)
+- **depends_on :** [T1]
+- **implements :** [doc]
+- **files_touched :** `t2.txt`
+- **done_when :** ok
+- **verify :** `true`
+""")
+    r = run_orch(sandbox, env_extra={"LAB_BUDGET_USD": "0.0005"})
+    assert r.returncode == 1
+    assert "Budget atteint" in r.stdout
+    st = state(sandbox)
+    assert st["T1"] == "done" and st["T2"] == "pending"  # T2 jamais lancée
+
+
+def test_lint_warns_separation_of_duties(sandbox: Path) -> None:
+    write_registry(
+        sandbox,
+        """schema_version = 1
+[[model]]
+id = "solo"
+roles = ["implementer", "reviewer"]
+[roles]
+implementer = "solo"
+reviewer = "solo"
+""",
+    )
+    (sandbox / "work" / "feat" / "tasks.md").write_text("""---
+status: approved
+---
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""")
+    r = run_orch(sandbox, "--validate")
+    assert "séparation des devoirs" in r.stdout
+
+
+def test_auto_checkpoint_refuses_self_review(sandbox: Path) -> None:
+    # reviewer == implementer → un checkpoint auto ne doit PAS s'auto-valider (bascule humain)
+    write_registry(
+        sandbox,
+        """schema_version = 1
+[[model]]
+id = "solo"
+roles = ["implementer", "reviewer"]
+[roles]
+implementer = "solo"
+reviewer = "solo"
+""",
+    )
+    (sandbox / "work" / "feat" / "tasks.md").write_text("""---
+status: approved
+---
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+
+### CP-1 — CHECKPOINT : auto mid-graph
+- **trigger :** auto quand [T1] done
+- **validator :** Owner
+- **mode :** auto
+
+### T2 — B
+- **depends_on :** [CP-1]
+- **implements :** [doc]
+- **files_touched :** `t2.txt`
+- **done_when :** ok
+- **verify :** `true`
+
+### CP-2 — CHECKPOINT : merge
+- **trigger :** auto quand T2 done
+- **validator :** Owner
+- **mode :** blocking
+""")
+    approve(sandbox, "CP-1")  # filet humain : la bascule doit retomber là-dessus
+    approve(sandbox, "CP-2")
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    cp1 = (sandbox / "work" / "feat" / ".approvals" / "CP-1").read_text()
+    assert (
+        "auto-approved" not in cp1
+    )  # n'a PAS auto-validé : a utilisé l'approbation humaine
+    assert "séparation des devoirs impossible" in r.stdout
 
 
 # ----------------------------------------------------- smoke e2e du harnais
