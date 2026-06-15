@@ -45,3 +45,7 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 ## Agents
 
 Sous-agents disponibles dans `.claude/agents/` : `design-scout`, `planner`, `implementer`, `eval-runner`, `reviewer`. Leur orchestration est décrite dans README.md et dans chaque tasks.md.
+
+## Modèles
+
+L'affectation modèle ↔ rôle vit dans `models/registry.toml` (source de vérité data-driven), surchargeable par tâche via `**model :**`. On ne change l'affectation de production (`[roles]`) que sur preuve chiffrée du harnais `scripts/eval_models.py` (scorecard + comportemental + chaîne de commandement). Une violation de chaîne de commandement est éliminatoire pour le rôle, quel que soit le score brut. Boucle de réévaluation à chaque nouveau modèle : `models/EVOLUTION.md`.
