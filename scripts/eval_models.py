@@ -158,13 +158,16 @@ def run_behavioral(models: list[str], layers: set[str], profile_text) -> list[di
     return results
 
 
+def discover_golden(root: Path) -> list[Path]:
+    """Tâches-or = un dossier avec goldeval/check.sh (l'eval cachée du scorecard)."""
+    gr = root / "evals" / "golden"
+    if not gr.exists():
+        return []
+    return sorted(p for p in gr.glob("*") if (p / "goldeval" / "check.sh").exists())
+
+
 def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
-    golden_root = ROOT / "evals" / "golden"
-    tasks = (
-        sorted(p for p in golden_root.glob("*") if (p / "check.sh").exists())
-        if golden_root.exists()
-        else []
-    )
+    tasks = discover_golden(ROOT)
     if not tasks:
         print("  (aucune tâche-or dans evals/golden/*/check.sh — scorecard sautée)")
         return []
