@@ -98,6 +98,22 @@ def _version(text: str) -> str | None:
     return m.group(1) if m else None
 
 
+def _focus(a: str, b: str, ctx: int = 25, tail: int = 70) -> tuple[str, str]:
+    """Cadre l'aperçu autour de la PREMIÈRE divergence (sinon une diff loin
+    dans une longue ligne reste invisible — les deux côtés paraissent identiques)."""
+    i = 0
+    while i < min(len(a), len(b)) and a[i] == b[i]:
+        i += 1
+    start = max(0, i - ctx)
+    pre = "…" if start > 0 else ""
+
+    def cut(s: str) -> str:
+        end = i + tail
+        return pre + s[start:end] + ("…" if end < len(s) else "")
+
+    return cut(a), cut(b)
+
+
 def main() -> int:
     args = sys.argv[1:]
     if args and args[0] == "--git":
@@ -139,7 +155,8 @@ def main() -> int:
         f"{'✅' if bumped else '⛔'} {path} : {len(changed)} élément(s) de fond modifié(s) :"
     )
     for k, (av, ap) in changed.items():
-        print(f"  • {k}\n      avant : {av[:120]}\n      après : {ap[:120]}")
+        fa, fb = _focus(av, ap)
+        print(f"  • {k}\n      avant : {fa}\n      après : {fb}")
     if bumped:
         print(
             f"→ version bumpée ({_version(old)} → {_version(new)}) : amendement assumé, OK."
