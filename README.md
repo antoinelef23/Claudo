@@ -153,6 +153,23 @@ harnais est testée en CI avec un shim `claude` déterministe (aucun coût) ; la
   `tests/orchestrator/` rejoue toute la mécanique (lint, vagues, confinement, reprise,
   checkpoints auto, anti-gate-vide) en ~3 s avec un shim `claude` déterministe.
 
+### Gouvernance (pilote / Adeo Global Ready)
+
+- **Budget $/run** : `LAB_BUDGET_USD` (orchestrateur) et `--budget` (campagne d'éval) — le run
+  s'arrête net avant la vague suivante si le coût dépasse le plafond, notifie, et reprend via
+  `.runs/state.json`. Le coût est mesuré (`--output-format json`), pas estimé.
+- **Séparation des devoirs** : un modèle ne valide pas seul son propre travail. Le panel de revue
+  préfère un modèle reviewer ≠ implementer ; si c'est impossible (même modèle), un checkpoint `auto`
+  refuse de s'auto-valider et bascule en humain. Le plan-lint avertit si `roles.reviewer == roles.implementer`.
+- **Panel de reviewers** : `**reviewers :** N` sur un checkpoint lance N revues à angles distincts
+  (correction / conformité spec / cas limites) ; auto-validation au **vote majoritaire** PASS seulement.
+- **Notifications d'équipe** : `LAB_GCHAT_WEBHOOK` (opt-in) poste checkpoints/blocages sur Google Chat
+  (no-op si absent, ne crashe jamais).
+
+**Backlog P2 assumé** (non livré, raisons) : worktree git par tâche parallèle (rend la collision
+*impossible* vs *interdite* — reporté pour ne pas déstabiliser l'orchestrateur vérifié, mérite sa PR
+dédiée) ; runner cross-vendor (Gemini/Vertex) — abstraction du `claude -p`, non testable ici sans accès Gemini.
+
 ## Démarrer une unité de travail
 
 ```bash

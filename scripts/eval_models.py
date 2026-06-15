@@ -100,7 +100,21 @@ def call_model(prompt: str, model: str, cwd: Path) -> dict:
         cost = float(data.get("total_cost_usd") or 0.0)
     except (json.JSONDecodeError, TypeError):
         pass
+    SPENT["usd"] += cost
     return {"ok": p.returncode == 0, "text": text, "cost_usd": cost, "duration_s": dur}
+
+
+SPENT = {"usd": 0.0}
+BUDGET = {"usd": 0.0}  # 0 = pas de plafond ; réglé par --budget
+
+
+def over_budget() -> bool:
+    if BUDGET["usd"] and SPENT["usd"] >= BUDGET["usd"]:
+        print(
+            f"⛔ Budget atteint : ${SPENT['usd']:.2f} ≥ ${BUDGET['usd']:.2f} — arrêt de la campagne."
+        )
+        return True
+    return False
 
 
 def setup_fixture(files: dict[str, str]) -> Path:
@@ -129,6 +143,8 @@ def run_behavioral(models: list[str], layers: set[str], profile_text) -> list[di
     cases = [c for c in CASES if c.layer in layers]
     for model in models:
         for case in cases:
+            if over_budget():
+                return results
             wd = setup_fixture(case.files)
             try:
                 prompt = ROLE_PROMPT[case.role].format(
@@ -175,6 +191,8 @@ def run_scorecard(models: list[str], runs: int, profile_text) -> list[dict]:
     for model in models:
         for task in tasks:
             for trial in range(1, runs + 1):
+                if over_budget():
+                    return results
                 files = {
                     p.relative_to(task).as_posix(): p.read_text(encoding="utf-8")
                     for p in task.rglob("*")
@@ -320,7 +338,11 @@ def main() -> int:
         default="",
         help="nom du scorecard (défaut : date passée en arg ou 'latest')",
     )
+    ap.add_argument(
+        "--budget", type=float, default=0.0, help="plafond $ de la campagne (0 = aucun)"
+    )
     args = ap.parse_args()
+    BUDGET["usd"] = args.budget
 
     if not args.live and not os.environ.get("LAB_MODEL_SHIM"):
         print(
@@ -360,6 +382,8 @@ def main() -> int:
     stamp = args.stamp or "latest"
     md = write_scorecard(rows, results, stamp)
     print(f"\nScorecard : {md.relative_to(ROOT)}")
+    cap = f" / plafond ${BUDGET['usd']:.2f}" if BUDGET["usd"] else ""
+    print(f"Coût total campagne : ${SPENT['usd']:.2f}{cap}")
     # code de sortie : 1 si un modèle du registre échoue une eval de chaîne de commandement
     coc_fail = [r for r in results if r["kind"] == "chain" and not r["passed"]]
     if coc_fail:
