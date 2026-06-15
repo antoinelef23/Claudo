@@ -106,6 +106,10 @@ def verify_allowed(cmd: str) -> bool:
         toks = shlex.split(cmd)
     except ValueError:
         return False
+    if (
+        "-c" in toks
+    ):  # exécution de code inline (python -c …) : injection, jamais nécessaire
+        return False
     i = 0
     while i < len(toks) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", toks[i]):
         i += 1  # sauter les assignations d'env en tête (ex. PYTHONPATH=src)
@@ -215,12 +219,17 @@ def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
     # checkpoint que pour les tâches SANS dépendance — une tâche câblée à une sœur d'AVANT le
     # checkpoint s'exécutait alors avant la validation humaine : faille de gate silencieuse.)
     pos = {n.id: i for i, n in enumerate(nodes)}
+    by_id = {n.id: n for n in nodes}
     last_cp: str | None = None
     for n in nodes:
         if n.is_checkpoint:
             last_cp = n.id
             continue
         if not last_cp or last_cp in n.depends_on:
+            continue
+        # M1 — ne pas injecter le CP dans une tâche dont le CP dépend déjà (tâche-trigger placée
+        # APRÈS le CP) : cela créerait un cycle. Le plan-lint le signalerait, mais autant ne pas le fabriquer.
+        if n.id in by_id[last_cp].depends_on:
             continue
         cp_i = pos[last_cp]
         if not any(pos.get(d, -1) >= cp_i for d in n.depends_on):
@@ -317,6 +326,16 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
             errors.append(
                 f"{n.id} : verify `{n.verify}` rejeté — un vérificateur exécuté en shell ne peut "
                 f"contenir d'opérateur shell et doit invoquer un outil vetté {sorted(VERIFY_CMDS)}"
+            )
+        # M3/M4 — une tâche qui implémente une EVAL-* DOIT déclarer un chemin de test dans son scope ;
+        # sinon la couverture par ID retombe sur tout le dépôt (collision cross-feature).
+        ev_ids = [
+            s for t in n.implements for s in SPEC_ID.findall(t) if s.startswith("EVAL-")
+        ]
+        if ev_ids and not any(f.startswith(("tests/", "evals/")) for f in n.files):
+            errors.append(
+                f"{n.id} : implémente {ev_ids} mais aucun chemin tests/ ou evals/ dans files_touched "
+                "— l'eval ne serait ni écrite ni gatée dans le périmètre (couverture non scopable)"
             )
 
     # IDs de spec
@@ -624,11 +643,22 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
             )
             for f in out[:10]:
                 print(f"     {f}", flush=True)
-            subprocess.run(
-                ["git", "restore", "--staged", "--", *out],
-                cwd=ROOT,
-                capture_output=True,
+            # L-1 — sur un dépôt sans HEAD (tout premier commit), `git restore --staged` échoue
+            # (rc 128) et laisserait le hors-scope indexé ; on retombe sur `git rm --cached`.
+            has_head = (
+                subprocess.run(
+                    ["git", "rev-parse", "--verify", "-q", "HEAD"],
+                    cwd=ROOT,
+                    capture_output=True,
+                ).returncode
+                == 0
             )
+            unstage = (
+                ["git", "restore", "--staged", "--", *out]
+                if has_head
+                else ["git", "rm", "--cached", "-q", "--", *out]
+            )
+            subprocess.run(unstage, cwd=ROOT, capture_output=True)
         r = subprocess.run(
             ["git", "commit", "-m", message], cwd=ROOT, capture_output=True, text=True
         )
@@ -734,8 +764,22 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             )
 
         if node.verify:
+            # H1 — exécution SANS shell : on tokenise (verify_allowed a déjà rejeté métacaractères
+            # et exécutables hors liste), on extrait les assignations d'env en tête, et on lance la
+            # liste d'arguments. Plus de shell = plus d'injection, et verify ≤ capacités de l'agent.
+            vtoks = shlex.split(node.verify)
+            venv: dict[str, str] = {}
+            j = 0
+            while j < len(vtoks) and re.match(r"^[A-Za-z_][A-Za-z0-9_]*=", vtoks[j]):
+                k, _, val = vtoks[j].partition("=")
+                venv[k] = val
+                j += 1
             v = subprocess.run(
-                node.verify, shell=True, cwd=ROOT, capture_output=True, text=True
+                vtoks[j:],
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env={**os.environ, **venv},
             )
             if v.returncode != 0:
                 extra = f"\n\n⛔ verify a échoué (`{node.verify}`) :\n{(v.stdout + v.stderr)[-2000:]}"
@@ -753,10 +797,17 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 f.rstrip("/") for f in node.files if f.startswith(("tests/", "evals/"))
             ]
             if scope:
+                # M2 — frontière de chemin exacte : `tests/foo` ne doit PAS matcher `tests/foobar`.
+                # nodeid pytest = `chemin::test`, donc on borne par `/` (répertoire) ou `::` (fichier).
+                def _in_scope(ln: str) -> bool:
+                    ln = ln.strip()
+                    return any(
+                        ln == s or ln.startswith(s + "/") or ln.startswith(s + "::")
+                        for s in scope
+                    )
+
                 collected = "\n".join(
-                    ln
-                    for ln in collected.splitlines()
-                    if any(ln.strip().startswith(s) for s in scope)
+                    ln for ln in collected.splitlines() if _in_scope(ln)
                 )
             if "::" not in collected:
                 ok = False

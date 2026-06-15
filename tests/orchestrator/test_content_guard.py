@@ -174,7 +174,7 @@ def test_design_codeblock_reformat_is_invisible():
     )
     # le découpage en deux lignes garde les mêmes tokens normalisés → pas de changement de fond
     changed = cg.diff_content(DESIGN_SIG, altered)
-    assert not any(v[0] and v[1] and v[0] != v[1] for v in changed.values()), changed
+    assert changed == {}, changed
 
 
 def test_git_downgrade_does_not_authorize_fond_change(tmp_path):
@@ -194,3 +194,93 @@ def test_git_downgrade_does_not_authorize_fond_change(tmp_path):
     r = _run_guard(wd, "work/spec.md")
     assert r.returncode == 1, r.stdout
     assert "NON croissante" in r.stdout
+
+
+# --------------------------------------- 2e passe : corrige les régressions H5/H6/M6 (revue n°2)
+
+GLOSS_REF = """---
+version: 1.0.0
+---
+## 2. Glossary
+| Terme | Code | Définition |
+|---|---|---|
+| Part | `parts` | nombre de beneficiaires |
+| Repartition | `shares` | liste de `parts` entiers dont la somme vaut le total |
+"""
+
+
+def test_glossary_inline_reference_does_not_shadow_definition():
+    # H6 (régression) — le row `shares` mentionne `parts` inline ; changer la définition PROPRE
+    # de `parts` doit rester détecté (la mention inline ne doit pas écraser GLOSS:parts).
+    altered = GLOSS_REF.replace(
+        "nombre de beneficiaires", "nombre total de parts egales"
+    )
+    changed = cg.diff_content(GLOSS_REF, altered)
+    assert "GLOSS:parts" in changed, changed
+
+
+DESIGN_MERMAID = """---
+version: 1.0.0
+---
+## 1. Architecture
+
+```mermaid
+flowchart LR
+    A --> B
+```
+"""
+
+
+def test_mermaid_reformat_is_invisible():
+    # H5 (régression) — un diagramme est de la FORME : le re-layout ne doit pas exiger un bump
+    altered = DESIGN_MERMAID.replace(
+        "flowchart LR\n    A --> B", "flowchart TD\n    A --> B\n    B --> A"
+    )
+    changed = cg.diff_content(DESIGN_MERMAID, altered)
+    assert changed == {}, changed
+
+
+DESIGN_TWO = """---
+version: 1.0.0
+---
+## 3. Stack
+
+```python
+X = 1
+```
+
+## 5. Contracts
+
+```python
+def f() -> int: ...
+```
+"""
+
+
+def test_code_block_keys_are_section_anchored():
+    # H5 (régression) — ajouter un bloc dans une section ne doit faire apparaître QUE cette
+    # section comme changée (clés ancrées à la section, pas un index positionnel global).
+    altered = DESIGN_TWO.replace(
+        "## 3. Stack\n\n```python\nX = 1\n```",
+        "## 3. Stack\n\n```python\nX = 1\n```\n\n```python\nY = 2\n```",
+    )
+    changed = cg.diff_content(DESIGN_TWO, altered)
+    assert set(changed) == {"CODE:3. Stack"}, changed
+
+
+def test_git_version_extra_component_not_a_bump(tmp_path):
+    # M6 (régression) — `1.0.0` → `1.0.0.0` n'est PAS un bump (semver strict 3 composants)
+    wd = tmp_path / "rx"
+    (wd / "work").mkdir(parents=True)
+    f = wd / "work" / "spec.md"
+    f.write_text(SPEC_LIST)
+    _git(wd, "init", "-q")
+    _git(wd, "add", "-A")
+    _git(wd, "commit", "-qm", "v1")
+    f.write_text(
+        SPEC_LIST.replace("× 45.0", "× 50.0").replace(
+            "version: 1.0.0", "version: 1.0.0.0"
+        )
+    )
+    r = _run_guard(wd, "work/spec.md")
+    assert r.returncode == 1, r.stdout

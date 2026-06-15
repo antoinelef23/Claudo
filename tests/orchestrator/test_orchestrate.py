@@ -299,16 +299,17 @@ def test_checkpoint_reject_reopens_tasks(sandbox: Path) -> None:
 
 
 def test_eval_coverage_per_id(sandbox: Path) -> None:
-    # EVAL-1 implémentée mais seule une eval_2 est collectée → couverture incomplète → failed
+    # EVAL-1 implémentée mais seule une eval_2 est collectée → couverture incomplète → failed.
+    # (files_touched contient un chemin de test, requis depuis le durcissement M3/M4.)
     collected = sandbox / "collected.txt"
-    collected.write_text("tests/x.py::test_eval_2_autre\n")
+    collected.write_text("tests/feat/test_x.py::test_eval_2_autre\n")
     write_tasks(
         sandbox,
         """
 ### T1 — Prétend couvrir EVAL-1
 - **depends_on :** —
 - **implements :** [EVAL-1]
-- **files_touched :** `t1.txt`
+- **files_touched :** `tests/feat/`
 - **done_when :** ok
 - **verify :** `true`
 """,
@@ -319,7 +320,7 @@ def test_eval_coverage_per_id(sandbox: Path) -> None:
     assert state(sandbox)["T1"] == "failed"
 
     # Même plan, l'eval attendue existe → done
-    collected.write_text("tests/x.py::test_eval_1_nominal\n")
+    collected.write_text("tests/feat/test_x.py::test_eval_1_nominal\n")
     (sandbox / "work" / "feat" / ".runs" / "state.json").unlink()
     r2 = run_orch(sandbox, env_extra=env)
     assert r2.returncode == 0, r2.stdout + r2.stderr
@@ -471,3 +472,45 @@ def test_eval_coverage_scoped_to_task_paths(sandbox: Path) -> None:
     r2 = run_orch(sandbox, env_extra=env)
     assert r2.returncode == 0, r2.stdout + r2.stderr
     assert state(sandbox)["T1"] == "done"
+
+
+def test_lint_requires_test_path_for_eval_task(sandbox: Path) -> None:
+    # M3/M4 — une tâche qui implémente une EVAL-* sans chemin tests/|evals/ dans files_touched
+    # est une erreur de lint (sa couverture retomberait sur tout le dépôt).
+    write_tasks(
+        sandbox,
+        """
+### T1 — implémente EVAL-1 mais sans chemin de test
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `src/x.py`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox, "--validate")
+    assert r.returncode == 1
+    assert "aucun chemin tests/ ou evals/" in r.stdout
+
+
+def test_eval_coverage_path_boundary(sandbox: Path) -> None:
+    # M2 — frontière de répertoire : un scope `tests/foo` ne doit PAS matcher `tests/foobar`.
+    collected = sandbox / "collected.txt"
+    collected.write_text("tests/foobar/test_x.py::test_eval_1_x\n")
+    write_tasks(
+        sandbox,
+        """
+### T1 — scope strict tests/foo
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `tests/foo/`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    env = {"LAB_EVALS_COLLECTED_FILE": str(collected)}
+    r = run_orch(sandbox, env_extra=env)
+    assert (
+        r.returncode == 1
+    )  # tests/foobar hors scope tests/foo → couverture vide → failed
+    assert state(sandbox)["T1"] == "failed"

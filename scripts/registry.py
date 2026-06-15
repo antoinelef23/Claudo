@@ -63,6 +63,11 @@ def load_registry(root: Path | str) -> Registry:
         for entry in data.get("model", [])
         if entry.get("id")
     ]
+    # roles doit être une liste : un `roles = "implementer"` (chaîne) ferait de `role in m.roles`
+    # un test de SOUS-CHAÎNE (eligible("impl") matcherait "implementer"). On coerce.
+    for m in models:
+        if isinstance(m.roles, str):
+            m.roles = [m.roles]
     return Registry(models=models, role_defaults=dict(data.get("roles", {})), root=root)
 
 

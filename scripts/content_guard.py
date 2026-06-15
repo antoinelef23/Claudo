@@ -35,6 +35,10 @@ _DEF = re.compile(rf"^\*{{0,2}}({ID})")
 _HEAD2 = re.compile(r"^#{1,2}\s")  # ## section → reset du contexte d'ID
 _KPI = re.compile(r"KPI", re.I)
 _FMT = re.compile(r"[`*_#>|]")
+_FENCE = re.compile(r"^([`~]{3,})(.*)$")  # ``` ou ~~~ (CommonMark), avec info-string
+# Les diagrammes sont de la FORME (mise en page) : un re-layout mermaid ne doit pas exiger
+# un bump de version. On ne les empreinte pas (sinon le garde devient impraticable → ignoré).
+_DIAGRAM_LANGS = {"mermaid", "dot", "graphviz", "plantuml", "puml", "sequencediagram"}
 
 
 def _norm(s: str) -> str:
@@ -60,24 +64,33 @@ def extract_content(text: str) -> dict[str, str]:
     content: dict[str, list[str]] = {}
     current: str | None = None
     in_glossary = False
-    in_code = False
-    code_idx = 0
+    fence_char = ""  # "" = hors bloc ; sinon "`" ou "~" du fence ouvrant
+    skip_block = False  # bloc de diagramme (forme) → non empreinté
+    last_head = (
+        "PREAMBLE"  # ancre des blocs de code à la section, pas à un index positionnel
+    )
 
     for raw in text.splitlines():
         line = raw.rstrip()
-        if line.strip().startswith("```"):  # frontière de bloc de code clôturé
-            in_code = not in_code
-            if in_code and current is None:
-                code_idx += (
-                    1  # nouveau bloc HORS ID (ex. design §5 signatures, §1 diagramme)
-                )
-            continue
-        if in_code:
-            # H5 — contenu d'un bloc clôturé : sous un ID (EX/ADR) → continuation de cet ID ;
-            # sinon → CODE:n (signatures/contrats du design, jusqu'ici jamais empreintés).
-            if line.strip():
-                key = current if current is not None else f"CODE:{code_idx}"
-                content.setdefault(key, []).append(_norm(line))
+        fm = _FENCE.match(line.strip())
+        if fm:
+            marker = fm.group(1)[0]
+            if not fence_char:  # ouverture
+                fence_char = marker
+                skip_block = fm.group(2).strip().lower() in _DIAGRAM_LANGS
+                continue
+            if marker == fence_char:  # fermeture (même style de fence)
+                fence_char = ""
+                skip_block = False
+                continue
+            # un fence d'autre style à l'intérieur d'un bloc = contenu littéral (on continue)
+        if fence_char:  # à l'intérieur d'un bloc de code
+            if skip_block or not line.strip():
+                continue
+            # H5 — sous un ID (EX/ADR) → continuation ; sinon → CODE ancré à la section courante
+            # (clé stable : insérer un bloc ailleurs ne décale pas les autres).
+            key = current if current is not None else f"CODE:{last_head}"
+            content.setdefault(key, []).append(_norm(line))
             continue
         stripped = _LEADING.sub("", line)
         m = _DEF.match(stripped)
@@ -89,16 +102,19 @@ def extract_content(text: str) -> dict[str, str]:
             current = None
             low = line.lower()
             in_glossary = "glossary" in low or "glossaire" in low
+            last_head = _norm(line) or "SECTION"
             continue
         # lignes de continuation rattachées à l'ID courant (Given/When/Then, YAML, ADR…)
         if current and line.strip():
             content[current].append(_norm(line))
             continue
-        # glossaire : une clé par nom canonique, valeur = ligne ENTIÈRE (nom + définition)
-        # normalisée agressivement → robuste à la forme, sensible au sens (H6).
+        # glossaire (H6) : clé sur le PREMIER backtick (= nom canonique de CETTE ligne),
+        # valeur = ligne entière normalisée agressivement (nom + définition). setdefault pour
+        # qu'une mention inline d'un autre terme ne shadow PAS la définition propre de ce terme.
         if in_glossary:
-            for c in re.findall(r"`([^`]+)`", line):
-                content[f"GLOSS:{c}"] = [_norm_gloss(line)]
+            names = re.findall(r"`([^`]+)`", line)
+            if names:
+                content.setdefault(f"GLOSS:{names[0]}", [_norm_gloss(line)])
         # lignes KPI hors ID
         if _KPI.search(line):
             content.setdefault("KPI", []).append(_norm(line))
@@ -121,11 +137,13 @@ def _version(text: str) -> str | None:
     return m.group(1) if m else None
 
 
-def _ver_tuple(v: str | None) -> tuple[int, ...] | None:
+def _ver_tuple(v: str | None) -> tuple[int, int, int] | None:
+    # M6 — semver strict à 3 composants. Évite que `1.0.0` → `1.0.0.0` (ou `1.0`) soit lu comme
+    # un bump (les tuples de longueurs différentes se comparaient à tort : (1,0,0,0) > (1,0,0)).
     if not v:
         return None
-    parts = re.findall(r"\d+", v)
-    return tuple(int(x) for x in parts) if parts else None
+    m = re.match(r"^(\d+)\.(\d+)\.(\d+)(?:\D|$)", v.strip())
+    return (int(m.group(1)), int(m.group(2)), int(m.group(3))) if m else None
 
 
 def _focus(a: str, b: str, ctx: int = 25, tail: int = 70) -> tuple[str, str]:

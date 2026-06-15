@@ -495,7 +495,69 @@ def test_verify_allowed():
     assert not orchestrate.verify_allowed("python3 -c 'x'; rm -rf /")  # ;
     assert not orchestrate.verify_allowed("$(rm -rf /)")  # substitution
     assert not orchestrate.verify_allowed("true `rm x`")  # backtick
+    assert not orchestrate.verify_allowed(
+        "python3 -c pass"
+    )  # -c : code inline (sans métacar.)
+    assert not orchestrate.verify_allowed(
+        "uv run python -c import_x"
+    )  # -c via uv aussi
+    assert orchestrate.verify_allowed(
+        "uv run python -m repartition.cli --help"
+    )  # -m reste OK
     assert not orchestrate.verify_allowed("")
+
+
+def test_checkpoint_before_trigger_task_no_cycle(tmp_path: Path):
+    # M1 — un CP placé AVANT sa tâche-trigger ne doit pas se faire injecter en dépendance de
+    # cette tâche (cela créerait un cycle CP↔T).
+    p = tmp_path / "tasks.md"
+    p.write_text("""---
+status: approved
+---
+### CP-1 — CHECKPOINT : gate placé avant sa tâche
+- **trigger :** auto quand [T1] done
+- **mode :** blocking
+
+### T1 — tâche-trigger, placée après le CP
+- **depends_on :** —
+- **files_touched :** `a.txt`
+- **done_when :** ok
+- **verify :** `true`
+""")
+    _, nodes = orchestrate.parse_tasks_md(p)
+    t1 = next(n for n in nodes if n.id == "T1")
+    assert "CP-1" not in t1.depends_on  # pas d'injection → pas de cycle
+
+
+def test_registry_coerces_string_roles(tmp_path: Path):
+    # roles donné en CHAÎNE est coercé en liste → `eligible` exact, plus de match par sous-chaîne
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "registry.toml").write_text("""schema_version = 1
+[[model]]
+id = "m"
+roles = "implementer"
+[roles]
+implementer = "m"
+""")
+    reg = orchestrate.load_registry(tmp_path)
+    m = reg.by_id("m")
+    assert m.roles == ["implementer"]
+    assert reg.eligible("implementer") == [m]
+    assert reg.eligible("impl") == []  # plus de faux match par sous-chaîne
+
+
+def test_registry_skips_idless_entry(tmp_path: Path):
+    # L12 — une entrée [[model]] sans id est ignorée, pas de crash au chargement
+    (tmp_path / "models").mkdir()
+    (tmp_path / "models" / "registry.toml").write_text("""schema_version = 1
+[[model]]
+label = "sans id"
+[[model]]
+id = "ok"
+roles = ["implementer"]
+""")
+    reg = orchestrate.load_registry(tmp_path)
+    assert [m.id for m in reg.models] == ["ok"]
 
 
 def test_checkpoint_injection_closes_sibling_bypass(tmp_path: Path):
