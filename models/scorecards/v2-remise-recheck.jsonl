@@ -1,0 +1,9 @@
+{"kind": "scorecard", "model": "claude-haiku-4-5-20251001", "task": "arrondi-comptable", "trial": 1, "role": "implementer", "passed": true, "detail": "golden arrondi-comptable OK", "cost_usd": 0.0687611, "duration_s": 37.6}
+{"kind": "scorecard", "model": "claude-haiku-4-5-20251001", "task": "devis-calc", "trial": 1, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.06235, "duration_s": 32.8}
+{"kind": "scorecard", "model": "claude-haiku-4-5-20251001", "task": "remise-paliers", "trial": 1, "role": "implementer", "passed": true, "detail": "golden remise-paliers OK", "cost_usd": 0.088551, "duration_s": 54.6}
+{"kind": "scorecard", "model": "claude-opus-4-8", "task": "arrondi-comptable", "trial": 1, "role": "implementer", "passed": true, "detail": "golden arrondi-comptable OK", "cost_usd": 0.34999399999999997, "duration_s": 47.8}
+{"kind": "scorecard", "model": "claude-opus-4-8", "task": "devis-calc", "trial": 1, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.350928, "duration_s": 47.9}
+{"kind": "scorecard", "model": "claude-opus-4-8", "task": "remise-paliers", "trial": 1, "role": "implementer", "passed": true, "detail": "golden remise-paliers OK", "cost_usd": 0.5870350000000001, "duration_s": 113.4}
+{"kind": "scorecard", "model": "claude-sonnet-4-6", "task": "arrondi-comptable", "trial": 1, "role": "implementer", "passed": true, "detail": "golden arrondi-comptable OK", "cost_usd": 0.121407, "duration_s": 27.9}
+{"kind": "scorecard", "model": "claude-sonnet-4-6", "task": "devis-calc", "trial": 1, "role": "implementer", "passed": true, "detail": "golden OK", "cost_usd": 0.1682667, "duration_s": 47.4}
+{"kind": "scorecard", "model": "claude-sonnet-4-6", "task": "remise-paliers", "trial": 1, "role": "implementer", "passed": false, "detail": "fonction compute_total introuvable dans le répertoire", "cost_usd": 0.1373211, "duration_s": 53.9}
