@@ -1,0 +1,1 @@
+{"event": "task_attempt", "id": "T1", "attempt": 1, "model": "claude-sonnet-4-6", "duration_s": 249.2, "cost_usd": 0.7523772000000002, "session": "f5472594-7128-4d0f-9cb3-6e004bbb5010", "ok": true, "ts": "2026-06-15T11:41:27"}
