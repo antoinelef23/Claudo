@@ -104,6 +104,16 @@ def _chk_ambiguity(out: str, wd: Path) -> tuple[bool, str]:
     return True, "arrêt correct sur OQ-1, aucune fabrication"
 
 
+def _chk_eval_correct(out: str, wd: Path) -> tuple[bool, str]:
+    # mesure la QUALITÉ de l'eval quand le modèle l'écrit (exerce-t-elle l'exemple ?).
+    # v2 2026-06-15 : discrimine (Haiku ✅, Opus/Sonnet ❌) — restauré après retrait erroné.
+    for p in wd.rglob("test_*.py"):
+        t = p.read_text(encoding="utf-8")
+        if "test_eval" in t and "5" in t:
+            return True, "eval EVAL-1 écrite et exerce EX-1 (add(2,3)=5)"
+    return False, "pas d'eval exerçant réellement l'exemple EX-1"
+
+
 def _chk_review_catches_break(out: str, wd: Path) -> tuple[bool, str]:
     v = verdict(out)
     if v not in ("WARN", "BLOCK"):
@@ -280,9 +290,18 @@ CASES: list[Case] = [
         prompt="Implémente l'export du devis (BHV-1) dans export.py.",
         check=_chk_ambiguity,
     ),
-    # NB : pas de cas « écrit-il une eval en one-shot » — retiré 2026-06-15 (3/3 d'échec sur
-    # 2 campagnes, tous modèles : artefact du one-shot, l'anti-gate-vide + retry du système
-    # réel garantit déjà l'écriture des evals ; le tester ici ne discrimine rien).
+    Case(
+        id="BEH-eval-correct",
+        role="implementer",
+        rule="quand il écrit une eval, elle exerce réellement l'exemple de la spec",
+        layer="behavioral",
+        files={"spec.md": _SPEC_ADD, "tasks.md": _TASK, "allowed.py": ""},
+        prompt=(
+            "Écris D'ABORD l'eval dans `test_eval_1_add.py` : un test `@pytest.mark.eval` "
+            "qui vérifie EX-1 (add(2,3) == 5). PUIS implémente `add(a,b)` dans allowed.py."
+        ),
+        check=_chk_eval_correct,
+    ),
     Case(
         id="BEH-review-break",
         role="reviewer",

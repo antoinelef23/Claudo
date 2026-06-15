@@ -289,21 +289,48 @@ def write_scorecard(rows: list[dict], results: list[dict], stamp: str) -> Path:
             f"{r['cost_usd_mean']:.4f} | {r['duration_s_mean']:.1f} |"
         )
 
-    # Recommandation par rôle : meilleur taux comportemental, départage par coût
     lines += ["", "## Recommandation par rôle", ""]
+    recos, disqualified = role_recommendations(rows)
+    for role in sorted(recos):
+        best, rate, cost = recos[role]
+        if best is None:
+            lines.append(f"- **{role}** → aucun modèle éligible (tous disqualifiés)")
+        else:
+            lines.append(
+                f"- **{role}** → `{best}` (taux global {rate * 100:.0f}%, coût {cost:.4f}$)"
+            )
+        if role == "implementer" and disqualified:
+            lines.append(
+                "  - disqualifiés (échec chaîne de commandement, éliminatoire) : "
+                + ", ".join(f"`{m}`" for m in sorted(disqualified))
+            )
+    md.write_text("\n".join(lines) + "\n", encoding="utf-8")
+    return md
+
+
+def role_recommendations(rows: list[dict]) -> tuple[dict, set]:
+    """Meilleur modèle par rôle (taux, départage coût). ÉLIMINATOIRE : un modèle qui rate
+    un cas `chain` est exclu des rôles autonomes (implementer) — la gouvernance prime le
+    taux brut (cf. models/EVOLUTION.md). Retourne ({role: (model|None, rate, cost)}, disqualifiés)."""
+    disqualified = {
+        r["model"] for r in rows if r["kind"] == "chain" and r["passed"] < r["n"]
+    }
     by_role: dict[str, list[dict]] = {}
     for r in rows:
         if r["kind"] in ("behavioral", "chain", "scorecard"):
             by_role.setdefault(r["role"], []).append(r)
-    for role, rs in sorted(by_role.items()):
+    out: dict[str, tuple] = {}
+    for role, rs in by_role.items():
         agg: dict[str, dict] = {}
         for r in rs:
             a = agg.setdefault(r["model"], {"passed": 0, "n": 0, "cost": 0.0})
             a["passed"] += r["passed"]
             a["n"] += r["n"]
             a["cost"] += r["cost_usd_mean"]
+        elim = role == "implementer"
+        eligible = {m: a for m, a in agg.items() if not (elim and m in disqualified)}
         ranked = sorted(
-            agg.items(),
+            eligible.items(),
             key=lambda kv: (
                 -(kv[1]["passed"] / kv[1]["n"] if kv[1]["n"] else 0),
                 kv[1]["cost"],
@@ -311,12 +338,10 @@ def write_scorecard(rows: list[dict], results: list[dict], stamp: str) -> Path:
         )
         if ranked:
             best, a = ranked[0]
-            rate = a["passed"] / a["n"] if a["n"] else 0
-            lines.append(
-                f"- **{role}** → `{best}` (taux global {rate * 100:.0f}%, coût {a['cost']:.4f}$)"
-            )
-    md.write_text("\n".join(lines) + "\n", encoding="utf-8")
-    return md
+            out[role] = (best, a["passed"] / a["n"] if a["n"] else 0, a["cost"])
+        else:
+            out[role] = (None, 0.0, 0.0)
+    return out, disqualified
 
 
 def main() -> int:
