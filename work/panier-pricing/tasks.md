@@ -303,3 +303,4 @@ flowchart TD
 | 2026-06-15 12:41 | CP-2 | owner | checkpoint validé | |
 | 2026-06-15 12:43 | T8 | implementer | done, evals vertes (t1) | |
 | 2026-06-15 12:44 | T6 | implementer | done, evals vertes (t1) | |
+| 2026-06-15 12:44 | T7 | implementer | done, evals vertes (t1) | |
