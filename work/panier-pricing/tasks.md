@@ -300,3 +300,5 @@ flowchart TD
 | 2026-06-15 12:24 | T5 | implementer | done, evals vertes (t1) | |
 | 2026-06-15 12:34 | CP-2 | owner | checkpoint REJETÉ — Spec amendée en v1.1.0 (commit 5b0ab2d) suite à la revue : ajout BHV-6c. coupons.py écarte à tort un FREE_SHIPPING valide en présence d'un coupon exclusif (estimate=0 le fait perdre dans le comparatif BHV-6b). Aligne resolve_coupons sur BHV-6c : le FREE_SHIPPING valide accorde TOUJOURS le franco (free_shipping=True) et figure dans applied_codes, indépendamment du cumul/exclusivité qui ne gouverne QUE les coupons de remise marchandise PERCENT/FIXED ; ne valorise jamais un FREE_SHIPPING dans la sélection exclusive. applied_codes en ordre canonique (priority, code). Relis spec.md v1.1.0 BHV-6/BHV-6c + EX-9, mets à jour tests/pricing_coupons en conséquence. | |
 | 2026-06-15 12:37 | T3 | implementer | done, evals vertes (t1) | |
+| 2026-06-15 12:41 | CP-2 | owner | checkpoint validé | |
+| 2026-06-15 12:43 | T8 | implementer | done, evals vertes (t1) | |
