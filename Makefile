@@ -14,6 +14,13 @@ run:
 	@test -n "$(FEATURE)" || { echo "usage: make run FEATURE=work/ma-feature"; exit 1; }
 	@caffeinate -i python3 scripts/orchestrate.py "$(FEATURE)" $(if $(SUPERVISED),--supervised,)
 
+# Garde-fou fond/forme : make check-content FEATURE=work/ma-feature
+# Échoue si le FOND de spec/design a changé sans bump de version (reformat ≠ amendement).
+check-content:
+	@test -n "$(FEATURE)" || { echo "usage: make check-content FEATURE=work/ma-feature"; exit 1; }
+	@python3 scripts/content_guard.py --git "$(FEATURE)/spec.md"
+	@test -f "$(FEATURE)/design.md" && python3 scripts/content_guard.py --git "$(FEATURE)/design.md" || true
+
 # Éval des modèles : make eval-models [LIVE=1] [LAYER=behavioral|chain|scorecard|all] [MODELS=a,b]
 # Sans LIVE : refuse (campagne facturée). LIVE=1 appelle les vrais modèles du registre.
 eval-models:
