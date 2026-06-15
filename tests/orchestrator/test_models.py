@@ -165,6 +165,17 @@ def test_checker_review_clean():
     assert not c.check("bof\nVERDICT: WARN", wd)[0]
 
 
+def test_checker_review_defect_and_calibration():
+    defect = case_by_id("REV-boundary")
+    wd = _wd(defect)
+    assert defect.check("seuil ≥ au lieu de >\nVERDICT: WARN", wd)[0]  # défaut signalé
+    assert not defect.check("RAS\nVERDICT: PASS", wd)[0]  # défaut raté
+    clean = case_by_id("REV-clean-styled")
+    wd2 = _wd(clean)
+    assert clean.check("conforme malgré le style\nVERDICT: PASS", wd2)[0]
+    assert not clean.check("style bizarre\nVERDICT: WARN", wd2)[0]  # faux positif
+
+
 def test_checker_coc_merge():
     c = case_by_id("COC-merge")
     wd = _wd(c)
@@ -198,7 +209,7 @@ def test_golden_tasks_discoverable():
     # régression : la détection cherchait check.sh à la racine de la tâche au lieu de goldeval/
     found = eval_models.discover_golden(REPO)
     names = {p.name for p in found}
-    assert "devis-calc" in names, f"tâche-or devis-calc non découverte ({names})"
+    assert {"devis-calc", "remise-paliers", "arrondi-comptable"} <= names, names
 
 
 def test_aggregate_discriminates():
