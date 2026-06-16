@@ -242,3 +242,5 @@ STATUS: done
 | 2026-06-16 10:48 | T1 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 | T2 | implementer | done, 7 tests verts (`test_store.py`) | |
 | 2026-06-16 10:50 | T2 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 10:58 | CP-1 | owner | checkpoint validé | |
+| 2026-06-16 11:01 | T3 | implementer | done, evals vertes (t1) | |
