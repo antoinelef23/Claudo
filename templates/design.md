@@ -85,11 +85,20 @@ flowchart LR
 - **Design system :** lequel (<nom>), composants utilisés, tokens, écarts éventuels (à faire valider). `N/A` si pas de front.
 - **Référentiel de conformité applicable :** <nom du référentiel> — ☐ CI conforme ☐ SAST/DAST ☐ gestion des secrets ☐ i18n ☐ RGPD/données perso ☐ accessibilité.
 
-## 7. Observability & rollout
+## 7. Deployment (GCP), observability & rollout
 
-- **Mesures :** lead time, part de code IA, défauts, coût complet.
-- **Rollout :** <feature flag, % de trafic, plan de rollback>.
-- **SLO :** <latence p95, dispo, budget erreur>.
+> Règles : `docs/gcp-deployment-standard.md` (cible) + `docs/engineering-rules.md` (dev).
+> **Feature pure (NG : pas d'I/O) → `N/A`.** Sinon, renseigner ci-dessous + cocher la checklist du standard.
+
+- **Runtime :** <Cloud Run | GKE | Cloud Run Job | Cloud Functions> — CPU/mém/concurrence/timeout, `min`/`max-instances` (D-1, D-3). Justifier tout choix ≠ Cloud Run en ADR.
+- **Identité & accès :** compte de service dédié <nom>, rôles au moindre privilège ; ingress <interne | public + Cloud Armor> ; CI via WIF (D-6, D-7).
+- **Secrets :** <liste> via Secret Manager (D-9).
+- **Réseau & données :** VPC connector ? VPC-SC ? egress allowlisté <domaines> ; données <Cloud SQL | Firestore | BigQuery>, CMEK ?, backups/PITR, résidence <region> (D-10, D-11).
+- **IA (si LLM) :** Vertex AI region <…>, modèle épinglé <…>, Model Armor/DLP ?, budget (D-12, D-13).
+- **CI/CD :** `make ci` → Cloud Build → Artifact Registry (image signée) → Binary Auth → deploy (D-14, D-15).
+- **Observabilité & SLO :** logs structurés (sans secret) ; SLO <latence p95, dispo, budget erreur> + alerting + traces (D-16, D-17). Mesures de delivery : lead time, part de code IA, défauts, coût complet.
+- **Rollout & rollback :** canary <% trafic>, feature flag <nom>, rollback auto sur breach SLO ; **mise en prod = décision humaine (checkpoint)** (D-18, D-19, D-20).
+- **Checklist du standard GCP :** ☐ cochée (cf. `docs/gcp-deployment-standard.md`).
 
 ## 8. Risks
 
