@@ -240,3 +240,6 @@ flowchart TD
 |---|---|---|---|---|
 | | | | | |
 | 2026-06-16 08:26 | T1 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 08:31 | CP-1 | owner | checkpoint validé | |
+| 2026-06-16 | T4 | implementer | done, 9 tests verts | |
+| 2026-06-16 08:32 | T4 | implementer | done, evals vertes (t1) | |
