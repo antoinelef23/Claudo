@@ -240,3 +240,5 @@ flowchart TD
 
 STATUS: done
 | 2026-06-16 10:48 | T1 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 | T2 | implementer | done, 7 tests verts (`test_store.py`) | |
+| 2026-06-16 10:50 | T2 | implementer | done, evals vertes (t1) | |
