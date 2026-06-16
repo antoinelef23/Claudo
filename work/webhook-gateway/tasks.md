@@ -246,3 +246,4 @@ STATUS: done
 | 2026-06-16 11:01 | T3 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 11:02 | T5 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 11:03 | T4 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 11:05 | T6 | implementer | done, evals vertes (t1) | |
