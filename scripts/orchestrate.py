@@ -41,6 +41,7 @@ import argparse
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
 import threading
@@ -50,6 +51,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import approvals
 from registry import load_registry, resolve_model
 
 # LAB_ROOT : surcharge pour les tests (sandbox) — défaut : la racine du repo
@@ -78,6 +80,49 @@ CLAUDE_ARGS = [
     "json",
 ]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
+
+# Commandes autorisées comme `verify` d'une tâche (finding H2). Une verify est une
+# commande de test/build, jamais un shell : on l'exécute SANS shell (argv), et on
+# refuse au plan-lint toute commande hors de cette liste ou contenant des
+# métacaractères shell. Empêche un `verify` agent-généré du type `pytest; curl|sh`.
+VERIFY_ALLOWED = {
+    "true",
+    "false",
+    "test",
+    "[",
+    "ls",
+    "cat",
+    "grep",
+    "head",
+    "tail",
+    "make",
+    "uv",
+    "python",
+    "python3",
+    "pytest",
+    "ruff",
+}
+# Métacaractères qui n'auraient de sens que via un shell — interdits dans un verify.
+_SHELL_META = re.compile(r"[;&|`$><\n]")
+# Préfixes d'env `VAR=val` autorisés devant un verify (finding H2, smuggling par env).
+# Allowlist : les clés qui n'ajoutent AUCUN privilège au-delà de ce que la verify fait
+# déjà (elle exécute du code in-repo de l'agent : conftest.py, modules de test). PYTHONPATH
+# en fait partie — `PYTHONPATH=src uv run …` est un usage standard et ne donne pas plus
+# que le `Bash(uv:*)/Bash(python3:*)` que l'agent a déjà.
+# Refusées (bloquées) : les clés qui détournent d'AUTRES process/shells/binaires —
+# LD_PRELOAD, LD_LIBRARY_PATH, DYLD_*, BASH_ENV, ENV, PYTHONSTARTUP, PYTHONHOME, PATH —
+# qui seraient une escalade réelle (RCE sans shell hors du périmètre des tests).
+VERIFY_ENV_ALLOWED = {
+    "CI",
+    "TZ",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "NO_COLOR",
+    "PYTHONPATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTEST_ADDOPTS",
+}
 
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
@@ -212,6 +257,47 @@ def _paths_overlap(a: str, b: str) -> bool:
     return a == b or a.startswith(b + "/") or b.startswith(a + "/")
 
 
+def parse_verify(cmd: str) -> tuple[list[str], dict[str, str]]:
+    """Découpe une commande `verify` en (argv, env_overrides) — SANS shell (finding H2).
+
+    Gère les préfixes d'environnement `VAR=val` restreints à VERIFY_ENV_ALLOWED
+    (ex. `CI=1 …`, `PYTHONPATH=src uv run …`). Les clés détournant d'autres
+    process/shells/binaires (LD_PRELOAD, DYLD_*, BASH_ENV, PYTHONSTARTUP, PATH…)
+    sont refusées : ce serait une escalade RCE hors du périmètre des tests.
+    Lève ValueError si : métacaractères shell, parsing impossible (guillemets non
+    fermés), vide, ou commande hors de VERIFY_ALLOWED. L'appelant exécute ensuite
+    l'argv tel quel (`shell=False`), ce qui neutralise tout chaînage/injection même
+    si cette validation était contournée.
+    """
+    if _SHELL_META.search(cmd):
+        raise ValueError(
+            "métacaractères shell interdits dans verify (; & | $ ` > < newline) — "
+            "une verify est une commande unique, pas un script shell"
+        )
+    tokens = shlex.split(cmd)  # peut lever ValueError (guillemets non fermés)
+    env: dict[str, str] = {}
+    while tokens and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[0]):
+        k, _, v = tokens[0].partition("=")
+        if k not in VERIFY_ENV_ALLOWED:
+            raise ValueError(
+                f"préfixe d'environnement « {k}= » interdit dans verify — "
+                f"clés autorisées : {', '.join(sorted(VERIFY_ENV_ALLOWED))}. "
+                "PYTHONPATH/PYTHONSTARTUP/LD_PRELOAD/BASH_ENV… permettent d'injecter "
+                "du code chargé par la commande (RCE sans shell)."
+            )
+        env[k] = v
+        tokens = tokens[1:]
+    if not tokens:
+        raise ValueError("verify vide (après les éventuels préfixes d'environnement)")
+    prog = Path(tokens[0]).name
+    if prog not in VERIFY_ALLOWED:
+        raise ValueError(
+            f"commande verify « {tokens[0]} » hors allowlist — "
+            f"autorisées : {', '.join(sorted(VERIFY_ALLOWED))}"
+        )
+    return tokens, env
+
+
 def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], list[str]]:
     """Plan-lint. Retourne (erreurs, avertissements)."""
     errors: list[str] = []
@@ -270,6 +356,11 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
             warnings.append(
                 f"{n.id} : pas de verify exécutable — le done_when ne sera pas vérifié mécaniquement"
             )
+        else:
+            try:
+                parse_verify(n.verify)
+            except ValueError as e:
+                errors.append(f"{n.id} : verify invalide (`{n.verify}`) — {e}")
 
     # IDs de spec
     spec_path = feature / "spec.md"
@@ -399,15 +490,26 @@ def _gchat(msg: str) -> None:
 
 def notify(msg: str) -> None:
     print(f"🔔 {msg}", flush=True)
-    _gchat(msg)
-    if os.environ.get("LAB_NO_NOTIFY"):  # tests / CI : pas de notif macOS
+    if os.environ.get(
+        "LAB_NO_NOTIFY"
+    ):  # tests / CI : aucune notif externe (incl. _gchat)
         return
+    _gchat(msg)
     try:
+        # msg passé en argv (item 1 of argv), JAMAIS interpolé dans la source
+        # AppleScript : une `reason` agent-générée ne peut plus injecter de
+        # `do shell script` via osascript (finding M2).
         subprocess.run(
             [
                 "osascript",
                 "-e",
-                f'display notification "{msg}" with title "Lab IA-natif" sound name "Glass"',
+                "on run argv",
+                "-e",
+                'display notification (item 1 of argv) with title (item 2 of argv) sound name "Glass"',
+                "-e",
+                "end run",
+                msg,
+                "Lab IA-natif",
             ],
             capture_output=True,
             timeout=10,
@@ -448,9 +550,17 @@ def run_claude(
         cmd += ["--model", model]
     if resume:
         cmd += ["--resume", resume]
+    # Le secret d'approbation ne doit JAMAIS être visible par un sous-agent : sinon
+    # il pourrait signer sa propre validation de checkpoint (finding H1).
+    child_env = {k: v for k, v in os.environ.items() if k != approvals.ENV_SECRET}
     try:
         p = subprocess.run(
-            cmd, cwd=ROOT, capture_output=True, text=True, timeout=TASK_TIMEOUT_S
+            cmd,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=TASK_TIMEOUT_S,
+            env=child_env,
         )
     except subprocess.TimeoutExpired:
         return {
@@ -612,8 +722,20 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             )
 
         if node.verify:
+            try:
+                argv, venv = parse_verify(node.verify)
+            except ValueError as e:
+                # Ne devrait pas arriver (plan-lint bloque déjà), mais défense en
+                # profondeur si exécuté sous --force : on ne lance jamais de shell.
+                extra = f"\n\n⛔ verify invalide (`{node.verify}`) : {e}"
+                run_log(feature, node, "implementer", f"verify INVALIDE (t{attempt})")
+                continue
             v = subprocess.run(
-                node.verify, shell=True, cwd=ROOT, capture_output=True, text=True
+                argv,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env={**os.environ, **venv} if venv else None,
             )
             if v.returncode != 0:
                 extra = f"\n\n⛔ verify a échoué (`{node.verify}`) :\n{(v.stdout + v.stderr)[-2000:]}"
@@ -770,8 +892,16 @@ def wait_checkpoint(
             )
         elif verdict == "PASS" and evals_ok:
             approval.parent.mkdir(exist_ok=True)
+            # Signé comme une approbation humaine (l'orchestrateur a le secret) pour
+            # rester vérifiable si le jeton est relu ; « auto-approved » reste dans
+            # l'auteur pour la traçabilité (finding H1, cohérence du chemin auto).
             approval.write_text(
-                f"auto-approved (evals vertes + panel reviewer PASS) at={datetime.now().isoformat()}\n"
+                approvals.sign(
+                    feature,
+                    node.id,
+                    "auto-approved (evals vertes + panel reviewer PASS)",
+                    datetime.now().isoformat(),
+                )
             )
             run_log(
                 feature, node, "reviewer", "checkpoint auto-validé (PASS, evals vertes)"
@@ -803,6 +933,29 @@ def wait_checkpoint(
             )
             return "rejected", info
         if approval.exists():
+            ok, why = approvals.verify(
+                feature, node.id, approval.read_text(encoding="utf-8")
+            )
+            if not ok:
+                # Jeton forgé / signature invalide : on l'écarte et on continue
+                # d'attendre une vraie validation humaine (finding H1).
+                approval.rename(
+                    approval.parent / f"{node.id}.invalid-{datetime.now():%Y%m%d%H%M%S}"
+                )
+                journal(
+                    feature, event="checkpoint_forgery_rejected", id=node.id, why=why
+                )
+                notify(
+                    f"⛔ {node.id} : approbation REJETÉE ({why}) — jeton écarté, "
+                    "toujours en attente d'une validation humaine signée."
+                )
+                continue
+            if "non signé" in why:
+                notify(f"⚠️ {node.id} : approbation acceptée mais {why}")
+            # Consommé après honoration : un jeton ne se rejoue pas (finding H4).
+            approval.rename(
+                approval.parent / f"{node.id}.handled-{datetime.now():%Y%m%d%H%M%S}"
+            )
             run_log(feature, node, "owner", "checkpoint validé")
             notify(f"{node.id} validé — reprise de l'exécution")
             return "approved", {}
@@ -856,6 +1009,14 @@ def main() -> int:
             print(f"  ❌ {e}")
         if not errors and not warnings:
             print("  ✅ aucun problème")
+        if args.validate:
+            # Surfacer chaque verify : l'Owner signe ces commandes en approuvant le
+            # plan (elles s'exécuteront sur l'hôte, sans shell — finding H2).
+            verifs = [(n.id, n.verify) for n in nodes if n.verify]
+            if verifs:
+                print("\n  Commandes verify (exécutées sans shell, à valider) :")
+                for nid, vcmd in verifs:
+                    print(f"    {nid}: {vcmd}")
     if args.validate:
         return 1 if errors else 0
     if errors and not args.force:
@@ -865,6 +1026,23 @@ def main() -> int:
     if fm.get("status") != "approved" and not (args.dry_run or args.force):
         print(
             f"⛔ tasks.md a status '{fm.get('status')}' — un plan doit être 'approved' par l'Owner avant exécution."
+        )
+        return 1
+
+    # Fail-closed (finding H1) : un plan avec checkpoints exige un secret de
+    # signature, sinon n'importe quel fichier .approvals/<CP> (qu'un agent peut
+    # écrire via Bash) serait honoré. Sans secret on REFUSE de démarrer, sauf
+    # opt-in explicite LAB_ALLOW_UNSIGNED_APPROVALS=1 (rétro-compat / legacy).
+    has_checkpoint = any(n.is_checkpoint for n in nodes)
+    # .strip() : un secret vide/blanc compte comme absent (cohérent avec approvals._secret).
+    secret_set = bool((os.environ.get(approvals.ENV_SECRET) or "").strip())
+    allow_unsigned = os.environ.get("LAB_ALLOW_UNSIGNED_APPROVALS") == "1"
+    if has_checkpoint and not secret_set and not allow_unsigned and not args.dry_run:
+        print(
+            "⛔ Plan avec checkpoint mais LAB_APPROVAL_SECRET non défini : une "
+            "approbation non signée serait falsifiable par un agent (finding H1). "
+            "Exporte LAB_APPROVAL_SECRET (recommandé) ou, en connaissance de cause, "
+            "LAB_ALLOW_UNSIGNED_APPROVALS=1 pour autoriser les jetons non signés."
         )
         return 1
 
