@@ -247,3 +247,4 @@ flowchart TD
 | 2026-06-16 | T3 | implementer | done, 9 tests verts | |
 | 2026-06-16 08:33 | T3 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 08:33 | T2 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 08:36 | T5 | implementer | done, evals vertes (t1) | |
