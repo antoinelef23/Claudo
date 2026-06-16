@@ -18,7 +18,8 @@ lab-ia-natif/
 │   │   ├── planner.md         # Génère tasks.md depuis spec + design
 │   │   ├── implementer.md     # Code une tâche contre la spec
 │   │   ├── eval-runner.md     # Exécute les evals (merge gate)
-│   │   └── reviewer.md        # Revue croisée spec ↔ code
+│   │   ├── reviewer.md        # Revue croisée spec ↔ code (fonctionnel)
+│   │   └── security-reviewer.md # Revue de sécurité adversariale (veto) + scanners
 │   └── skills/
 │       └── vibe-workshop/     # Animation de l'atelier spec v1.0
 └── examples/
@@ -39,7 +40,7 @@ flowchart TD
     GO -->|oui| IMPL["implementer(s)<br/>⚡ PARALLÈLE par parallel_group<br/>SÉQUENCE par depends_on"]
     IMPL -->|"déclencheur : AUTOMATIQUE<br/>(hook post-implémentation)"| EVAL["eval-runner<br/>pas d'eval ✅, pas de merge"]
     EVAL -->|échec| IMPL
-    EVAL -->|succès| REV["reviewer + revue Owner"]
+    EVAL -->|succès| REV["reviewer ∥ security-reviewer (veto)<br/>+ revue Owner"]
     REV -->|"déclencheur : HUMAIN (Owner)"| MERGE["merge → audit trail Git"]
     MERGE -.->|"la spec évolue dans le repo"| SPEC
 ```

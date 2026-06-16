@@ -328,8 +328,45 @@ def test_pick_reviewer_models_prefers_non_implementer():
 
 
 def test_gchat_no_crash_when_unreachable(monkeypatch):
+    # https injoignable → l'erreur réseau est avalée, ne lève jamais
+    monkeypatch.setenv("LAB_GCHAT_WEBHOOK", "https://127.0.0.1:9/nope")
+    assert orchestrate._gchat("test") is None
+
+
+def test_gchat_rejects_non_https_scheme(monkeypatch, tmp_path):
+    # SSRF/exfiltration via file:// ou http:// : refusé AVANT tout urlopen (durcissement security-reviewer)
+    leak = tmp_path / "secret.txt"
+    leak.write_text("top-secret")
+    monkeypatch.setenv("LAB_GCHAT_WEBHOOK", f"file://{leak}")
+    assert orchestrate._gchat("test") is None  # early-return, jamais ouvert
     monkeypatch.setenv("LAB_GCHAT_WEBHOOK", "http://127.0.0.1:9/nope")
-    assert orchestrate._gchat("test") is None  # avale l'erreur réseau, ne lève jamais
+    assert orchestrate._gchat("test") is None
+
+
+def test_review_args_are_read_only():
+    # capability scoping (LLM06) : les relecteurs n'ont JAMAIS l'auto-édition de l'implementer
+    assert "acceptEdits" in orchestrate.CLAUDE_ARGS  # l'implementer, lui, édite
+    assert "acceptEdits" not in orchestrate.REVIEW_ARGS
+    assert "default" in orchestrate.REVIEW_ARGS
+    # même jeu d'outils (lecture + scanners) hormis le mode de permission
+    assert orchestrate.REVIEW_ARGS.count("--allowedTools") == 1
+
+
+def test_combine_security_is_a_veto():
+    c = orchestrate._combine_security
+    assert c("PASS", "PASS") == "PASS"  # les deux PASS → PASS
+    assert c("PASS", "WARN") == "WARN"  # sécu WARN → humain, jamais auto-PASS
+    assert c("PASS", "BLOCK") == "BLOCK"  # sécu = veto, même si fonctionnel PASS
+    assert c("BLOCK", "PASS") == "BLOCK"  # fonctionnel bloque aussi
+    assert c("WARN", "PASS") == "WARN"
+
+
+def test_security_enabled_default_and_optout(monkeypatch):
+    monkeypatch.delenv("LAB_NO_SECURITY_REVIEW", raising=False)
+    assert orchestrate._security_enabled() is True  # ACTIVE par défaut
+    for v in ("1", "true", "yes"):
+        monkeypatch.setenv("LAB_NO_SECURITY_REVIEW", v)
+        assert orchestrate._security_enabled() is False
 
 
 def test_budget_stops_run(sandbox: Path) -> None:

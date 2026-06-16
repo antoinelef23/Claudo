@@ -21,3 +21,11 @@ build/
 # Artefacts de run de l'orchestrateur (état/journal/rapports + jetons d'approbation) — éphémères
 .runs/
 .approvals/
+
+# Artefacts de build / supply-chain / mutation — régénérés
+sbom.json
+.audit-reqs.txt
+.mutmut-cache/
+mutants/
+html/
+coverage.xml

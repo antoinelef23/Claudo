@@ -35,7 +35,7 @@
 ## 5. CI/CD
 
 - **D-14** — Pipeline : **`make ci` vert (gate)** → build **Cloud Build** → push **Artifact Registry** (image signée, **cosign / SLSA**) → **Binary Authorization** exige la signature → déploiement (`gcloud run deploy` / Cloud Deploy). Pas de déploiement depuis un poste.
-- **D-15** — Le **merge gate du lab** (`make ci` : lint non-mutant + tests + evals) est un **prérequis de déploiement** : pas d'eval verte, pas de prod (R-25).
+- **D-15** — Le **merge gate du lab** (`make ci` : lint non-mutant + tests + evals + **gate sécurité** SAST/CVE/secrets, R-29) est un **prérequis de déploiement** : pas d'eval verte ni de finding sécurité, pas de prod (R-25). La revue adversariale `security-reviewer` (R-30) éclaire le checkpoint humain ; elle ne remplace pas le gate mécanique.
 
 ## 6. Observabilité
 
@@ -64,6 +64,7 @@
 ☐ Réseau : VPC connector, VPC-SC si sensible, egress allowlisté                      [D-10]
 ☐ Données : service managé, CMEK si sensible, backups/PITR, résidence                [D-11]
 ☐ (IA) Vertex régional, modèle épinglé, Model Armor/DLP si PII, budget               [D-12,D-13]
+☐ Gate sécurité vert : SAST (bandit) + CVE deps (pip-audit) + secrets (detect-secrets) [R-29]
 ☐ CI/CD : make ci → Cloud Build → Artifact Registry signée → Binary Auth → deploy    [D-14,D-15]
 ☐ Logs structurés sans secret ; SLO + alerting + traces                              [D-16,D-17]
 ☐ Rollout canary + feature flag ; rollback auto sur SLO                              [D-18,D-19]

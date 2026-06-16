@@ -23,13 +23,16 @@ SHIM = """#!/usr/bin/env bash
 [ -n "${LAB_ROOT:-}" ] && echo "$@" >> "$LAB_ROOT/.shim/argv.log"
 PROMPT="$2"
 ID=""
-if echo "$PROMPT" | grep -q "agent reviewer"; then
+if echo "$PROMPT" | grep -q "security-reviewer"; then
+  ID="SECURITY"
+elif echo "$PROMPT" | grep -q "agent reviewer"; then
   ID="REVIEW"
 else
   ID=$(echo "$PROMPT" | grep -oE "la tâche (T[0-9]+|CP-[0-9]+)" | head -1 | awk '{print $3}')
 fi
 OUT="STATUS: done"
 [ "$ID" = "REVIEW" ] && OUT="VERDICT: PASS"
+[ "$ID" = "SECURITY" ] && OUT="VERDICT: PASS"
 if [ -n "$ID" ] && [ -f "$LAB_ROOT/.shim/$ID.sh" ]; then
   OUT=$(bash "$LAB_ROOT/.shim/$ID.sh")
 fi
@@ -86,6 +89,9 @@ def run_orch(
         "LAB_ROOT": str(sandbox),
         "LAB_NO_NOTIFY": "1",
         "LAB_TASK_TIMEOUT": "60",
+        # Revue sécurité OFF par défaut dans les tests existants (focalisés sur le flux fonctionnel).
+        # Les tests dédiés à la sécurité la réactivent via env_extra={"LAB_NO_SECURITY_REVIEW": ""}.
+        "LAB_NO_SECURITY_REVIEW": "1",
         "PATH": f"{sandbox / 'bin'}:{os.environ['PATH']}",
         **(env_extra or {}),
     }

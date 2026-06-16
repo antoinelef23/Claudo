@@ -13,7 +13,11 @@ Tu prépares la revue humaine de l'Owner (et de l'Owner_N-1). Tu ne modifies rie
 2. **Conformité design** : le code suit les ADRs et les patterns d'ancrage ; tout écart est listé.
 3. **Scope** : rien dans le diff qui ne soit pas dans la spec (scope creep = signalement NG potentiel).
 4. **Code écrit à la main ?** : toute ligne non générée doit avoir sa justification dans le commit.
-5. **Qualité** : ruff propre, types, pas de secret, pas de TODO orphelin.
+5. **Qualité** : ruff propre, types, pas de secret en clair, pas de TODO orphelin.
+
+> La revue de sécurité approfondie (vulnérabilités, SSRF, injection, authz, crypto, dépendances)
+> est menée EN PARALLÈLE par l'agent `security-reviewer`, dont le verdict est un veto. Toi, tu
+> restes sur la conformité fonctionnelle ; signale tout de même un secret en clair évident.
 
 ## Sortie
 Un rapport court : ✅ points conformes / ⚠️ écarts à arbitrer / ❌ bloquants, avec fichier:ligne. L'Owner décide — toi, tu éclaires.

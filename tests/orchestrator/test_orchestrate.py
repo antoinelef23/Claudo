@@ -564,3 +564,131 @@ def test_remote_approvals_dir(sandbox: Path, tmp_path: Path) -> None:
     r = run_orch(sandbox, env_extra={"LAB_APPROVALS_DIR": str(shared)})
     assert r.returncode == 0, r.stdout + r.stderr
     assert state(sandbox)["CP-1"] == "done"
+
+
+# -------------------------------------------------- revue sécurité (panéliste veto)
+
+_SEC_TASKS = """
+### T1 — Produit un fichier
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** fichier présent
+- **verify :** `true`
+
+### CP-1 — CHECKPOINT : vérification mécanique
+- **trigger :** auto quand [T1] done
+- **validator :** Owner
+- **mode :** auto
+
+### T2 — Étape finale
+- **depends_on :** [CP-1]
+- **implements :** [doc]
+- **files_touched :** `t2.txt`
+- **done_when :** ok
+- **verify :** `true`
+
+### CP-2 — CHECKPOINT : merge
+- **trigger :** auto quand T2 done
+- **validator :** Owner
+- **mode :** blocking
+"""
+
+
+def _review_lenses(sandbox: Path) -> list[str]:
+    return [e.get("lens") for e in journal_events(sandbox) if e["event"] == "review"]
+
+
+def test_security_panelist_runs_and_passes(sandbox: Path) -> None:
+    # Sécurité ACTIVE (défaut prod) + shim sécurité PASS → auto-validation conservée,
+    # et le journal trace bien un panéliste « sécurité ».
+    (sandbox / ".shim" / "T1.sh").write_text('echo "x" > t1.txt\necho "STATUS: done"\n')
+    write_tasks(sandbox, _SEC_TASKS)
+    approve(sandbox, "CP-2")  # merge final humain pré-approuvé
+    r = run_orch(sandbox, env_extra={"LAB_NO_SECURITY_REVIEW": ""})
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(sandbox)["CP-1"] == "done"
+    assert "sécurité" in _review_lenses(sandbox)
+    auto = (sandbox / "work" / "feat" / ".approvals" / "CP-1").read_text()
+    assert "auto-approved" in auto  # fonctionnel PASS + sécurité PASS → auto OK
+
+
+def test_security_block_vetoes_auto_approval(sandbox: Path) -> None:
+    # Le panel fonctionnel PASS (shim REVIEW) mais la sécurité BLOCK → le checkpoint auto
+    # NE DOIT PAS s'auto-valider : il bascule en décision humaine (veto, pas un vote).
+    (sandbox / ".shim" / "T1.sh").write_text('echo "x" > t1.txt\necho "STATUS: done"\n')
+    (sandbox / ".shim" / "SECURITY.sh").write_text('echo "VERDICT: BLOCK"\n')
+    write_tasks(sandbox, _SEC_TASKS)
+    approve(
+        sandbox, "CP-1"
+    )  # pré-approuvés pour que la boucle d'attente ne bloque pas le test
+    approve(sandbox, "CP-2")
+    r = run_orch(sandbox, env_extra={"LAB_NO_SECURITY_REVIEW": ""})
+    assert r.returncode == 0, r.stdout + r.stderr
+    # le jeton est l'approbation HUMAINE pré-posée, PAS une auto-validation
+    token = (sandbox / "work" / "feat" / ".approvals" / "CP-1").read_text()
+    assert "auto-approved" not in token
+    assert "approved_by=test" in token
+    # le verdict sécurité BLOCK est bien journalisé et le rapport agrège en BLOCK
+    sec = [
+        e
+        for e in journal_events(sandbox)
+        if e["event"] == "review" and e.get("lens") == "sécurité"
+    ]
+    assert sec and sec[-1]["verdict"] == "BLOCK"
+    report = (sandbox / "work" / "feat" / ".runs" / "CP-1-review.md").read_text()
+    assert "verdict agrégé : BLOCK" in report and "sécurité BLOCK" in report
+
+
+# -------------------------------------------------- anti-reward-hacking (R-31)
+
+
+def test_eval_tampering_outside_scope_fails(sandbox: Path) -> None:
+    # T1 a pour scope `t1.txt` mais écrit AUSSI une eval hors-scope pour saboter le juge.
+    # L'orchestrateur doit refuser la tâche (failed) AVANT même de lancer le gate.
+    (sandbox / ".shim" / "T1.sh").write_text(
+        "echo x > t1.txt\n"
+        "mkdir -p tests\n"
+        'echo "def test_eval_9(): assert True" > tests/test_eval_9_sneaky.py\n'
+        'echo "STATUS: done"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — Tâche normale
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+    failed = [e for e in journal_events(sandbox) if e["event"] == "task_failed"]
+    assert failed and "anti-reward-hacking" in failed[-1]["reason"]
+    assert "test_eval_9_sneaky.py" in failed[-1]["reason"]
+
+
+def test_eval_in_scope_is_not_flagged(sandbox: Path) -> None:
+    # Écrire une eval DANS le scope (répertoire tests/ déclaré) ne déclenche pas le garde-fou.
+    (sandbox / ".shim" / "T1.sh").write_text(
+        "mkdir -p tests\n"
+        'echo "def test_eval_1(): assert True" > tests/test_eval_1_ok.py\n'
+        'echo "STATUS: done"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — Écrit son eval (in scope)
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `tests/`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(sandbox)["T1"] == "done"

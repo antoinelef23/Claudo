@@ -3,7 +3,10 @@ name = "devis-lab"
 version = "0.1.0"
 description = "Lab IA-natif — feature de simulation devis-pose"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "fastapi>=0.137.1",
+    "uvicorn[standard]>=0.49.0",
+]
 
 [build-system]
 requires = ["hatchling"]
@@ -13,7 +16,31 @@ build-backend = "hatchling.build"
 packages = ["src/devis"]
 
 [dependency-groups]
-dev = ["pytest", "ruff"]
+dev = [
+    "pytest",
+    "ruff",
+    "bandit",
+    "pip-audit",
+    "detect-secrets",
+    "pytest-cov",
+    "mutmut",
+    "cyclonedx-bom",
+    "httpx>=0.28.1",
+]
+
+# SAST Python — le gate (make security) filtre sur severity/confidence medium+ pour ne pas
+# bloquer sur le bruit bas (import subprocess, etc.) tout en attrapant le réel (shell=True,
+# SQLi, eval, yaml.load…). Tests et artefacts de run ne sont pas du code de prod.
+[tool.bandit]
+exclude_dirs = ["tests", ".runs", "work", ".venv", "models"]
+
+# Mutation testing (anti-tautologie, R-32) : on mute le code des FEATURES (src/) et on vérifie
+# que les evals tuent les mutants. Opt-in (`make mutation`, lent) — pas dans `make ci`.
+# L'orchestrateur (scripts/) est testé en sous-process : préférer `make mutation` à la couverture
+# ligne pour lui (la couverture in-process le sous-estime).
+[tool.mutmut]
+paths_to_mutate = ["src/"]
+tests_dir = ["tests/"]
 
 [tool.pytest.ini_options]
 pythonpath = ["src"]

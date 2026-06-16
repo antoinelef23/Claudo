@@ -79,6 +79,12 @@ CLAUDE_ARGS = [
     "--output-format",
     "json",
 ]
+# Moindre privilège par rôle (OWASP LLM06 — Excessive Agency) : les reviewers (fonctionnel ET
+# sécurité) ne doivent JAMAIS écrire de fichier. Même allowlist d'outils (lecture + scanners),
+# mais permission-mode "default" au lieu de "acceptEdits" → toute tentative d'Edit/Write est
+# refusée en headless (pas d'auto-acceptation). Un relecteur qui peut modifier le code qu'il
+# juge n'est plus un contre-pouvoir.
+REVIEW_ARGS = ["default" if a == "acceptEdits" else a for a in CLAUDE_ARGS]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
 
 # H1 — le `verify` d'une tâche est exécuté en shell ; il provient du plan (tasks.md), donc
@@ -467,6 +473,10 @@ def _gchat(msg: str) -> None:
     url = os.environ.get("LAB_GCHAT_WEBHOOK")
     if not url:
         return
+    if not url.lower().startswith(
+        "https://"
+    ):  # refuse file://, http://, schémas exotiques
+        return
     try:
         import json as _json
         import urllib.request
@@ -476,7 +486,8 @@ def _gchat(msg: str) -> None:
             data=_json.dumps({"text": f"[Lab IA-natif] {msg}"}).encode(),
             headers={"Content-Type": "application/json"},
         )
-        urllib.request.urlopen(req, timeout=10)
+        # https forcé ci-dessus ; URL = secret opérateur, pas une entrée externe utilisateur
+        urllib.request.urlopen(req, timeout=10)  # nosec B310
     except Exception:
         pass
 
@@ -521,7 +532,10 @@ def journal(feature: Path, **event) -> None:
 
 
 def run_claude(
-    prompt: str, resume: str | None = None, model: str | None = None
+    prompt: str,
+    resume: str | None = None,
+    model: str | None = None,
+    read_only: bool = False,
 ) -> dict:
     """Appel claude headless. Retourne {ok, text, session_id, cost_usd, error}.
 
@@ -530,8 +544,9 @@ def run_claude(
     (pour reprendre la MÊME session au retry au lieu de repartir de zéro) et
     coût, agrégé dans COST_TOTAL pour le bilan de delivery.
     model : --model passé tel quel (défaut CLI si None).
+    read_only : capability scoping (LLM06) — REVIEW_ARGS (pas d'auto-édition) au lieu de CLAUDE_ARGS.
     """
-    cmd = ["claude", "-p", prompt, *CLAUDE_ARGS]
+    cmd = ["claude", "-p", prompt, *(REVIEW_ARGS if read_only else CLAUDE_ARGS)]
     if model:
         cmd += ["--model", model]
     if resume:
@@ -669,6 +684,37 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
             )
 
 
+_EVAL_FILE = re.compile(r"(^|/)(test_eval|evals/)")
+
+
+def _is_eval_file(path: str) -> bool:
+    """Fichier d'eval au sens de la convention (test_eval_*.py, ou sous un répertoire evals/)."""
+    return bool(_EVAL_FILE.search(path))
+
+
+def _in_files_scope(path: str, files: list[str]) -> bool:
+    """path est-il dans le scope files_touched (fichier exact ou sous un répertoire listé)."""
+    p = path.strip()
+    for f in files:
+        f = f.rstrip("/")
+        if p == f or p.startswith(f + "/"):
+            return True
+    return False
+
+
+def _changed_paths() -> list[str]:
+    """Fichiers modifiés (suivis, vs HEAD) + nouveaux (non suivis) dans l'arbre de travail."""
+    paths: list[str] = []
+    for args in (
+        ["git", "diff", "--name-only", "HEAD"],
+        ["git", "ls-files", "--others", "--exclude-standard"],
+    ):
+        r = subprocess.run(args, cwd=ROOT, capture_output=True, text=True)
+        if r.returncode == 0:
+            paths += [ln.strip() for ln in r.stdout.splitlines() if ln.strip()]
+    return paths
+
+
 def run_task(node: Node, feature: Path, dry: bool) -> str:
     """Retourne done | failed | blocked."""
     base_prompt = (
@@ -762,6 +808,28 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 f"⚠️  {node.id} : pas de ligne STATUS dans la réponse — on s'en remet aux evals",
                 flush=True,
             )
+
+        # #2 anti-reward-hacking : l'implementer ne doit pas modifier/affaiblir une eval HORS de
+        # son scope files_touched pour faire passer le gate. Une eval hors-scope touchée = sabotage
+        # du juge → refus net (immutabilité du test pour l'agent qui code, cf. R-31).
+        tampered = sorted(
+            {
+                p
+                for p in _changed_paths()
+                if _is_eval_file(p) and not _in_files_scope(p, node.files)
+            }
+        )
+        if tampered:
+            reason = (
+                "eval(s) hors-scope modifiée(s) (anti-reward-hacking) : "
+                + ", ".join(tampered)
+            )
+            run_log(feature, node, "implementer", f"TAMPER — {reason}")
+            journal(feature, event="task_failed", id=node.id, reason=reason)
+            notify(
+                f"{node.id} : {reason} — tâche refusée. Re-scope (planner) ou corrige l'agent."
+            )
+            return "failed"
 
         if node.verify:
             # H1 — exécution SANS shell : on tokenise (verify_allowed a déjà rejeté métacaractères
@@ -875,6 +943,23 @@ def _aggregate_verdict(verdicts: list[str]) -> str:
     return "WARN"
 
 
+def _security_enabled() -> bool:
+    """Revue sécurité ACTIVE par défaut. Opt-out explicite via LAB_NO_SECURITY_REVIEW
+    (feature triviale, contrainte de coût). Le gate mécanique CI (make security) reste, lui,
+    toujours enforcé indépendamment de ce flag."""
+    return os.environ.get("LAB_NO_SECURITY_REVIEW", "") not in ("1", "true", "yes")
+
+
+def _combine_security(functional: str, sec: str) -> str:
+    """La revue sécurité est un VETO : jamais mise en minorité par le panel fonctionnel.
+    BLOCK si l'un des deux BLOCK ; PASS seulement si les DEUX PASS ; sinon WARN (→ humain)."""
+    if functional == "BLOCK" or sec == "BLOCK":
+        return "BLOCK"
+    if functional == "PASS" and sec == "PASS":
+        return "PASS"
+    return "WARN"
+
+
 def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     """Panel de reviewers. Retourne (verdict_agrégé, rapport, self_review_only).
     self_review_only = True si tous les panelistes tournent sur le modèle de l'implementer
@@ -898,7 +983,9 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
             f"Produis le rapport (✅/⚠️/❌ avec fichier:ligne) et termine IMPÉRATIVEMENT par une "
             f"ligne seule : « VERDICT: PASS », « VERDICT: WARN » ou « VERDICT: BLOCK »."
         ) + REGISTRY.profile_text(mid)
-        r = run_claude(prompt, model=mid)
+        r = run_claude(
+            prompt, model=mid, read_only=True
+        )  # LLM06 — relecteur sans droit d'écriture
         vm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", r["text"])
         v = vm[-1] if vm else "WARN"
         verdicts.append(v)
@@ -916,12 +1003,56 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
             ok=r["ok"],
         )
 
-    agg = _aggregate_verdict(verdicts)
-    self_only = impl is not None and all(m == impl for m in models)
+    agg = _aggregate_verdict(verdicts)  # verdict du panel FONCTIONNEL
+
+    # Panéliste sécurité (toujours, sauf opt-out) — verdict en VETO, jamais mis en minorité.
+    sec_v: str | None = None
+    sec_model: str | None = None
+    if _security_enabled():
+        sec_model = pick_reviewer_models(cp, 1)[
+            0
+        ]  # modèle reviewer, ≠ implementer si possible
+        sprompt = (
+            f"Tu agis comme l'agent security-reviewer (.claude/agents/security-reviewer.md). "
+            f"Feature : {feature}. Checkpoint {cp.id} — {cp.title}. "
+            f"Tâches couvertes : {', '.join(cp.depends_on) or 'toutes'}. "
+            f"ANGLE IMPOSÉ : revue de sécurité adversariale. Lance les scanners mécaniques "
+            f"(bandit, pip-audit, detect-secrets) PUIS cherche les vulnérabilités de logique "
+            f"(injection, SSRF, authz/IDOR, crypto/comparaison non constante, désérialisation, "
+            f"secrets, DoS). Feature pure sans I/O → PASS « surface d'attaque nulle ». Termine "
+            f"IMPÉRATIVEMENT par une ligne seule : « VERDICT: PASS|WARN|BLOCK »."
+        ) + REGISTRY.profile_text(sec_model)
+        sr = run_claude(
+            sprompt, model=sec_model, read_only=True
+        )  # LLM06 — scanners en lecture seule
+        svm = re.findall(r"VERDICT:\s*(PASS|WARN|BLOCK)", sr["text"])
+        sec_v = svm[-1] if svm else "WARN"
+        sections.append(
+            f"## Panéliste sécurité — {sec_model or 'défaut CLI'} — angle : sécurité adversariale\n"
+            f"VERDICT: {sec_v}\n\n{sr['text'] or sr['error']}"
+        )
+        journal(
+            feature,
+            event="review",
+            id=cp.id,
+            model=sec_model,
+            lens="sécurité",
+            verdict=sec_v,
+            cost_usd=sr["cost_usd"],
+            ok=sr["ok"],
+        )
+
+    final = _combine_security(agg, sec_v) if sec_v else agg
+    all_models = models + ([sec_model] if sec_model else [])
+    self_only = impl is not None and all(m == impl for m in all_models)
     report.parent.mkdir(exist_ok=True)
-    header = f"# Revue {cp.id} — panel de {n} — verdict agrégé : {agg} ({', '.join(verdicts)})\n\n"
+    sec_tag = f" · sécurité {sec_v}" if sec_v else " · sécurité OFF"
+    header = (
+        f"# Revue {cp.id} — panel de {n}+sécu — verdict agrégé : {final} "
+        f"(fonctionnel {agg} [{', '.join(verdicts)}]{sec_tag})\n\n"
+    )
     report.write_text(header + "\n\n---\n\n".join(sections), encoding="utf-8")
-    return agg, report, self_only
+    return final, report, self_only
 
 
 def parse_rejection(path: Path) -> dict:

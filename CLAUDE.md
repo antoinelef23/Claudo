@@ -21,6 +21,9 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 - **Traçabilité** : chaque commit référence les IDs de la spec qu'il implémente (ex: `feat: matching produits [BHV-3, INV-2]`).
 - **Design ancré** : ne jamais inventer une architecture. S'adosser aux repos de référence listés dans design.md §2. Si aucun pattern de référence ne couvre le besoin, le signaler dans une ADR plutôt qu'improviser.
 - **Règles d'ingénierie & déploiement** : tout agent applique le standard de développement `docs/engineering-rules.md` (règles **R-n** : cœur pur, ports & adapters, déterminisme par injection, no-op sur états terminaux, evals qui exercent les ré-invocations…) ; pour une feature qui se déploie, le standard `docs/gcp-deployment-standard.md` (règles **D-n** : Cloud Run, WIF, Secret Manager, CI signée, SLO, rollout canary, prod = décision humaine), renseigné dans `design.md §7`. Le `reviewer` vérifie R-n/D-n au checkpoint ; une feature pure note `§7 N/A`.
+- **Sécurité — gate + revue** : `make ci` inclut un **gate sécurité mécanique** `make security` (SAST `bandit` + CVE deps `pip-audit` + secrets `detect-secrets`, R-29) — pas de finding, sinon rouge. À chaque checkpoint, l'agent `security-reviewer` mène une **revue adversariale** (SSRF, injection, authz, crypto, désérialisation, R-30) **en VETO** du panel fonctionnel : auto-validation seulement si fonctionnel ET sécurité PASS ; un `BLOCK` sécurité n'est jamais mis en minorité. Feature pure → « surface d'attaque nulle ».
+- **Intégrité des evals (anti-reward-hacking)** : l'`implementer` ne touche une eval que dans son scope (`files_touched`) ; toute eval modifiée hors-scope = tâche refusée (R-31). Les **relecteurs tournent en lecture seule** (pas d'auto-édition). Anti-tautologie mécanisé par mutation testing `make mutation` (R-32 : les evals doivent **tuer** les mutants — une eval verte qui ne tue rien est un faux filet).
+- **Menaces du processus agentique** : voir `docs/threat-model.md` (OWASP LLM/ASI, MITRE ATLAS). Menace résiduelle prioritaire = **injection de prompt indirecte** via contenu ingéré (specs non humaines, repos de référence, sorties d'outils) — à durcir (quarantaine/dual-LLM) **avant** de lancer `design-scout` sur de vrais repos externes.
 - **Spec immuable en cours de tâche** : si l'implémentation révèle un trou dans la spec, on arrête, on amende la spec (commit séparé), puis on reprend.
 - **Amendement = passe de cohérence** : tout amendement de spec impose de mettre à jour les pointeurs `# version :` de design.md/tasks.md et de relire les docs dépendants (une note rédigée avant l'amendement peut être devenue fausse). Le plan-lint signale la dérive de version.
 - **Forme adaptable, fond sacré** : le FOND de spec.md (contrat métier) et design.md (image technique) ne change que par amendement humain (commit séparé + bump `version:`). La FORME peut évoluer librement, y compris pour qu'un autre modèle comprenne mieux. `scripts/content_guard.py` (`make check-content`) rend la règle mécanique : un reformat qui altère le fond sans bump de version est rejeté. Pour aider un modèle qui comprend mal : ajuster d'ABORD le scaffolding (`models/profiles/`, agent `.md`), reformater spec/design en DERNIER recours seulement.
@@ -47,7 +50,7 @@ Ordre de lecture obligatoire avant de coder : spec.md → design.md → tasks.md
 
 ## Agents
 
-Sous-agents disponibles dans `.claude/agents/` : `design-scout`, `planner`, `implementer`, `eval-runner`, `reviewer`. Leur orchestration est décrite dans README.md et dans chaque tasks.md.
+Sous-agents disponibles dans `.claude/agents/` : `design-scout`, `planner`, `implementer`, `eval-runner`, `reviewer`, `security-reviewer`. Leur orchestration est décrite dans README.md et dans chaque tasks.md.
 
 ## Modèles
 
