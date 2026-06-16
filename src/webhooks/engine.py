@@ -13,7 +13,7 @@ def deliver(
 ) -> Delivery:
     delivery = store.enqueue(subscription.id, event.id)
 
-    if delivery.state == DELIVERED:
+    if delivery.state in {DELIVERED, DEAD_LETTER}:
         return delivery
 
     for n in range(1, subscription.max_attempts + 1):

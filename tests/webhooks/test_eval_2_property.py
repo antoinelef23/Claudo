@@ -73,3 +73,10 @@ def test_eval_2_property():
             assert len(transport.calls) == calls_count, (
                 f"scenario {i}: send called after DELIVERED"
             )
+
+        # INV-2/INV-4: aucun send supplémentaire après DEAD_LETTER (ADR-3 v1.1.0)
+        if delivery.state == DEAD_LETTER:
+            deliver(store, transport, sub, event, clock)
+            assert len(transport.calls) == calls_count, (
+                f"scenario {i}: send called after DEAD_LETTER"
+            )
