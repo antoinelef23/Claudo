@@ -10,6 +10,7 @@ SERVICE="webhook-gateway"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}"
 TAG="$(git rev-parse --short HEAD 2>/dev/null || echo latest)"
 SECRET_ACME="${GATEWAY_SECRET_ACME:-acme-test-key}"
+READ_TOKEN="${GATEWAY_READ_TOKEN:-read-test-token}"
 
 cd "$(dirname "$0")/.."
 
@@ -38,7 +39,7 @@ gcloud run deploy "$SERVICE" \
   --allow-unauthenticated \
   --cpu=1 --memory=512Mi --concurrency=80 --timeout=30 \
   --min-instances=0 --max-instances=4 \
-  --set-env-vars="GATEWAY_SECRET_ACME=${SECRET_ACME}" \
+  --set-env-vars="GATEWAY_SECRET_ACME=${SECRET_ACME},GATEWAY_READ_TOKEN=${READ_TOKEN}" \
   --quiet
 
 URL="$(gcloud run services describe "$SERVICE" --region="$REGION" --project="$PROJECT" --format='value(status.url)')"
