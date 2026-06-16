@@ -7,6 +7,7 @@ H2 : un `verify` agent-généré ne peut ni injecter de shell ni sortir de l'all
 from __future__ import annotations
 
 import json
+import subprocess
 import sys
 from pathlib import Path
 
@@ -211,3 +212,52 @@ def test_checkpoint_plan_fails_closed_without_secret(sandbox: Path) -> None:
     )
     assert r2.returncode == 0, r2.stdout + r2.stderr
     assert state(sandbox)["CP-1"] == "done"
+
+
+# ---------------------------------------------------------------- H3/H5 : golden protégé
+
+
+def test_scoped_commit_does_not_commit_out_of_scope_golden(sandbox: Path) -> None:
+    # finding H3/H5 : une tâche ne doit pas auto-commiter un oracle golden hors de son
+    # files_touched (sinon une vérité terrain altérée passe en douce dans le scorecard).
+    g = sandbox / "evals" / "golden" / "g"
+    g.mkdir(parents=True)
+    (g / "check.sh").write_text("echo ok\n")
+    subprocess.run(["git", "add", "-A"], cwd=sandbox, check=True, capture_output=True)
+    subprocess.run(
+        ["git", "commit", "-qm", "golden"], cwd=sandbox, check=True, capture_output=True
+    )
+
+    # T1 (scope = t1.txt) altère le golden en plus de son fichier.
+    (sandbox / ".shim" / "T1.sh").write_text(
+        'echo data > t1.txt\necho "TAMPERED" >> evals/golden/g/check.sh\n'
+        'echo "STATUS: done"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — Touche t1 mais altère un golden hors scope
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+
+    committed = subprocess.run(
+        ["git", "show", "--name-only", "--format=", "HEAD"],
+        cwd=sandbox,
+        capture_output=True,
+        text=True,
+    ).stdout
+    assert "evals/golden/g/check.sh" not in committed, (
+        f"le golden hors scope n'aurait pas dû être commité :\n{committed}"
+    )
+    # Il reste modifié dans l'arbre (laissé non commité, pas avalé).
+    status = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=sandbox, capture_output=True, text=True
+    ).stdout
+    assert "evals/golden/g/check.sh" in status

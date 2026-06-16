@@ -23,8 +23,9 @@ Garde-fous d'autonomie :
     n'est collectée (pas d'eval écrite = pas de done, même si `make evals` sort 0)
   - confinement d'échec : une tâche failed/blocked ne bloque que son sous-arbre de
     dépendants (skipped) ; les autres branches continuent
-  - commits scopés : on ne stage que les files_touched de la tâche (+ tests/, evals/,
-    le dossier feature) sous verrou — jamais de `git add -A` en vague parallèle
+  - commits scopés : on ne stage que les files_touched de la tâche + le dossier
+    feature sous verrou (jamais `git add -A`, ni `tests`/`evals` en bloc qui
+    aspirerait les fichiers des autres tâches et les goldens — findings H3/H5)
 
 Usage :
     python3 scripts/orchestrate.py examples/agent-douche --validate
@@ -628,11 +629,40 @@ def evals_collected() -> str:
 
 
 def scoped_commit(node: Node, feature: Path, message: str) -> None:
-    """Stage uniquement le périmètre de la tâche, sous verrou (vagues parallèles)."""
+    """Stage uniquement le périmètre de la tâche, sous verrou (vagues parallèles).
+
+    On ne stage PLUS `tests`/`evals` en bloc (findings H3/H5) : par convention,
+    files_touched contient déjà les chemins de tests/evals de la tâche. Le staging
+    en bloc aspirait les fichiers d'autres tâches de la vague ET les oracles
+    `evals/golden/**` — un golden altéré hors-scope se retrouvait auto-commité,
+    corrompant la vérité terrain du scorecard. On stage donc node.files + le dossier
+    feature (spec/design/tasks), puis on dé-stage tout golden non déclaré.
+    """
     with COMMIT_LOCK:
-        paths = [*node.files, "tests", "evals", str(feature.relative_to(ROOT))]
+        paths = [*node.files, str(feature.relative_to(ROOT))]
         for p in paths:
             subprocess.run(["git", "add", "--", p], cwd=ROOT, capture_output=True)
+        # Garde-fou oracle : un golden n'est commité que s'il est explicitement dans
+        # files_touched. Sinon on le dé-stage (finding H3, anti-tamper du scorecard).
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        for f in staged:
+            if f.startswith("evals/golden/") and not any(
+                _paths_overlap(f, d) for d in node.files
+            ):
+                subprocess.run(
+                    ["git", "reset", "-q", "HEAD", "--", f],
+                    cwd=ROOT,
+                    capture_output=True,
+                )
+                print(
+                    f"⚠️  {node.id} : golden hors files_touched dé-stagé (oracle protégé) : {f}",
+                    flush=True,
+                )
         leftover = subprocess.run(
             ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True
         ).stdout
