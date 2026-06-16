@@ -354,22 +354,46 @@ def test_lint_warns_on_spec_version_drift(sandbox: Path) -> None:
 
 
 def test_anti_gate_vide(sandbox: Path) -> None:
-    # T1 implémente un ID réel mais aucune eval n'existe (pas de pyproject) → failed
+    # Une tâche qui implémente une EVAL-* mais ne collecte AUCUNE eval dans son périmètre → failed.
+    # (L'exigence d'eval est scopée aux EVAL-* depuis le correctif fondation : voir test ci-dessous.)
+    collected = sandbox / "collected.txt"
+    collected.write_text("")  # rien de collecté
     write_tasks(
         sandbox,
         """
-### T1 — Prétend implémenter INV-1 sans eval
+### T1 — Prétend implémenter EVAL-1 sans écrire d'eval
 - **depends_on :** —
-- **implements :** [INV-1]
-- **files_touched :** `t1.txt`
+- **implements :** [EVAL-1]
+- **files_touched :** `tests/feat/`
 - **done_when :** ok
 - **verify :** `true`
 """,
     )
-    r = run_orch(sandbox)
+    r = run_orch(sandbox, env_extra={"LAB_EVALS_COLLECTED_FILE": str(collected)})
     assert r.returncode == 1
     assert state(sandbox)["T1"] == "failed"
     assert "FAIL" in (sandbox / "work" / "feat" / "tasks.md").read_text()
+
+
+def test_foundation_task_without_eval_passes(sandbox: Path) -> None:
+    # Correctif fondation : une tâche qui implémente des invariants (INV/BHV, AUCUNE EVAL-*) et n'a
+    # pas d'eval propre est gatée par son verify et passe — ses evals vivent dans une tâche de
+    # composition + le merge gate. (Avant le correctif, le scope M3/M4 la faisait échouer à tort.)
+    (sandbox / ".shim" / "T1.sh").write_text('echo x > t1.txt\necho "STATUS: done"\n')
+    write_tasks(
+        sandbox,
+        """
+### T1 — Fondation : implémente INV-1/BHV-1 sans eval propre
+- **depends_on :** —
+- **implements :** [INV-1, BHV-1]
+- **files_touched :** `src/foo.py`, `tests/foo/`
+- **done_when :** ok
+- **verify :** `test -f t1.txt`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(sandbox)["T1"] == "done"
 
 
 # ----------------------------------------------------- durcissement (revue 2026-06-15)

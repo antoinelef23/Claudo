@@ -787,12 +787,15 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 continue
 
         ok, out = run_evals()
-        if ok and real_ids:
+        # Anti-gate-vide & couverture : on n'exige une eval QUE pour les tâches qui implémentent une
+        # EVAL-* de la spec. Une tâche FONDATION (INV/BHV seuls — ex. model.py, dont les invariants
+        # sont éval-és par une tâche de composition + le merge gate) est gatée par son `verify`. Sans
+        # ce scope-EVAL, une fondation légitime sans eval propre échouait à tort (faux positif M3/M4).
+        eval_ids = [i for i in real_ids if i.startswith("EVAL-")]
+        if ok and eval_ids:
             collected = evals_collected()
-            # M3/M4 — restreindre la couverture aux tests DU périmètre de la tâche. Sinon un
-            # EVAL-2 d'une AUTRE feature (même numéro) satisfait la couverture par collision de
-            # sous-chaîne, et l'anti-gate-vide n'est jamais par-tâche. Repli sur le dépôt entier
-            # si la tâche ne déclare aucun chemin de test (ex. une CLI sans eval propre).
+            # M3/M4 — restreindre la couverture aux tests DU périmètre de la tâche (sinon un EVAL-2
+            # d'une AUTRE feature satisfait la couverture par collision de sous-chaîne).
             scope = [
                 f.rstrip("/") for f in node.files if f.startswith(("tests/", "evals/"))
             ]
@@ -812,16 +815,14 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             if "::" not in collected:
                 ok = False
                 out = (
-                    "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée alors que la tâche "
-                    f"implémente {node.implements}. Écris les evals de spec.md §7 (pytest -m eval) — "
-                    "pas d'eval, pas de done."
+                    "Gate vide : la tâche implémente "
+                    f"{eval_ids} mais AUCUNE eval n'est collectée dans son périmètre. Écris les evals "
+                    "de spec.md §7 (pytest -m eval, nom contenant l'ID) — pas d'eval, pas de done."
                 )
             else:
                 low = collected.lower()
                 missing = [
-                    i
-                    for i in real_ids
-                    if i.startswith("EVAL-") and i.lower().replace("-", "_") not in low
+                    i for i in eval_ids if i.lower().replace("-", "_") not in low
                 ]
                 if missing:
                     ok = False
