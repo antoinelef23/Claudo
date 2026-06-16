@@ -286,7 +286,7 @@ def test_checkpoint_reject_reopens_tasks(sandbox: Path) -> None:
     d = sandbox / "work" / "feat" / ".approvals"
     d.mkdir(parents=True)
     (d / "CP-1.rejected").write_text("reason=la sortie ne convient pas\ntasks=T1\n")
-    (d / "CP-1").write_text("approved_by=test\n")
+    approve(sandbox, "CP-1")  # jeton signé (le rejet est consommé d'abord)
     r = run_orch(sandbox)
     assert r.returncode == 0, r.stdout + r.stderr
     assert state(sandbox) == {"T1": "done", "CP-1": "done"}

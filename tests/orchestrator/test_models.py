@@ -428,7 +428,10 @@ status: approved
     approve(sandbox, "CP-2")
     r = run_orch(sandbox)
     assert r.returncode == 0, r.stdout + r.stderr
-    cp1 = (sandbox / "work" / "feat" / ".approvals" / "CP-1").read_text()
+    # L'approbation humaine a été honorée puis consommée (renommée .handled-*).
+    handled = list((sandbox / "work" / "feat" / ".approvals").glob("CP-1.handled-*"))
+    assert handled, "la bascule humaine doit avoir honoré l'approbation pré-déposée"
+    cp1 = handled[0].read_text()
     assert (
         "auto-approved" not in cp1
     )  # n'a PAS auto-validé : a utilisé l'approbation humaine

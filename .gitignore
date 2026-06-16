@@ -17,3 +17,10 @@ build/
 .mypy_cache/
 *.egg-info/
 .coverage
+
+# Artefacts de run de l'orchestrateur — jamais versionnés (anti-rejeu de jetons
+# d'approbation + divergence state.json, findings H1/H4). Les rapports de revue
+# (.runs/*-review.md) restent suivis pour l'audit.
+**/.approvals/
+**/.runs/state.json
+**/.runs/journal.jsonl
