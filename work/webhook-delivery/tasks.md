@@ -250,3 +250,5 @@ flowchart TD
 | 2026-06-16 08:36 | T5 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 08:47 | CP-2 | owner | checkpoint REJETÉ — Design amendé v1.1.0 (ADR-3) suite à la revue : court-circuite deliver() sur TOUT état terminal — DELIVERED ET DEAD_LETTER — pas seulement DELIVERED. Bug actuel (engine.py): re-livrer une delivery déjà DEAD_LETTER ré-entre dans la boucle et émet jusqu'à max_attempts send de plus → viole INV-2 et INV-4. Corrige engine.py (retour immédiat si state in {DELIVERED, DEAD_LETTER}). ET étends EVAL-2 (test_eval_2_property.py) pour fermer l'angle mort : rejoue deliver() une 2e fois sur une delivery arrivée à DEAD_LETTER et vérifie qu'AUCUN send supplémentaire n'a lieu (INV-2/INV-4). Relis design.md v1.1.0 ADR-3. | |
 | 2026-06-16 08:48 | T5 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 08:52 | CP-2 | owner | checkpoint validé | |
+| 2026-06-16 08:54 | T6 | implementer | done, evals vertes (t1) | |
