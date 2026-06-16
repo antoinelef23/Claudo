@@ -1,10 +1,10 @@
 ---
 artifact: design
 feature: webhook-delivery
-version: 1.0.0
+version: 1.1.0
 status: validated
 owner: Antoine (test E2E — "fake real")
-validated_by: technique simulé — 2026-06-15
+validated_by: technique simulé — 2026-06-16 (amendement ADR-3 post-revue CP-2)
 spec: ./spec.md          # version : 1.0.0
 ---
 
@@ -74,14 +74,18 @@ Six modules sous `src/webhooks/` :
   En test : une horloge logique (`0, 1000, 2000, …`). Pas de `time.sleep`.
 - **Consequences :** retries et `next_at` déterministes et vérifiables ; pas de temps réel.
 
-### ADR-3 — Boucle de tentatives bornée + court-circuit idempotent
+### ADR-3 — Boucle de tentatives bornée + court-circuit sur état TERMINAL
 - **Status :** accepted
 - **Context :** INV-1 (au plus une fois), INV-2 (bornage), INV-4 (lettre morte terminale).
-- **Decision :** `deliver` : si la `delivery` est déjà `DELIVERED` → retour immédiat (aucun `send`).
-  Sinon `for n in 1..max_attempts`: `sig=sign`; `ok=transport.send`; enregistrer ; si `ok` → `DELIVERED`,
-  retour ; sinon `next_at=clock()+backoff_ms(n)`. Après la boucle → `DEAD_LETTER`.
+- **Decision :** `deliver` : si la `delivery` est déjà dans un **état terminal — `DELIVERED` OU
+  `DEAD_LETTER`** → retour immédiat, **aucun `send`**. Sinon `for n in 1..max_attempts`: `sig=sign`;
+  `ok=transport.send`; enregistrer ; si `ok` → `DELIVERED`, retour ; sinon `next_at=clock()+backoff_ms(n)`.
+  Après la boucle → `DEAD_LETTER`.
 - **Anchored on :** pattern DLQ standard.
-- **Consequences :** nombre d'appels ≤ max_attempts par construction ; états terminaux nets.
+- **Consequences :** nombre d'appels ≤ max_attempts **sur toute la vie de la delivery, y compris
+  après re-livraison** (pas seulement intra-appel) ; INV-2 et INV-4 tenus symétriquement à BHV-7
+  (DELIVERED). *(Amendement post-revue CP-2 : l'ADR ne couvrait que `DELIVERED` ; re-livrer un
+  `DEAD_LETTER` relançait des tentatives → violait INV-2/INV-4 alors que l'eval gate était verte.)*
 
 ## 5. Contracts & data (signatures — pinnées pour le parallélisme)
 
@@ -116,6 +120,7 @@ class DeliveryStore:
     def all(self) -> list["Delivery"]: ...
 
 # engine.py
+# court-circuit si delivery déjà TERMINALE (DELIVERED ou DEAD_LETTER) → aucun send (ADR-3, INV-2/INV-4)
 def deliver(store, transport, subscription, event, clock, base_ms: int = 1000, cap_ms: int = 60000) -> "Delivery": ...
 ```
 
@@ -143,3 +148,4 @@ livré/dead-letter directes ; `deliver` est pur sur entrées injectées → tout
 | Version | Date | Auteur | Changement |
 |---|---|---|---|
 | 1.0.0 | 2026-06-15 | technique (simulé) + design-scout | Création |
+| 1.1.0 | 2026-06-16 | technique (amendement post-revue CP-2) | ADR-3 : court-circuit sur tout état TERMINAL (DELIVERED **et** DEAD_LETTER), pas seulement DELIVERED — sinon re-livrer un dead-letter relance des tentatives (viole INV-2/INV-4). §5 deliver annoté. EVAL-2 (T5) à étendre : rejouer deliver sur un état terminal. |

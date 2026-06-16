@@ -6,7 +6,7 @@ status: approved
 generated_by: planner
 approved_by: Antoine (Owner) — 2026-06-16 — E2E "fake real" ; pré-flight GO ; CP-1 auto, CP-2/CP-3 blocking
 spec: ./spec.md          # version : 1.0.0
-design: ./design.md      # version : 1.0.0
+design: ./design.md      # version : 1.1.0
 ---
 
 # Tasks — Service de livraison de webhooks fiable
