@@ -37,7 +37,9 @@ _SAMPLE: list[tuple[str, str, dict]] = [
 
 def _client() -> tuple[TestClient, InMemoryStore]:
     store = InMemoryStore()
-    app = create_app(secrets=SECRETS, store=store, now=lambda: NOW)
+    app = create_app(
+        secrets=SECRETS, store=store, now=lambda: NOW, read_token="read-test-token"
+    )
     return TestClient(app), store
 
 
@@ -254,3 +256,96 @@ def test_eval_3_compare_digest_self_test():
         assert _verify_fn(SECRET, NOW, raw, f"sha256={mutated}", NOW) is False, (
             f"verify() doit renvoyer False pour la signature mutée au pos {pos}"
         )
+
+
+# ---------------------------------------------------------------------------
+# Volet (d) — F-2 : signature non-ASCII / non-hexadécimale → 401, jamais 500 (BHV-2, ADR-4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.eval
+def test_eval_3_d_non_ascii_signature_401():
+    """Signature contenant des octets non-ASCII → 401, jamais 500 (BHV-2/F-2, ADR-4).
+
+    Sans la garde F-2, compare_digest lèverait TypeError sur ces octets,
+    provoquant un 500 qui constituerait un oracle d'erreur (INV-6 violé).
+    """
+    # ASCII non-hex → envoyables en str. Octets non-ASCII (0x80-0xFF) → envoyés en BYTES car
+    # httpx refuse d'encoder un str non-ASCII côté client (Starlette les décode latin-1 côté app,
+    # ce qui ferait lever TypeError à compare_digest sans la garde F-2).
+    ascii_non_hex = ["sha256=gggg", "sha256=ZZZZ!@#$"]
+    non_ascii_bytes = [b"sha256=caf\xe9", b"sha256=\x80\xff\xfe"]
+    for sig in ascii_non_hex + non_ascii_bytes:
+        client, store = _client()
+        raw = _raw(event_id="sec-nonascii", type="test", data={})
+        headers = {"X-Timestamp": str(NOW), "X-Signature": sig}
+        resp = client.post("/webhooks/acme", content=raw, headers=headers)
+        assert resp.status_code == 401, (
+            f"Signature non-hex/non-ASCII {sig!r} doit → 401 (pas 500)"
+        )
+        assert store.get("sec-nonascii") is None
+
+
+# ---------------------------------------------------------------------------
+# Volet (e) — F-1 / INV-7 : GET /events/{id} sans X-Read-Token valide → 401 (ADR-4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.eval
+def test_eval_3_e_get_without_read_token_401():
+    """GET /events/{id} sans X-Read-Token → 401, aucun payload (INV-7/F-1, IDOR fermé).
+
+    Vérifie : token absent → 401, token invalide → 401, token valide → 200.
+    """
+    client, store = _client()
+    # Injecter un événement connu
+    raw = _raw(event_id="sec-idor", type="test", data={"secret": "confidential"})
+    sig = f"sha256={sign(SECRET, NOW, raw)}"
+    r = client.post(
+        "/webhooks/acme",
+        content=raw,
+        headers={"X-Timestamp": str(NOW), "X-Signature": sig},
+    )
+    assert r.status_code == 202
+
+    # Token absent → 401
+    resp_no_token = client.get("/events/sec-idor")
+    assert resp_no_token.status_code == 401, "Token absent doit → 401"
+
+    # Token invalide → 401
+    resp_bad_token = client.get("/events/sec-idor", headers={"X-Read-Token": "wrong"})
+    assert resp_bad_token.status_code == 401, "Token invalide doit → 401"
+
+    # Token valide → 200 (santé)
+    resp_ok = client.get(
+        "/events/sec-idor", headers={"X-Read-Token": "read-test-token"}
+    )
+    assert resp_ok.status_code == 200, "Token valide doit → 200"
+    assert resp_ok.json()["event_id"] == "sec-idor"
+
+
+# ---------------------------------------------------------------------------
+# Volet (f) — F-3 / BHV-8 : corps > MAX_BODY → 413 avant tout HMAC (ADR-4)
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.eval
+def test_eval_3_f_body_too_large_413():
+    """Corps > MAX_BODY → 413 avant lecture intégrale / calcul HMAC (BHV-8/F-3, ADR-4).
+
+    Le corps surdimensionné porte une signature intentionnellement invalide pour
+    prouver que le 413 est émis avant tout calcul HMAC.
+    """
+    from gateway.app import MAX_BODY
+
+    client, store = _client()
+    oversized = b"x" * (MAX_BODY + 1)
+    headers = {
+        "X-Timestamp": str(NOW),
+        "X-Signature": "sha256=aabbccdd",  # invalide — ne doit jamais être évalué
+    }
+    resp = client.post("/webhooks/acme", content=oversized, headers=headers)
+    assert resp.status_code == 413, (
+        f"Corps de {len(oversized)} octets (> MAX_BODY={MAX_BODY}) doit → 413"
+    )
+    assert store.get("any") is None, "Aucun événement ne doit être enregistré"

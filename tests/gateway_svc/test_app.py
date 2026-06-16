@@ -1,19 +1,20 @@
-"""Tests BHV-1..7 pour l'adaptateur FastAPI (T3).
+"""Tests BHV-1..8, INV-7 pour l'adaptateur FastAPI (T3 amendé 1.1.0).
 
-Pas d'eval ici — les evals EX-1..EX-5, EVAL-2, EVAL-3 relèvent de T4/T5/T6.
+Pas d'eval ici — les evals EX-1..EX-6, EVAL-2, EVAL-3 relèvent de T4/T5/T6.
 """
 
 import json
 
 from fastapi.testclient import TestClient
 
-from gateway.app import create_app
+from gateway.app import MAX_BODY, create_app
 from gateway.store import InMemoryStore
 from gateway.verify import sign
 
 SECRET = b"test-secret"
 SECRETS = {"acme": SECRET}
 NOW = 1_700_000_000
+READ_TOKEN = "read-test-token"
 
 
 def _make_client(
@@ -21,7 +22,9 @@ def _make_client(
 ) -> tuple[TestClient, InMemoryStore]:
     if store is None:
         store = InMemoryStore()
-    app = create_app(secrets=SECRETS, store=store, now=lambda: NOW)
+    app = create_app(
+        secrets=SECRETS, store=store, now=lambda: NOW, read_token=READ_TOKEN
+    )
     return TestClient(app), store
 
 
@@ -66,6 +69,29 @@ def test_bhv2_missing_signature_401():
     resp = client.post("/webhooks/acme", content=raw, headers={"X-Timestamp": str(NOW)})
     assert resp.status_code == 401
     assert store.get("evt-2b") is None
+
+
+def test_bhv2_nonhex_signature_401():
+    """F-2/ADR-4: signature non-hexadécimale → 401, jamais 500."""
+    client, store = _make_client()
+    raw = _raw(event_id="evt-2c", type="payment", data={})
+    headers = {"X-Timestamp": str(NOW), "X-Signature": "sha256=xyz!!not-hex"}
+    resp = client.post("/webhooks/acme", content=raw, headers=headers)
+    assert resp.status_code == 401
+    assert store.get("evt-2c") is None
+
+
+def test_bhv2_nonascii_signature_401():
+    """F-2/ADR-4: signature avec octets non-ASCII → 401, jamais 500 (compare_digest TypeError)."""
+    client, store = _make_client()
+    raw = _raw(event_id="evt-2d", type="payment", data={})
+    # Octets non-ASCII (0x80-0xFF) envoyés en BYTES : httpx refuse d'encoder un str non-ASCII
+    # côté client. Starlette les décode latin-1 → str non-ASCII côté app, ce qui ferait lever
+    # TypeError à compare_digest sans la garde F-2 (→ 500). Avec la garde : 401.
+    headers = {"X-Timestamp": str(NOW), "X-Signature": b"sha256=\x80\xff\xfe"}
+    resp = client.post("/webhooks/acme", content=raw, headers=headers)
+    assert resp.status_code == 401
+    assert store.get("evt-2d") is None
 
 
 # --- BHV-3 : horodatage périmé → 401, rien enregistré ---
@@ -121,22 +147,40 @@ def test_bhv5_healthz():
     assert resp.json() == {"status": "ok"}
 
 
-# --- BHV-6 : relecture → 200 + payload si connu, 404 sinon ---
+# --- BHV-6 / INV-7 : relecture authentifiée (amendement 1.1.0, F-1) ---
 
 
 def test_bhv6_get_known_event_200():
     client, store = _make_client()
     raw = _raw(event_id="evt-lookup", type="test", data={"x": 1})
     client.post("/webhooks/acme", content=raw, headers=_valid_headers(raw))
-    resp = client.get("/events/evt-lookup")
+    resp = client.get("/events/evt-lookup", headers={"X-Read-Token": READ_TOKEN})
     assert resp.status_code == 200
     assert resp.json()["event_id"] == "evt-lookup"
 
 
 def test_bhv6_get_unknown_event_404():
     client, _ = _make_client()
-    resp = client.get("/events/no-such-event")
+    resp = client.get("/events/no-such-event", headers={"X-Read-Token": READ_TOKEN})
     assert resp.status_code == 404
+
+
+def test_bhv6_get_without_token_401():
+    """INV-7/F-1: GET sans X-Read-Token → 401, aucun payload (IDOR fermé)."""
+    client, store = _make_client()
+    raw = _raw(event_id="evt-auth", type="test", data={"secret": "value"})
+    client.post("/webhooks/acme", content=raw, headers=_valid_headers(raw))
+    resp = client.get("/events/evt-auth")
+    assert resp.status_code == 401
+
+
+def test_bhv6_get_with_wrong_token_401():
+    """INV-7/F-1: GET avec token invalide → 401, aucun payload."""
+    client, store = _make_client()
+    raw = _raw(event_id="evt-auth2", type="test", data={})
+    client.post("/webhooks/acme", content=raw, headers=_valid_headers(raw))
+    resp = client.get("/events/evt-auth2", headers={"X-Read-Token": "wrong-token"})
+    assert resp.status_code == 401
 
 
 # --- BHV-7 : corps malformé → 400, rien enregistré ---
@@ -170,6 +214,20 @@ def test_bhv7_missing_data_400():
     raw = _raw(event_id="evt-y", type="order")
     resp = client.post("/webhooks/acme", content=raw, headers=_valid_headers(raw))
     assert resp.status_code == 400
+
+
+# --- BHV-8 : corps trop volumineux → 413 avant tout HMAC (amendement 1.1.0, F-3) ---
+
+
+def test_bhv8_body_too_large_413():
+    """F-3/ADR-4: corps > MAX_BODY → 413, rien enregistré, aucun HMAC calculé."""
+    client, store = _make_client()
+    oversized = b"x" * (MAX_BODY + 1)
+    # Signature délibérément invalide — on ne doit jamais l'atteindre
+    headers = {"X-Timestamp": str(NOW), "X-Signature": "sha256=aabbccdd"}
+    resp = client.post("/webhooks/acme", content=oversized, headers=headers)
+    assert resp.status_code == 413
+    assert store.get("any-id") is None
 
 
 # --- Source inconnue → 401 (même réponse que signature invalide, INV-6) ---

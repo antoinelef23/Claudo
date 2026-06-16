@@ -1,4 +1,4 @@
-"""EVAL-1 — Exemples EX-1..EX-5 (spec.md §6, EVAL-1). Merge gate."""
+"""EVAL-1 — Exemples EX-1..EX-6 (spec.md §6, EVAL-1 amendé 1.1.0). Merge gate."""
 
 import json
 
@@ -19,12 +19,16 @@ def store():
     return InMemoryStore()
 
 
+READ_TOKEN = "read-test-token"
+
+
 @pytest.fixture(scope="module")
 def client(store):
     app = create_app(
         secrets={SOURCE: SECRET},
         store=store,
         now=lambda: NOW,
+        read_token=READ_TOKEN,
     )
     with TestClient(app) as c:
         yield c
@@ -126,8 +130,16 @@ def test_eval_1_ex4_duplicate(client, store):
 
 @pytest.mark.eval
 def test_eval_1_ex5_read_known(client, store):
-    """EX-5 — BHV-6: GET /events/evt-1 → 200 + payload."""
-    resp = client.get("/events/evt-1")
+    """EX-5 — BHV-6: GET /events/evt-1 avec X-Read-Token valide → 200 + payload (amendé 1.1.0)."""
+    resp = client.get("/events/evt-1", headers={"X-Read-Token": READ_TOKEN})
     assert resp.status_code == 200
     payload = resp.json()
     assert payload["event_id"] == "evt-1"
+
+
+@pytest.mark.eval
+def test_eval_1_ex6_read_without_token(client, store):
+    """EX-6 — INV-7/BHV-6 (1.1.0): GET /events/evt-1 sans X-Read-Token → 401, aucun payload."""
+    resp = client.get("/events/evt-1")
+    assert resp.status_code == 401
+    assert resp.content == b""

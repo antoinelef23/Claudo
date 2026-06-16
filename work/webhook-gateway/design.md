@@ -1,11 +1,11 @@
 ---
 artifact: design
 feature: webhook-gateway
-version: 1.0.0
+version: 1.1.0
 status: validated
 owner: Owner (lab)
 validated_by: FDE (lab) — 2026-06-16
-spec: ./spec.md   # couvre spec 1.0.0
+spec: ./spec.md   # couvre spec 1.1.0
 ---
 
 # Design — Webhook Gateway
@@ -64,6 +64,16 @@ flowchart LR
 - **Decision :** `EventStore.add_if_absent(event_id, payload) -> bool` (atomique pour la version mémoire via un set/dict) ; `False` → 409. Pas de verrou distribué (NG-1) ; l'adaptateur Firestore futur utilisera une écriture conditionnelle.
 - **Consequences :** idempotence garantie au sein d'un process ; documentée comme limite avant persistance distribuée.
 
+### ADR-4 — Durcissement de l'adaptateur HTTP *(amendement 1.1.0, suite revue sécurité CP-2)*
+- **Status :** accepted
+- **Context :** la revue `security-reviewer` (VETO) au CP-2 a relevé sur l'adaptateur : F-1 lecture non authentifiée (IDOR/énumération des payloads), F-2 signature non-ASCII → 500 au lieu de 401, F-3 corps non borné (DoS pré-auth).
+- **Decision :**
+  - **F-1 (INV-7)** : `GET /events/{id}` exige `X-Read-Token` comparé en temps constant (`hmac.compare_digest`) à un `read_token` **injecté** dans `create_app` ; absent/invalide → 401. Jeton de lecture distinct du secret HMAC d'ingestion.
+  - **F-2 (BHV-2)** : avant `verify`, l'adaptateur valide que la signature (après retrait de `sha256=`) est **hexadécimale ASCII** ; sinon 401. (`compare_digest` lève `TypeError` sur non-ASCII — on ne l'atteint jamais.)
+  - **F-3 (BHV-8)** : rejet **413** si `Content-Length` > `MAX_BODY (1 MiB)`, et lecture bornée du corps, **avant** tout calcul HMAC.
+- **Anchored on :** schéma Stripe/Svix (sig hex), pattern API key header (read token).
+- **Consequences :** signature de `create_app` étendue (`read_token`, voir §5) ; ces gardes vivent dans l'adaptateur (`app.py`), le cœur pur reste inchangé.
+
 ## 5. Contracts & data (signatures — pinnées pour le ∥)
 ```python
 # src/gateway/model.py
@@ -88,10 +98,16 @@ class EventStore(Protocol):
 class InMemoryStore:  # adaptateur
     ...
 
-# src/gateway/app.py  (adaptateur FastAPI ; clock + store injectés via Depends)
-def create_app(secrets: dict[str, bytes], store: EventStore, now: Callable[[], int]) -> FastAPI: ...
+# src/gateway/app.py  (adaptateur FastAPI ; clock + store + read_token injectés)
+MAX_BODY = 1 * 1024 * 1024  # 1 MiB (BHV-8)
+def create_app(
+    secrets: dict[str, bytes],
+    store: EventStore,
+    now: Callable[[], int],
+    read_token: str,                 # 1.1.0 — jeton de lecture (INV-7) ; comparé en temps constant
+) -> FastAPI: ...
 ```
-- API : routes `POST /webhooks/{source}`, `GET /events/{event_id}`, `GET /healthz`.
+- API : routes `POST /webhooks/{source}` (413 si corps > MAX_BODY), `GET /events/{event_id}` (X-Read-Token requis), `GET /healthz`.
 
 ## 6. Design system & conformité
 - **Design system :** N/A (pas de front).
@@ -101,7 +117,7 @@ def create_app(secrets: dict[str, bytes], store: EventStore, now: Callable[[], i
 > Règles : `docs/gcp-deployment-standard.md` + `docs/engineering-rules.md`. Feature NON pure (service HTTP).
 - **Runtime :** **Cloud Run** (service), `europe-west1`, CPU 1 / mém 512Mi / concurrence 80 / timeout 30s, `min-instances=0`, `max-instances=4` (D-1, D-3).
 - **Identité & accès :** compte de service dédié `webhook-gateway-sa` au moindre privilège ; ingress public (un partenaire externe POST) + **Cloud Armor** recommandé ; CI via WIF (D-6, D-7). *Pour la démo : déploiement via gcloud authentifié Owner ; SA dédié = durcissement noté.*
-- **Secrets :** clé(s) HMAC par `source` via **Secret Manager** (`gateway-hmac-acme`) ; en démo, injectée par variable d'env `GATEWAY_SECRET_ACME` (D-9). Jamais en clair dans l'image ni les logs (INV-6).
+- **Secrets :** clé(s) HMAC par `source` + **jeton de lecture** (`read_token`, INV-7) via **Secret Manager** ; en démo, injectés par env `GATEWAY_SECRET_ACME` / `GATEWAY_READ_TOKEN` (D-9). Jamais en clair dans l'image ni les logs (INV-6).
 - **Réseau & données :** pas de VPC connector (pas de dépendance interne) ; magasin en mémoire (NG-1) → **éphémère par instance** (limite assumée pour la démo ; Firestore en cible).
 - **CI/CD :** `make ci` vert (lint + tests + evals + sécurité) → **SBOM** (`make sbom`) → build image → Artifact Registry → Cloud Run deploy (D-14, D-15). Image non-root, slim.
 - **Observabilité & SLO :** logs structurés sans secret ; SLO indicatif p95 < 300 ms, dispo 99 % ; `/healthz` = liveness (D-16, D-17).
@@ -119,3 +135,4 @@ def create_app(secrets: dict[str, bytes], store: EventStore, now: Callable[[], i
 | Version | Date | Auteur | Changement |
 |---|---|---|---|
 | 1.0.0 | 2026-06-16 | Owner + FDE | Création (artefact production-ready) |
+| 1.1.0 | 2026-06-16 | Owner + FDE | ADR-4 : durcissement adaptateur (F-1 read-auth INV-7, F-2 sig hex→401, F-3 body 413) suite revue sécurité CP-2 ; `create_app(read_token)` |

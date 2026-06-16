@@ -3,8 +3,8 @@ artifact: tasks
 feature: webhook-gateway
 status: approved
 generated_by: planner
-spec: ./spec.md          # version : 1.0.0
-design: ./design.md      # version : 1.0.0
+spec: ./spec.md          # version : 1.1.0
+design: ./design.md      # version : 1.1.0
 ---
 
 # Tasks — Webhook Gateway (récepteur de webhooks signés)
@@ -247,3 +247,4 @@ STATUS: done
 | 2026-06-16 11:02 | T5 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 11:03 | T4 | implementer | done, evals vertes (t1) | |
 | 2026-06-16 11:05 | T6 | implementer | done, evals vertes (t1) | |
+| 2026-06-16 11:18 | CP-2 | owner | checkpoint REJETÉ — Amendement spec 1.1.0 + design ADR-4 (suite revue securite CP-2). Relis spec.md ET design.md (1.1.0) AVANT de corriger ; le coeur model/verify/store est INCHANGE. Trois corrections de l adaptateur HTTP : (F-1 IDOR) GET /events/{id} exige un X-Read-Token valide (INV-7/BHV-6) sinon 401 sans payload ; create_app prend desormais un parametre read_token (design 5/ADR-4) compare en temps constant via hmac.compare_digest. (F-2) une signature non-ASCII ou non-hexadecimale ne doit JAMAIS produire un 500 : valide que la signature (apres retrait du prefixe sha256=) est hexadecimale ASCII AVANT d appeler verify, sinon 401 (BHV-2). (F-3) repond 413 si le corps depasse MAX_BODY=1 MiB AVANT tout calcul HMAC (BHV-8). Repartition : T3 applique les 3 gardes dans app.py + couvre-les dans test_app.py ; T4 (EVAL-1) fait passer X-Read-Token=read-test-token a EX-5 (200) et ajoute EX-6 (GET sans jeton -> 401) ; T6 (EVAL-3) ajoute (d) signature non-ASCII -> 401, (e) GET sans jeton -> 401, (f) corps > MAX_BODY -> 413. | |

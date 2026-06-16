@@ -28,7 +28,9 @@ _POOL_SIZE = 100
 @pytest.mark.eval
 def test_eval_2_idempotence() -> None:
     store = InMemoryStore()
-    app = create_app(secrets=_SECRETS, store=store, now=lambda: _NOW)
+    app = create_app(
+        secrets=_SECRETS, store=store, now=lambda: _NOW, read_token="read-test-token"
+    )
     client = TestClient(app)
 
     rng = random.Random(42)
