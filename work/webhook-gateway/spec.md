@@ -1,14 +1,16 @@
 ---
 artifact: spec
 feature: webhook-gateway
-version: 1.1.0
+version: 1.1.1
 status: validated
 owner: Owner (lab)
 ---
 
 <!-- Amendement 1.1.0 (2026-06-16) — suite à la revue sécurité CP-2 (security-reviewer, VETO) :
      fermeture de F-1 (IDOR lecture non authentifiée → INV-7 + BHV-6), F-2 (signature non-ASCII
-     → 500 au lieu de 401 → BHV-2 précisé), F-3 (corps non borné, DoS pré-auth → BHV-8). -->
+     → 500 au lieu de 401 → BHV-2 précisé), F-3 (corps non borné, DoS pré-auth → BHV-8).
+     Amendement 1.1.1 (2026-06-16) — endpoint de santé /healthz → /health : /healthz est réservé/
+     intercepté par le Google Front End sur Cloud Run (404 avant le conteneur, constaté en live). -->
 
 
 # Spec — Webhook Gateway (récepteur de webhooks signés)
@@ -37,7 +39,7 @@ deux fois le même événement même si le partenaire réémet. Le service est *
 - **BHV-2 — Signature invalide** : *Given* une signature fausse/absente/**malformée (y compris non-hexadécimale ou contenant des octets non-ASCII)** ; *When* POST ; *Then* **401** (jamais 500), rien enregistré. *(1.1.0 : précision F-2 — une signature non-ASCII ne doit pas provoquer d'erreur serveur.)*
 - **BHV-3 — Horodatage périmé** : *Given* une signature valide mais `timestamp` hors fenêtre ; *When* POST ; *Then* **401**, rien enregistré.
 - **BHV-4 — Doublon** : *Given* un `event_id` déjà reçu ; *When* POST à nouveau (signé, frais) ; *Then* **409 Conflict**, magasin inchangé, corps `{"status":"duplicate","event_id":...}`.
-- **BHV-5 — Santé** : *When* `GET /healthz` ; *Then* **200** `{"status":"ok"}`.
+- **BHV-5 — Santé** : *When* `GET /health` ; *Then* **200** `{"status":"ok"}`.
 - **BHV-6 — Relecture authentifiée** *(amendé 1.1.0)* : *Given* un `X-Read-Token` **valide** ; *When* `GET /events/{event_id}` ; *Then* **200** + payload si connu, **404** sinon. *Given* un token absent/invalide ; *Then* **401**, aucun payload (INV-7).
 - **BHV-7 — Corps malformé** : *Given* un JSON invalide ou des champs requis manquants ; *When* POST ; *Then* **400**, rien enregistré.
 - **BHV-8 — Corps trop volumineux** *(amendement 1.1.0)* : *Given* un corps dépassant `MAX_BODY = 1 MiB` ; *When* POST ; *Then* **413**, corps non lu intégralement / non traité, rien enregistré (mitige le DoS pré-auth F-3).
@@ -52,7 +54,7 @@ deux fois le même événement même si le partenaire réémet. Le service est *
 - **Signature** : `HMAC_SHA256(key_for(source), f"{timestamp}.{raw_body}")` en hexadécimal.
 - **Lecture** *(1.1.0)* : `GET /events/{event_id}` — en-tête `X-Read-Token: <token>` (jeton de lecture configuré, injecté). Sans jeton valide → 401 (INV-7).
 - **Limite** *(1.1.0)* : `MAX_BODY = 1 MiB` ; au-delà → 413 (BHV-8).
-- **Réponses** : 202 / 400 / 401 / 409 / 413 (POST) ; 200 / 401 / 404 (GET) ; 200 (healthz).
+- **Réponses** : 202 / 400 / 401 / 409 / 413 (POST) ; 200 / 401 / 404 (GET) ; 200 (health).
 
 ## 6. Exemples (golds — alimentent EVAL-1)
 Clé de test `source=acme` → `secret = b"acme-test-key"`. `now = 1_700_000_000`. Fenêtre 300 s. Jeton de lecture `read_token = "read-test-token"` *(1.1.0)*.

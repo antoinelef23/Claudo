@@ -23,8 +23,8 @@ def create_app(
 ) -> FastAPI:
     app = FastAPI()
 
-    @app.get("/healthz")
-    async def healthz() -> dict:
+    @app.get("/health")
+    async def health() -> dict:
         return {"status": "ok"}
 
     @app.post("/webhooks/{source}")

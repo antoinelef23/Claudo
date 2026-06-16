@@ -3,8 +3,8 @@ artifact: tasks
 feature: webhook-gateway
 status: approved
 generated_by: planner
-spec: ./spec.md          # version : 1.1.0
-design: ./design.md      # version : 1.1.0
+spec: ./spec.md          # version : 1.1.1
+design: ./design.md      # version : 1.1.1
 ---
 
 # Tasks — Webhook Gateway (récepteur de webhooks signés)
@@ -120,7 +120,7 @@ flowchart TD
   >   `{"status":"accepted","event_id":...}` (BHV-1) ; False → **409** `{"status":"duplicate","event_id":...}`,
   >   magasin inchangé (BHV-4).
   > • `GET /events/{event_id}` : 200 + payload si connu, 404 sinon (BHV-6).
-  > • `GET /healthz` : 200 `{"status":"ok"}` (BHV-5).
+  > • `GET /health` : 200 `{"status":"ok"}` (BHV-5).
   > INV-6 : ne logge jamais secret/signature/payload ; un échec de signature ne révèle pas pourquoi
   > (même réponse 401 que la source inconnue). L'ORDRE de vérification doit garantir qu'aucune écriture
   > n'a lieu avant la validation signature+fraîcheur+parsing. Horloge `now` et `store` INJECTÉS

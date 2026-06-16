@@ -1,11 +1,11 @@
 ---
 artifact: design
 feature: webhook-gateway
-version: 1.1.0
+version: 1.1.1
 status: validated
 owner: Owner (lab)
 validated_by: FDE (lab) — 2026-06-16
-spec: ./spec.md   # couvre spec 1.1.0
+spec: ./spec.md   # couvre spec 1.1.1
 ---
 
 # Design — Webhook Gateway
@@ -107,7 +107,7 @@ def create_app(
     read_token: str,                 # 1.1.0 — jeton de lecture (INV-7) ; comparé en temps constant
 ) -> FastAPI: ...
 ```
-- API : routes `POST /webhooks/{source}` (413 si corps > MAX_BODY), `GET /events/{event_id}` (X-Read-Token requis), `GET /healthz`.
+- API : routes `POST /webhooks/{source}` (413 si corps > MAX_BODY), `GET /events/{event_id}` (X-Read-Token requis), `GET /health`.
 
 ## 6. Design system & conformité
 - **Design system :** N/A (pas de front).
@@ -120,7 +120,7 @@ def create_app(
 - **Secrets :** clé(s) HMAC par `source` + **jeton de lecture** (`read_token`, INV-7) via **Secret Manager** ; en démo, injectés par env `GATEWAY_SECRET_ACME` / `GATEWAY_READ_TOKEN` (D-9). Jamais en clair dans l'image ni les logs (INV-6).
 - **Réseau & données :** pas de VPC connector (pas de dépendance interne) ; magasin en mémoire (NG-1) → **éphémère par instance** (limite assumée pour la démo ; Firestore en cible).
 - **CI/CD :** `make ci` vert (lint + tests + evals + sécurité) → **SBOM** (`make sbom`) → build image → Artifact Registry → Cloud Run deploy (D-14, D-15). Image non-root, slim.
-- **Observabilité & SLO :** logs structurés sans secret ; SLO indicatif p95 < 300 ms, dispo 99 % ; `/healthz` = liveness (D-16, D-17).
+- **Observabilité & SLO :** logs structurés sans secret ; SLO indicatif p95 < 300 ms, dispo 99 % ; `/health` = liveness (D-16, D-17).
 - **Rollout & rollback :** Cloud Run garde les révisions → rollback = re-router le trafic ; **mise en prod = décision humaine (checkpoint final)** (D-18, D-20).
 - **Checklist du standard GCP :** partiellement cochée (démo) — SA dédié, WIF, Cloud Armor, Firestore = durcissements tracés.
 
@@ -136,3 +136,4 @@ def create_app(
 |---|---|---|---|
 | 1.0.0 | 2026-06-16 | Owner + FDE | Création (artefact production-ready) |
 | 1.1.0 | 2026-06-16 | Owner + FDE | ADR-4 : durcissement adaptateur (F-1 read-auth INV-7, F-2 sig hex→401, F-3 body 413) suite revue sécurité CP-2 ; `create_app(read_token)` |
+| 1.1.1 | 2026-06-16 | FDE | `/healthz` → `/health` : `/healthz` réservé par le Google Front End (404 avant conteneur), constaté en déploiement Cloud Run live |

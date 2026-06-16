@@ -142,7 +142,7 @@ def test_bhv4_duplicate_409():
 
 def test_bhv5_healthz():
     client, _ = _make_client()
-    resp = client.get("/healthz")
+    resp = client.get("/health")
     assert resp.status_code == 200
     assert resp.json() == {"status": "ok"}
 
