@@ -44,9 +44,9 @@ flowchart TD
 - **parallel_group :** A
 - **implements :** [INV-1, INV-2, INV-3, INV-5, INV-6]
 - **anchored_on :** design §5 (signatures pinnées), ADR-1 (cœur pur), ADR-2 (canonicalisation `{ts}.{raw}`)
-- **files_touched :** `src/gateway/__init__.py`, `src/gateway/model.py`, `src/gateway/verify.py`, `tests/gateway/__init__.py`, `tests/gateway/test_model.py`, `tests/gateway/test_verify.py`
+- **files_touched :** `src/gateway/__init__.py`, `src/gateway/model.py`, `src/gateway/verify.py`, `tests/gateway_svc/__init__.py`, `tests/gateway_svc/test_model.py`, `tests/gateway_svc/test_verify.py`
 - **prompt :**
-  > Crée le package `src/gateway/` (avec `__init__.py`) et le package de tests `tests/gateway/`
+  > Crée le package `src/gateway/` (avec `__init__.py`) et le package de tests `tests/gateway_svc/`
   > (avec `__init__.py` — sinon collision pytest avec les autres features). Implémente STRICTEMENT
   > les signatures pinnées de design.md §5 :
   > `src/gateway/model.py` → `@dataclass(frozen=True) WebhookEvent(event_id: str, type: str, data: dict)`
@@ -59,12 +59,12 @@ flowchart TD
   > `hmac.compare_digest`, jamais `==`. INV-1/INV-6 au niveau cœur : un échec ne renvoie qu'un booléen,
   > sans message qui révèle la cause (pas d'oracle) ; ne logge ni secret, ni signature, ni payload.
   > Accepte le préfixe `sha256=` sur l'en-tête de signature et le retire avant comparaison.
-  > Écris les tests AVANT le code : `tests/gateway/test_model.py` (gel du dataclass, valeur de MAX_SKEW)
-  > et `tests/gateway/test_verify.py` (signature valide → True ; octet muté → False ; bornes de skew
+  > Écris les tests AVANT le code : `tests/gateway_svc/test_model.py` (gel du dataclass, valeur de MAX_SKEW)
+  > et `tests/gateway_svc/test_verify.py` (signature valide → True ; octet muté → False ; bornes de skew
   > `±MAX_SKEW` acceptées, `±(MAX_SKEW+1)` rejetées ; usage de `compare_digest`). Importe depuis
   > `gateway.model` / `gateway.verify` (pythonpath=src). Ne crée aucun autre module.
-- **done_when :** `pytest tests/gateway/test_model.py tests/gateway/test_verify.py` vert
-- **verify :** `uv run pytest -q tests/gateway/test_model.py tests/gateway/test_verify.py`
+- **done_when :** `pytest tests/gateway_svc/test_model.py tests/gateway_svc/test_verify.py` vert
+- **verify :** `uv run pytest -q tests/gateway_svc/test_model.py tests/gateway_svc/test_verify.py`
 - **status :** ☐ pending → ☐ running → ☐ done
 
 ### T2 — Port de stockage + adaptateur mémoire idempotent
@@ -73,7 +73,7 @@ flowchart TD
 - **parallel_group :** B
 - **implements :** [INV-4]
 - **anchored_on :** design §5, ADR-3 (idempotence par clé naturelle `event_id`)
-- **files_touched :** `src/gateway/store.py`, `tests/gateway/test_store.py`
+- **files_touched :** `src/gateway/store.py`, `tests/gateway_svc/test_store.py`
 - **prompt :**
   > Implémente `src/gateway/store.py` conforme à design.md §5 et ADR-3 : `EventStore` (Protocol) avec
   > `add_if_absent(self, event_id: str, payload: dict) -> bool` (False si `event_id` déjà présent) et
@@ -81,11 +81,11 @@ flowchart TD
   > INV-4 : pour un `event_id` donné, l'événement est enregistré AU PLUS UNE FOIS — un 2e
   > `add_if_absent` renvoie False et ne modifie pas le magasin (aucun effet de bord). Aucun réseau,
   > aucune horloge (NG-1 : magasin en mémoire, swap Firestore futur sans changer le cœur). Écris les
-  > tests AVANT le code dans `tests/gateway/test_store.py` (ajout neuf → True + `get` renvoie le
+  > tests AVANT le code dans `tests/gateway_svc/test_store.py` (ajout neuf → True + `get` renvoie le
   > payload ; ré-ajout du même id → False + magasin inchangé ; `get` d'un id inconnu → None). Importe
   > depuis `gateway.store`. Ne touche ni à `model.py`, ni à `verify.py`, ni à `app.py`.
-- **done_when :** `pytest tests/gateway/test_store.py` vert
-- **verify :** `uv run pytest -q tests/gateway/test_store.py`
+- **done_when :** `pytest tests/gateway_svc/test_store.py` vert
+- **verify :** `uv run pytest -q tests/gateway_svc/test_store.py`
 - **status :** ☐ pending → ☐ running → ☐ done
 
 ### CP-1 — CHECKPOINT : cœur (model + verify + store) validé
@@ -104,9 +104,10 @@ flowchart TD
 - **agent :** implementer
 - **depends_on :** [CP-1]
 - **parallel_group :** C
-- **implements :** [BHV-1, BHV-2, BHV-3, BHV-4, BHV-5, BHV-6, BHV-7, INV-1, INV-6]
-- **anchored_on :** design §5 (`create_app`), ADR-1 (horloge + store injectés via `Depends`), ADR-2 (corps brut)
-- **files_touched :** `src/gateway/app.py`, `tests/gateway/test_app.py`
+- **implements :** [BHV-1, BHV-2, BHV-3, BHV-4, BHV-5, BHV-6, BHV-7, BHV-8, INV-1, INV-6, INV-7]
+- **anchored_on :** design §5 (`create_app`), ADR-1 (horloge + store injectés via `Depends`), ADR-2 (corps brut), ADR-4
+- **⟳ amendé 1.1.0/1.1.1 (revue sécu CP-2)** : `create_app(read_token)` (4 args) ; GET /events exige `X-Read-Token` (INV-7/BHV-6) ; signature non-hex/non-ASCII → 401 (BHV-2/F-2) ; corps > MAX_BODY → 413 (BHV-8/F-3) ; route santé `/health` (pas `/healthz`, réservé GFE).
+- **files_touched :** `src/gateway/app.py`, `tests/gateway_svc/test_app.py`
 - **prompt :**
   > Implémente `src/gateway/app.py` conforme à design.md §5 et ADR-1/ADR-2 :
   > `create_app(secrets: dict[str, bytes], store: EventStore, now: Callable[[], int]) -> FastAPI`.
@@ -124,12 +125,12 @@ flowchart TD
   > INV-6 : ne logge jamais secret/signature/payload ; un échec de signature ne révèle pas pourquoi
   > (même réponse 401 que la source inconnue). L'ORDRE de vérification doit garantir qu'aucune écriture
   > n'a lieu avant la validation signature+fraîcheur+parsing. Horloge `now` et `store` INJECTÉS
-  > (testables/rejouables, INV-5). Écris les tests AVANT le code dans `tests/gateway/test_app.py` via le
+  > (testables/rejouables, INV-5). Écris les tests AVANT le code dans `tests/gateway_svc/test_app.py` via le
   > client de test FastAPI (`fastapi.testclient.TestClient`, en process, pas de réseau) avec `now` figé
   > et un `InMemoryStore` neuf : couvre BHV-1..7 (codes HTTP + corps + état du magasin). N'écris pas
   > d'eval ici (test_eval_* relèvent de T4/T5/T6). Ne touche pas à `model.py`/`verify.py`/`store.py`.
-- **done_when :** `pytest tests/gateway/test_app.py` vert (BHV-1..7 couverts)
-- **verify :** `uv run pytest -q tests/gateway/test_app.py`
+- **done_when :** `pytest tests/gateway_svc/test_app.py` vert (BHV-1..7 couverts)
+- **verify :** `uv run pytest -q tests/gateway_svc/test_app.py`
 - **status :** ☐ pending → ☐ running → ☐ done
 
 ### T4 — EVAL-1 : exemples EX-1 à EX-5 vérifiés exactement
@@ -137,10 +138,11 @@ flowchart TD
 - **depends_on :** [T3]
 - **parallel_group :** D *(parallélisable avec T5, T6 : chemins de test disjoints)*
 - **implements :** [EVAL-1, BHV-1, BHV-2, BHV-3, BHV-4, BHV-6]
+- **⟳ amendé 1.1.0** : EX-5 envoie `X-Read-Token` valide (200) ; ajout EX-6 (GET sans jeton → 401).
 - **anchored_on :** spec §6 (Exemples/golds), spec §7 (EVAL-1)
-- **files_touched :** `tests/gateway/test_eval_1_examples.py`
+- **files_touched :** `tests/gateway_svc/test_eval_1_examples.py`
 - **prompt :**
-  > Écris EVAL-1 dans `tests/gateway/test_eval_1_examples.py` : tests `@pytest.mark.eval`, fonctions
+  > Écris EVAL-1 dans `tests/gateway_svc/test_eval_1_examples.py` : tests `@pytest.mark.eval`, fonctions
   > dont le nom contient l'ID en minuscules (`test_eval_1_...`). Rejoue EXACTEMENT les 5 exemples de
   > spec.md §6 via le client de test FastAPI (en process, pas de réseau), horloge injectée à
   > `now = 1_700_000_000`, `source=acme`, `secret = b"acme-test-key"`, fenêtre 300 s. Vérifie code HTTP
@@ -154,7 +156,7 @@ flowchart TD
   > falsifié). Importe depuis `gateway.*`. N'écris AUCUN code source — uniquement le module d'eval. Ne
   > crée pas de module de test homonyme d'un autre.
 - **done_when :** EVAL-1 verte (EX-1..EX-5, 100 %)
-- **verify :** `uv run pytest -q -m eval tests/gateway/test_eval_1_examples.py`
+- **verify :** `uv run pytest -q -m eval tests/gateway_svc/test_eval_1_examples.py`
 - **status :** ☐ pending → ☐ running → ☐ done
 
 ### T5 — EVAL-2 : property idempotence (INV-4)
@@ -163,9 +165,9 @@ flowchart TD
 - **parallel_group :** D *(parallélisable avec T4, T6 : chemins de test disjoints)*
 - **implements :** [EVAL-2, INV-4]
 - **anchored_on :** spec §7 (EVAL-2), ADR-3 (idempotence par `event_id`)
-- **files_touched :** `tests/gateway/test_eval_2_idempotence.py`
+- **files_touched :** `tests/gateway_svc/test_eval_2_idempotence.py`
 - **prompt :**
-  > Écris EVAL-2 dans `tests/gateway/test_eval_2_idempotence.py` : test `@pytest.mark.eval`, fonction
+  > Écris EVAL-2 dans `tests/gateway_svc/test_eval_2_idempotence.py` : test `@pytest.mark.eval`, fonction
   > `test_eval_2_idempotence`. Via `random.Random(42)` (SEED FIXE = 42), génère `N = 500` séquences de
   > livraisons signées+fraîches mêlant des doublons d'un même `event_id` et des `event_id` neufs, jouées
   > sur le client de test FastAPI avec `now` figé et un `InMemoryStore` neuf. Vérifie INV-4 : à la fin le
@@ -175,18 +177,19 @@ flowchart TD
   > `gateway.*` et calcule les signatures via `gateway.verify.sign`. N'écris AUCUN code source. Ne crée
   > pas de module de test homonyme d'un autre.
 - **done_when :** EVAL-2 verte (500 séquences, INV-4 tenu)
-- **verify :** `uv run pytest -q -m eval tests/gateway/test_eval_2_idempotence.py`
+- **verify :** `uv run pytest -q -m eval tests/gateway_svc/test_eval_2_idempotence.py`
 - **status :** ☐ pending → ☐ running → ☐ done
 
 ### T6 — EVAL-3 : property sécurité (INV-1, INV-2, INV-3)
 - **agent :** implementer
 - **depends_on :** [T3]
 - **parallel_group :** D *(parallélisable avec T4, T5 : chemins de test disjoints)*
-- **implements :** [EVAL-3, INV-1, INV-2, INV-3]
+- **implements :** [EVAL-3, INV-1, INV-2, INV-3, INV-7]
+- **⟳ amendé 1.1.0** : ajout volets (d) signature non-ASCII → 401, (e) GET sans `X-Read-Token` → 401 (INV-7), (f) corps > MAX_BODY → 413.
 - **anchored_on :** spec §7 (EVAL-3), ADR-2 (signature canonicalisée), INV-2 (`compare_digest`)
-- **files_touched :** `tests/gateway/test_eval_3_security.py`
+- **files_touched :** `tests/gateway_svc/test_eval_3_security.py`
 - **prompt :**
-  > Écris EVAL-3 dans `tests/gateway/test_eval_3_security.py` : tests `@pytest.mark.eval`, fonctions
+  > Écris EVAL-3 dans `tests/gateway_svc/test_eval_3_security.py` : tests `@pytest.mark.eval`, fonctions
   > `test_eval_3_...`. Couvre les trois volets de spec.md §7 :
   > (a) SIGNATURE — pour un échantillon de requêtes valides, toute mutation d'UN octet de la signature
   >   (ou du corps, ou de l'horodatage signé) → **401** et magasin inchangé (INV-1) ;
@@ -199,7 +202,7 @@ flowchart TD
   > signatures correctes via `gateway.verify.sign`. Aucun réseau, aléa borné au seed si utilisé. Importe
   > depuis `gateway.*`. N'écris AUCUN code source. Ne crée pas de module de test homonyme d'un autre.
 - **done_when :** EVAL-3 verte (volets a/b/c)
-- **verify :** `uv run pytest -q -m eval tests/gateway/test_eval_3_security.py`
+- **verify :** `uv run pytest -q -m eval tests/gateway_svc/test_eval_3_security.py`
 - **status :** ☐ pending → ☐ running → ☐ done
 
 ### CP-2 — CHECKPOINT : merge final
@@ -236,15 +239,12 @@ flowchart TD
 
 | Date | Tâche | Agent | Résultat | Commit |
 |---|---|---|---|---|
-| | | | | |
-
-STATUS: done
-| 2026-06-16 10:48 | T1 | implementer | done, evals vertes (t1) | |
-| 2026-06-16 | T2 | implementer | done, 7 tests verts (`test_store.py`) | |
-| 2026-06-16 10:50 | T2 | implementer | done, evals vertes (t1) | |
-| 2026-06-16 10:58 | CP-1 | owner | checkpoint validé | |
-| 2026-06-16 11:01 | T3 | implementer | done, evals vertes (t1) | |
-| 2026-06-16 11:02 | T5 | implementer | done, evals vertes (t1) | |
-| 2026-06-16 11:03 | T4 | implementer | done, evals vertes (t1) | |
-| 2026-06-16 11:05 | T6 | implementer | done, evals vertes (t1) | |
-| 2026-06-16 11:18 | CP-2 | owner | checkpoint REJETÉ — Amendement spec 1.1.0 + design ADR-4 (suite revue securite CP-2). Relis spec.md ET design.md (1.1.0) AVANT de corriger ; le coeur model/verify/store est INCHANGE. Trois corrections de l adaptateur HTTP : (F-1 IDOR) GET /events/{id} exige un X-Read-Token valide (INV-7/BHV-6) sinon 401 sans payload ; create_app prend desormais un parametre read_token (design 5/ADR-4) compare en temps constant via hmac.compare_digest. (F-2) une signature non-ASCII ou non-hexadecimale ne doit JAMAIS produire un 500 : valide que la signature (apres retrait du prefixe sha256=) est hexadecimale ASCII AVANT d appeler verify, sinon 401 (BHV-2). (F-3) repond 413 si le corps depasse MAX_BODY=1 MiB AVANT tout calcul HMAC (BHV-8). Repartition : T3 applique les 3 gardes dans app.py + couvre-les dans test_app.py ; T4 (EVAL-1) fait passer X-Read-Token=read-test-token a EX-5 (200) et ajoute EX-6 (GET sans jeton -> 401) ; T6 (EVAL-3) ajoute (d) signature non-ASCII -> 401, (e) GET sans jeton -> 401, (f) corps > MAX_BODY -> 413. | |
+| 2026-06-16 | T1 | implementer | done — model+verify, 13 tests verts | af003fa |
+| 2026-06-16 | T2 | implementer | done — store idempotent, 7 tests verts | e2424fa |
+| 2026-06-16 | CP-1 | owner | auto→WARN (shim test hand-written) → validé Owner | — |
+| 2026-06-16 | T3 | implementer | done — app FastAPI BHV-1..7 | 9d8b54a |
+| 2026-06-16 | T4/T5/T6 | implementer | done — EVAL-1/2/3 (vague ∥ 3-wide) | c11481d/f92341a/ec6b9e6 |
+| 2026-06-16 | CP-2 | owner | **REJETÉ** — revue sécurité (VETO) : F-1 IDOR, F-2 500≠401, F-3 DoS → amendement spec 1.1.0 (voir `.runs/CP-2-review.md`) | — |
+| 2026-06-16 | T3/T4/T6 | implementer | re-livrés sur spec 1.1.0 (read-auth, sig-hex, body-limit) — atomique (contrat transverse) | 70454f8 |
+| 2026-06-16 | 1.1.1 | FDE | /healthz→/health (réservé GFE, constaté en live Cloud Run) | (commit /health) |
+| 2026-06-16 | CP-2 | owner | validé — 59 tests + 20 evals verts, déployé Cloud Run, vérifié live | — |

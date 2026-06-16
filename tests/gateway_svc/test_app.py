@@ -137,10 +137,10 @@ def test_bhv4_duplicate_409():
     assert store.get("evt-dup") == snapshot
 
 
-# --- BHV-5 : healthz → 200 {"status":"ok"} ---
+# --- BHV-5 : health → 200 {"status":"ok"} ---
 
 
-def test_bhv5_healthz():
+def test_bhv5_health():
     client, _ = _make_client()
     resp = client.get("/health")
     assert resp.status_code == 200

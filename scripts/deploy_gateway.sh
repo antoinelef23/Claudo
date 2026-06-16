@@ -9,8 +9,17 @@ REPO="${AR_REPO:-lab-services}"
 SERVICE="webhook-gateway"
 IMAGE="${REGION}-docker.pkg.dev/${PROJECT}/${REPO}/${SERVICE}"
 TAG="$(git rev-parse --short HEAD 2>/dev/null || echo latest)"
-SECRET_ACME="${GATEWAY_SECRET_ACME:-acme-test-key}"
-READ_TOKEN="${GATEWAY_READ_TOKEN:-read-test-token}"
+# Fail-closed (B-2) : pas d'identifiant par défaut en silence. DEMO=1 = opt-in EXPLICITE aux
+# identifiants de démo connus (données synthétiques uniquement). En prod : Secret Manager
+# (--set-secrets), jamais --set-env-vars, et roter ces valeurs.
+if [ "${DEMO:-}" = "1" ]; then
+  SECRET_ACME="${GATEWAY_SECRET_ACME:-acme-test-key}"
+  READ_TOKEN="${GATEWAY_READ_TOKEN:-read-test-token}"
+  echo "⚠️  DEMO=1 — identifiants de démo CONNUS + ingress public : n'envoyez QUE des données synthétiques."
+else
+  SECRET_ACME="${GATEWAY_SECRET_ACME:?requis (ou DEMO=1) — en prod via Secret Manager}"
+  READ_TOKEN="${GATEWAY_READ_TOKEN:?requis (ou DEMO=1) — en prod via Secret Manager}"
+fi
 
 cd "$(dirname "$0")/.."
 

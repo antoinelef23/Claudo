@@ -69,7 +69,7 @@ Clé de test `source=acme` → `secret = b"acme-test-key"`. `now = 1_700_000_000
 | EX-6 | relecture **sans** jeton valide *(1.1.0)* | — | `GET /events/evt-1` | — | 401, aucun payload |
 
 ## 7. Evals (merge gate — `make evals`, `pytest -m eval`)
-- **EVAL-1** — *examples* : rejoue EX-1..EX-5 via le client de test FastAPI (en process, pas de réseau), vérifie code HTTP **et** état du magasin. Horloge injectée à `now`.
+- **EVAL-1** — *examples* : rejoue EX-1..EX-6 via le client de test FastAPI (en process, pas de réseau), vérifie code HTTP **et** état du magasin. Horloge injectée à `now`, jeton de lecture injecté.
 - **EVAL-2** — *property idempotence* : pour `N=500` séquences aléatoires (seed=42) de livraisons d'un même `event_id` mêlées à des `event_id` neufs, le magasin contient exactement l'ensemble des ids distincts et chaque doublon renvoie 409. Vérifie INV-4.
 - **EVAL-3** — *property sécurité* : (a) toute signature falsifiée (mutation d'un octet) → 401 (INV-1) ; (b) la frontière de la fenêtre est exacte : `±MAX_SKEW` accepté, `±(MAX_SKEW+1)` rejeté (INV-3) ; (c) la comparaison de signature passe par `hmac.compare_digest` (INV-2 — vérifié par inspection/auto-test du helper) ; **(d)** *(1.1.0)* une signature **non-ASCII / non-hexadécimale** → **401** (jamais 500) (BHV-2/F-2) ; **(e)** *(1.1.0)* `GET /events/{id}` **sans** `X-Read-Token` valide → **401**, aucun payload (INV-7/F-1) ; **(f)** *(1.1.0)* un corps `> MAX_BODY` → **413** (BHV-8/F-3).
 

@@ -126,6 +126,10 @@ def verify_allowed(cmd: str) -> bool:
 
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
+# Union des files_touched de tous les nœuds du plan — peuplé dans main() après parse. Sert au
+# garde anti-tamper (#2) à ne pas confondre l'écriture légitime d'une eval par une tâche sœur
+# (en vague ∥) avec un sabotage : seules les evals hors de TOUT scope du plan sont refusées.
+PLAN_SCOPE_FILES: list[str] = []
 COST_LOCK = threading.Lock()
 COST_TOTAL = {"usd": 0.0}
 
@@ -812,11 +816,17 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         # #2 anti-reward-hacking : l'implementer ne doit pas modifier/affaiblir une eval HORS de
         # son scope files_touched pour faire passer le gate. Une eval hors-scope touchée = sabotage
         # du juge → refus net (immutabilité du test pour l'agent qui code, cf. R-31).
+        # Concurrence : `_changed_paths()` est un diff git GLOBAL — en vague ∥, il voit aussi les
+        # écritures en cours d'une tâche sœur. On ne flag donc que les evals n'appartenant à AUCUN
+        # scope du plan (vraies orphelines) : une eval possédée par une autre tâche est un travail
+        # légitime en cours, pas un sabotage. (Isolation stricte par worktree-par-tâche = backlog.)
         tampered = sorted(
             {
                 p
                 for p in _changed_paths()
-                if _is_eval_file(p) and not _in_files_scope(p, node.files)
+                if _is_eval_file(p)
+                and not _in_files_scope(p, node.files)
+                and not _in_files_scope(p, PLAN_SCOPE_FILES)
             }
         )
         if tampered:
@@ -1171,6 +1181,9 @@ def main() -> int:
 
     feature = (ROOT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
+    PLAN_SCOPE_FILES[:] = [
+        f for n in nodes for f in n.files
+    ]  # garde anti-tamper ∥ (#2)
 
     errors, warnings = validate(feature, fm, nodes)
     if args.validate or errors or warnings:

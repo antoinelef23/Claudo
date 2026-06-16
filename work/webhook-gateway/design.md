@@ -122,14 +122,21 @@ def create_app(
 - **CI/CD :** `make ci` vert (lint + tests + evals + sécurité) → **SBOM** (`make sbom`) → build image → Artifact Registry → Cloud Run deploy (D-14, D-15). Image non-root, slim.
 - **Observabilité & SLO :** logs structurés sans secret ; SLO indicatif p95 < 300 ms, dispo 99 % ; `/health` = liveness (D-16, D-17).
 - **Rollout & rollback :** Cloud Run garde les révisions → rollback = re-router le trafic ; **mise en prod = décision humaine (checkpoint final)** (D-18, D-20).
-- **Checklist du standard GCP :** partiellement cochée (démo) — SA dédié, WIF, Cloud Armor, Firestore = durcissements tracés.
+- **Entrée du service :** `gateway/asgi.py` — **fail-closed** : refuse de démarrer sans `GATEWAY_SECRET_<SOURCE>` ET `GATEWAY_READ_TOKEN` (jamais de défaut ouvert).
+- **Checklist du standard GCP :** partiellement cochée (démo).
+
+> **⚠️ Bloqueurs AVANT toute prod réelle (cette démo tourne sur données synthétiques, ingress public, identifiants connus — ne rien y envoyer de réel)** :
+> - **B-1 — Anti-rejeu/idempotence en mémoire par instance** : avec `max-instances>1` ou un cold-start, un rejeu (même `event_id`/`ts`/`sig` dans la fenêtre 300 s) peut atterrir sur une autre instance et être ré-accepté (202). Cible : magasin partagé TTL (Firestore/Redis) ou `min=max=1` (béquille). Ferme réellement INV-4/anti-rejeu inter-instances.
+> - **B-2 — Secrets** : passer de `--set-env-vars` à **Secret Manager** (`--set-secrets`), supprimer tout défaut d'identifiant, **roter** les valeurs de démo.
+> - **B-3 — Ingress** : `--allow-unauthenticated` (requis pour un partenaire externe) ⇒ **Cloud Armor** (rate-limit/WAF) obligatoire ; + SA dédié moindre privilège (D-7), image signée + Binary Auth (D-2/D-14), WIF en CI (D-6).
 
 ## 8. Risks
 | Risque | P | I | Mitigation |
 |---|---|---|---|
+| Rejeu inter-instances (magasin mémoire) | **H en prod** | M | **B-1** : magasin partagé TTL ; démo = min=max=1 |
+| Identifiants de démo connus + ingress public | **H en prod** | H | **B-2/B-3** : Secret Manager + rotation + Cloud Armor |
 | Magasin mémoire perdu au scale/redéploiement | M | M | NG-1 assumé ; Firestore en cible |
 | Clé HMAC fuitée | L | H | Secret Manager, rotation, jamais loggée (INV-6) |
-| Rejeu dans la fenêtre 300 s | L | M | idempotence (INV-4) couvre le rejeu du même event_id |
 
 ## 9. Changelog
 | Version | Date | Auteur | Changement |
