@@ -253,14 +253,17 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
     shutil.copy(REPO / "Makefile", wd / "Makefile")
     (wd / "work" / "feat").mkdir(parents=True)
     (wd / "work" / "feat" / "spec.md").write_text(SPEC_LIST)
-    _git(wd, "init", "-q")
+    # -b base : branche initiale déterministe (sinon « main » en local mais « master »
+    # sur le git d'Ubuntu CI → la base serait introuvable et le skip fail-safe ferait
+    # passer le test à tort).
+    _git(wd, "init", "-q", "-b", "base")
     _git(wd, "add", "-A")
     _git(wd, "commit", "-qm", "base")
     _git(wd, "checkout", "-q", "-b", "feature")
     (wd / "work" / "feat" / "spec.md").write_text(SPEC_LIST.replace("× 45.0", "× 99.0"))
     _git(wd, "commit", "-qam", "sneaky")
 
-    env = {**os.environ, "BASE": "main"}
+    env = {**os.environ, "BASE": "base"}
     r = subprocess.run(
         ["bash", "scripts/ci_checks.sh"],
         cwd=wd,
