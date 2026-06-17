@@ -39,12 +39,14 @@ Prérequis : claude CLI installé et authentifié ; tasks.md avec status: approv
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
 import shlex
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -129,6 +131,66 @@ COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
 COST_LOCK = threading.Lock()
 COST_TOTAL = {"usd": 0.0}
+# fd du flock inter-process gardé ouvert toute la durée du run (libéré à la sortie
+# du process par l'OS). Empêche deux orchestrateurs de courser sur le même feature.
+_ORCH_LOCK_FD: int | None = None
+
+
+def acquire_orchestrator_lock(feature: Path) -> None:
+    """flock OS exclusif sur .runs/orchestrator.lock — fail-fast si déjà tenu (finding H6).
+
+    Deux process orchestrate.py sur le même feature corrompraient state.json, l'index
+    git, le journal et le budget (COST_TOTAL est par-process). Les threading.Lock ne
+    protègent QUE l'intra-process. Le fd reste ouvert : l'OS libère à la fin du process.
+    """
+    global _ORCH_LOCK_FD
+    lock_path = feature / ".runs" / "orchestrator.lock"
+    lock_path.parent.mkdir(exist_ok=True, parents=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # exclusif, non bloquant
+    except OSError as e:
+        os.close(fd)
+        raise OSError(
+            f"verrou orchestrateur déjà tenu sur {lock_path} — un autre run tourne "
+            "sur ce feature. Attends sa fin (ou supprime le .lock s'il est éventé)."
+        ) from e
+    _ORCH_LOCK_FD = fd
+
+
+def atomic_write_json(path: Path, obj: dict) -> None:
+    """Écrit un JSON de façon atomique (tempfile + os.replace) — pas de troncature
+    sur SIGKILL en plein write (finding L9)."""
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", dir=str(path.parent), delete=False, suffix=".tmp", encoding="utf-8"
+    ) as f:
+        json.dump(obj, f, indent=2, ensure_ascii=False)
+        tmp = f.name
+    try:
+        os.replace(tmp, str(path))
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def eval_covers(spec_id: str, collected: str) -> bool:
+    """Vrai si une eval collectée porte spec_id, par matching de NODE ID pytest
+    (finding M7). On regarde le nom de test APRÈS « :: » (pas le chemin de fichier),
+    et on interdit qu'un préfixe numérique collisionne : eval_1 ≠ eval_10,
+    et tests/eval_2_helpers.py ne « couvre » pas EVAL-2."""
+    slug = spec_id.lower().replace("-", "_")  # EVAL-1 -> eval_1
+    pat = re.compile(rf"(?<![a-z0-9]){re.escape(slug)}(?![0-9])")
+    for line in collected.splitlines():
+        if "::" not in line:
+            continue
+        node_id = line.rsplit("::", 1)[1]  # nom du test, pas le chemin
+        if pat.search(node_id.lower()):
+            return True
+    return False
 
 
 @dataclass
@@ -381,6 +443,21 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
                 warnings.append(
                     f"{ev} déclarée dans spec.md §7 mais portée par aucune tâche (implements)"
                 )
+        # finding L4 : la couverture par ID ne valide que les EVAL-*. Un plan qui
+        # implémente des comportements/invariants SANS aucune EVAL-* repose sur des
+        # tests hors-plan — on le signale (le gate dur reste sur les EVAL-*).
+        impl_behaviors = {
+            s
+            for n in nodes
+            for t in n.implements
+            for s in SPEC_ID.findall(t)
+            if s.startswith(("BHV-", "INV-"))
+        }
+        if impl_behaviors and not any(s.startswith("EVAL-") for s in claimed):
+            warnings.append(
+                f"des comportements/invariants sont implémentés ({sorted(impl_behaviors)[:3]}…) "
+                "mais aucune tâche ne porte d'EVAL-* : la couverture eval repose sur des tests hors-plan"
+            )
         # Dérive documentaire : les pointeurs « # version : x.y.z » doivent suivre la spec
         sv = re.search(r"^version:\s*([\d.]+)", spec_text, re.M)
         if sv:
@@ -773,28 +850,44 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 continue
 
         ok, out = run_evals()
-        if ok and real_ids:
+        # Anti-gate-vide : une tâche qui touche du code source DOIT avoir des evals,
+        # même sans implements déclaré (finding M6) — sinon `make evals` vert par
+        # absence (exit-5 masqué) laisserait passer du code non gaté.
+        touches_source = any(
+            f.endswith(".py") and not f.startswith(("tests/", "evals/"))
+            for f in node.files
+        ) or any(
+            _paths_overlap(f, p)
+            for f in node.files
+            for p in ("src", "app", "lib", "modules")
+        )
+        if ok and (real_ids or touches_source):
             collected = evals_collected()
             if "::" not in collected:
                 ok = False
-                out = (
-                    "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée alors que la tâche "
-                    f"implémente {node.implements}. Écris les evals de spec.md §7 (pytest -m eval) — "
-                    "pas d'eval, pas de done."
+                reason = (
+                    f"implémente {node.implements}"
+                    if real_ids
+                    else f"modifie du code source {node.files}"
                 )
-            else:
-                low = collected.lower()
+                out = (
+                    "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée "
+                    f"alors que la tâche {reason}. Écris les evals de spec.md §7 "
+                    "(pytest -m eval) — pas d'eval, pas de done."
+                )
+            elif real_ids:
+                # Couverture par ID : matching de node-id pytest (finding M7).
                 missing = [
                     i
                     for i in real_ids
-                    if i.startswith("EVAL-") and i.lower().replace("-", "_") not in low
+                    if i.startswith("EVAL-") and not eval_covers(i, collected)
                 ]
                 if missing:
                     ok = False
                     out = (
-                        f"Couverture eval incomplète : aucune eval collectée ne porte {missing}. "
-                        f"Convention : nom de test contenant l'ID en minuscules, "
-                        f"ex. test_{missing[0].lower().replace('-', '_')}_<cas>."
+                        f"Couverture eval incomplète : aucun test collecté ne porte {missing}. "
+                        f"Convention : node-id `test_{missing[0].lower().replace('-', '_')}_<cas>` "
+                        "(ID en minuscules, tirets→underscores)."
                     )
         if ok:
             run_log(feature, node, "implementer", f"done, evals vertes (t{attempt})")
@@ -1091,14 +1184,32 @@ def main() -> int:
     rejections: dict[str, int] = {}
     state_f = feature / ".runs" / "state.json"
     state_f.parent.mkdir(exist_ok=True)
+    if not args.dry_run:
+        # Verrou inter-process (finding H6) : interdit deux runs concurrents sur le
+        # même feature (course sur state.json / index git / journal / budget).
+        try:
+            acquire_orchestrator_lock(feature)
+        except OSError as e:
+            print(f"⛔ {e}", file=sys.stderr)
+            return 1
     if state_f.exists() and not args.dry_run:
-        for nid, st in json.loads(state_f.read_text()).items():
+        # Reprise tolérante (finding L9) : un state.json tronqué (kill en plein write)
+        # ne doit pas crasher la reprise — on repart propre plutôt que de planter.
+        try:
+            restored = json.loads(state_f.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(
+                f"⚠️  state.json illisible ({e}) — reprise à neuf (toutes les tâches pending).",
+                file=sys.stderr,
+            )
+            restored = {}
+        for nid, st in restored.items():
             if nid in by_id and st == "done":
                 by_id[nid].status = "done"
 
     def save() -> None:
         if not args.dry_run:
-            state_f.write_text(json.dumps({n.id: n.status for n in nodes}, indent=2))
+            atomic_write_json(state_f, {n.id: n.status for n in nodes})
 
     while any(n.status == "pending" for n in nodes):
         if BUDGET_USD and COST_TOTAL["usd"] >= BUDGET_USD:

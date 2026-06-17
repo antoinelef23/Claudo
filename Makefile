@@ -2,7 +2,7 @@
 # Les cibles sont tolérantes : tant que le projet Python n'existe pas (pas de pyproject.toml),
 # elles no-op proprement pour ne pas casser les hooks sur le squelette vide.
 
-.PHONY: install lint test evals gate validate run
+.PHONY: install lint lint-check test evals gate gate-ci validate run check-content check-content-ci eval-models
 
 # Plan-lint d'une feature : make validate FEATURE=work/ma-feature
 validate:
@@ -19,7 +19,12 @@ run:
 check-content:
 	@test -n "$(FEATURE)" || { echo "usage: make check-content FEATURE=work/ma-feature"; exit 1; }
 	@python3 scripts/content_guard.py --git "$(FEATURE)/spec.md"
-	@test -f "$(FEATURE)/design.md" && python3 scripts/content_guard.py --git "$(FEATURE)/design.md" || true
+	@if [ -f "$(FEATURE)/design.md" ]; then python3 scripts/content_guard.py --git "$(FEATURE)/design.md"; fi
+
+# Garde-fou fond/forme en CI : compare spec/design des features changées à une base
+# (finding M10/M11). Toute la logique est dans le script (testable hors Actions).
+check-content-ci:
+	@BASE="$(or $(BASE),origin/main)" bash scripts/ci_checks.sh
 
 # Éval des modèles : make eval-models [LIVE=1] [LAYER=behavioral|chain|scorecard|all] [MODELS=a,b]
 # Sans LIVE : refuse (campagne facturée). LIVE=1 appelle les vrais modèles du registre.
@@ -33,6 +38,12 @@ lint:
 	@if [ -f pyproject.toml ]; then \
 		uv run ruff check --fix . && uv run ruff format .; \
 	else echo "[lint] pas de pyproject.toml — skip"; fi
+
+# Lint NON mutant pour la CI (finding L6) : échoue sur la dérive au lieu de l'auto-corriger.
+lint-check:
+	@if [ -f pyproject.toml ]; then \
+		uv run ruff check . && uv run ruff format --check .; \
+	else echo "[lint-check] pas de pyproject.toml — skip"; fi
 
 test:
 	@if [ -f pyproject.toml ]; then \
@@ -51,3 +62,8 @@ evals:
 
 gate: lint test evals
 	@echo "✅ gate OK"
+
+# Gate CI : lint NON mutant (finding L6) — sinon une dérive fixable/format ne fait
+# jamais rougir la CI (ruff --fix la corrigerait silencieusement et sortirait 0).
+gate-ci: lint-check test evals
+	@echo "✅ gate-ci OK"
