@@ -17,6 +17,11 @@ import pytest
 
 REPO = Path(__file__).resolve().parents[2]
 ORCH = REPO / "scripts" / "orchestrate.py"
+sys.path.insert(0, str(REPO / "scripts"))
+import approvals  # noqa: E402
+
+# Secret de test : les tests exercent le chemin SÉCURISÉ (jetons signés) par défaut.
+TEST_SECRET = "test-approval-secret"
 
 SHIM = """#!/usr/bin/env bash
 # Shim claude pour les tests orchestrateur — déterministe, instantané.
@@ -86,6 +91,7 @@ def run_orch(
         "LAB_ROOT": str(sandbox),
         "LAB_NO_NOTIFY": "1",
         "LAB_TASK_TIMEOUT": "60",
+        "LAB_APPROVAL_SECRET": TEST_SECRET,  # chemin sécurisé par défaut (jetons signés)
         "PATH": f"{sandbox / 'bin'}:{os.environ['PATH']}",
         **(env_extra or {}),
     }
@@ -100,9 +106,20 @@ def run_orch(
 
 
 def approve(sandbox: Path, cp: str, feature: str = "work/feat") -> None:
-    d = sandbox / feature / ".approvals"
+    """Dépose un jeton d'approbation SIGNÉ avec TEST_SECRET (comme le ferait
+    scripts/approve.sh avec LAB_APPROVAL_SECRET défini)."""
+    fdir = (sandbox / feature).resolve()
+    d = fdir / ".approvals"
     d.mkdir(parents=True, exist_ok=True)
-    (d / cp).write_text("approved_by=test\n")
+    old = os.environ.get(approvals.ENV_SECRET)
+    os.environ[approvals.ENV_SECRET] = TEST_SECRET
+    try:
+        (d / cp).write_text(approvals.sign(fdir, cp, "test", "2026-01-01T00:00:00"))
+    finally:
+        if old is None:
+            os.environ.pop(approvals.ENV_SECRET, None)
+        else:
+            os.environ[approvals.ENV_SECRET] = old
 
 
 def write_registry(sandbox: Path, toml: str) -> None:

@@ -23,10 +23,18 @@ def funcs():
 def approx(a, b): return abs(float(a) - b) < 0.01
 
 cases = [
+    # Exemples de la spec (bornes des paliers)
     ((1000, 0), {"products_eur": 1000.00}),     # borne basse : 0 %
     ((1000.01, 0), {"products_eur": 950.01}),    # juste au-dessus : 5 %
     ((5000, 10), {"products_eur": 4750.00, "installation_eur": 450.00}),  # borne haute 5 % inclusive
     ((5000.01, 0), {"products_eur": 4500.01}),   # juste au-dessus : 10 %
+    # Held-out (finding M8) : valeurs HORS spec, dérivées des paliers (≤1000 → 0 %,
+    # 1000<p≤5000 → 5 %, p>5000 → 10 % ; pose 45 €/m²) — défont une table de correspondance.
+    ((999.99, 5), {"products_eur": 999.99}),       # sous le 1er palier
+    ((1500, 0), {"products_eur": 1425.0}),         # milieu du palier 5 %
+    ((5000.00, 10), {"total_eur": 5200.0}),        # borne haute 5 % + pose
+    ((5001, 0), {"products_eur": 4500.9}),         # juste au-dessus → 10 %
+    ((50000, 200), {"total_eur": 54000.0}),        # gros montant 10 % + pose
 ]
 
 def works(fn):
@@ -36,7 +44,8 @@ def works(fn):
             for k, v in exp.items():
                 if not approx(r[k], v):
                     return False
-        return float(fn(-100, -5)["total_eur"]) == 0.0  # clamp INV-1
+        # clamp INV-1 ET is_estimate MUST valoir True (finding M9)
+        return float(fn(-100, -5)["total_eur"]) == 0.0 and fn(1500, 10).get("is_estimate") is True
     except Exception:
         return False
 

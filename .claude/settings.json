@@ -1,4 +1,16 @@
 {
+  "permissions": {
+    "deny": [
+      "Write(**/.approvals/**)",
+      "Edit(**/.approvals/**)",
+      "MultiEdit(**/.approvals/**)",
+      "NotebookEdit(**/.approvals/**)",
+      "Write(**/.runs/**)",
+      "Edit(**/.runs/**)",
+      "MultiEdit(**/.runs/**)",
+      "NotebookEdit(**/.runs/**)"
+    ]
+  },
   "hooks": {
     "PostToolUse": [
       {

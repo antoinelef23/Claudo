@@ -5,9 +5,11 @@ du 2026-06-10 (devis-pose / export-devis) en secondes, avec le shim claude.
 from __future__ import annotations
 
 import json
+import os
+import sys
 from pathlib import Path
 
-from .conftest import approve, run_orch
+from .conftest import REPO, approve, run_orch
 
 FM = """---
 artifact: tasks
@@ -286,7 +288,7 @@ def test_checkpoint_reject_reopens_tasks(sandbox: Path) -> None:
     d = sandbox / "work" / "feat" / ".approvals"
     d.mkdir(parents=True)
     (d / "CP-1.rejected").write_text("reason=la sortie ne convient pas\ntasks=T1\n")
-    (d / "CP-1").write_text("approved_by=test\n")
+    approve(sandbox, "CP-1")  # jeton signé (le rejet est consommé d'abord)
     r = run_orch(sandbox)
     assert r.returncode == 0, r.stdout + r.stderr
     assert state(sandbox) == {"T1": "done", "CP-1": "done"}
@@ -369,3 +371,108 @@ def test_anti_gate_vide(sandbox: Path) -> None:
     assert r.returncode == 1
     assert state(sandbox)["T1"] == "failed"
     assert "FAIL" in (sandbox / "work" / "feat" / "tasks.md").read_text()
+
+
+def test_anti_gate_vide_for_source_edit_without_implements(sandbox: Path) -> None:
+    # finding M6 : une tâche qui touche du code source (src/*.py) sans implements doit
+    # quand même exiger des evals — sinon `make evals` vert par absence laisse passer.
+    write_tasks(
+        sandbox,
+        """
+### T1 — Édite du code source sans déclarer d'ID
+- **depends_on :** —
+- **implements :** []
+- **files_touched :** `src/core.py`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+
+
+def test_eval_id_matching_rejects_substring_collisions(sandbox: Path) -> None:
+    # finding M7 : eval_1 ne doit PAS matcher eval_10, ni un chemin eval_2_helpers.py.
+    collected = sandbox / "collected.txt"
+    collected.write_text(
+        "tests/eval_1.py::test_eval_10_other\ntests/eval_2_helpers.py::test_something\n"
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — Implémente EVAL-1, evals nommées EVAL-10 / chemin trompeur
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    env = {"LAB_EVALS_COLLECTED_FILE": str(collected)}
+    r = run_orch(sandbox, env_extra=env)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+
+    # node-id correct → couvert → done
+    collected.write_text("tests/test_eval_1_examples.py::test_eval_1_nominal\n")
+    (sandbox / "work" / "feat" / ".runs" / "state.json").unlink()
+    r2 = run_orch(sandbox, env_extra=env)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert state(sandbox)["T1"] == "done"
+
+
+def test_corrupt_state_json_does_not_crash_resume(sandbox: Path) -> None:
+    # finding L9 : un state.json tronqué (kill en plein write) ne crashe pas la reprise.
+    (sandbox / ".shim" / "T1.sh").write_text(
+        'echo x >> .shim/count\necho "STATUS: done"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0
+    # Corrompt state.json
+    (sandbox / "work" / "feat" / ".runs" / "state.json").write_text(
+        '{"T1": "done", "cor'
+    )
+    r2 = run_orch(sandbox)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert "illisible" in r2.stderr  # reprise tolérante signalée
+    assert state(sandbox)["T1"] == "done"
+
+
+def test_concurrent_orchestrate_fails_fast(sandbox: Path) -> None:
+    # finding H6 : deux runs concurrents sur le même feature → le 2e échoue vite.
+    sys.path.insert(0, str(REPO / "scripts"))
+    import orchestrate
+
+    write_tasks(
+        sandbox,
+        """
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    feat = (sandbox / "work" / "feat").resolve()
+    orchestrate.acquire_orchestrator_lock(feat)  # ce process tient le verrou
+    try:
+        r = run_orch(sandbox)  # sous-process : doit échouer vite
+        assert r.returncode == 1
+        assert "verrou orchestrateur" in r.stderr
+    finally:
+        if orchestrate._ORCH_LOCK_FD is not None:
+            os.close(orchestrate._ORCH_LOCK_FD)
+            orchestrate._ORCH_LOCK_FD = None

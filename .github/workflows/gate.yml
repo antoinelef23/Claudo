@@ -1,6 +1,8 @@
-# Miroir CI du merge gate local : pas d'eval verte, pas de merge — enforcé, pas conventionnel.
-# Reprend exactement `make gate` (lint + tests + evals), y compris la suite orchestrateur
-# (shim claude déterministe, aucun vrai agent requis).
+# Miroir CI du merge gate local (findings L5/L6/M10/M11) :
+#  - lint NON mutant (gate-ci : ruff --check, ne masque pas la dérive)
+#  - tests + evals (suite orchestrateur via shim claude déterministe)
+#  - content_guard sur les features changées vs la base (fond sacré : bump de version)
+#  - plan-lint (make validate) informatif sur les features changées
 name: gate
 
 on:
@@ -14,8 +16,18 @@ jobs:
     env:
       LAB_NO_NOTIFY: "1"
     steps:
-      - uses: actions/checkout@v4
-      - uses: astral-sh/setup-uv@v5
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0 # historique complet : nécessaire pour diff vs la base
+      - uses: astral-sh/setup-uv@v8.2.0
       - run: uv python install 3.12
       - run: make install
-      - run: make gate
+      - name: Content guard + plan-lint (features changées)
+        run: |
+          if [ -n "${{ github.base_ref }}" ]; then
+            BASE="origin/${{ github.base_ref }}"
+          else
+            BASE="HEAD~1"
+          fi
+          make check-content-ci BASE="$BASE"
+      - run: make gate-ci

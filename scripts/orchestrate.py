@@ -23,8 +23,9 @@ Garde-fous d'autonomie :
     n'est collectée (pas d'eval écrite = pas de done, même si `make evals` sort 0)
   - confinement d'échec : une tâche failed/blocked ne bloque que son sous-arbre de
     dépendants (skipped) ; les autres branches continuent
-  - commits scopés : on ne stage que les files_touched de la tâche (+ tests/, evals/,
-    le dossier feature) sous verrou — jamais de `git add -A` en vague parallèle
+  - commits scopés : on ne stage que les files_touched de la tâche + le dossier
+    feature sous verrou (jamais `git add -A`, ni `tests`/`evals` en bloc qui
+    aspirerait les fichiers des autres tâches et les goldens — findings H3/H5)
 
 Usage :
     python3 scripts/orchestrate.py examples/agent-douche --validate
@@ -38,11 +39,14 @@ Prérequis : claude CLI installé et authentifié ; tasks.md avec status: approv
 from __future__ import annotations
 
 import argparse
+import fcntl
 import json
 import os
 import re
+import shlex
 import subprocess
 import sys
+import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
@@ -50,6 +54,7 @@ from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
+import approvals
 from registry import load_registry, resolve_model
 
 # LAB_ROOT : surcharge pour les tests (sandbox) — défaut : la racine du repo
@@ -79,10 +84,113 @@ CLAUDE_ARGS = [
 ]
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
 
+# Commandes autorisées comme `verify` d'une tâche (finding H2). Une verify est une
+# commande de test/build, jamais un shell : on l'exécute SANS shell (argv), et on
+# refuse au plan-lint toute commande hors de cette liste ou contenant des
+# métacaractères shell. Empêche un `verify` agent-généré du type `pytest; curl|sh`.
+VERIFY_ALLOWED = {
+    "true",
+    "false",
+    "test",
+    "[",
+    "ls",
+    "cat",
+    "grep",
+    "head",
+    "tail",
+    "make",
+    "uv",
+    "python",
+    "python3",
+    "pytest",
+    "ruff",
+}
+# Métacaractères qui n'auraient de sens que via un shell — interdits dans un verify.
+_SHELL_META = re.compile(r"[;&|`$><\n]")
+# Préfixes d'env `VAR=val` autorisés devant un verify (finding H2, smuggling par env).
+# Allowlist : les clés qui n'ajoutent AUCUN privilège au-delà de ce que la verify fait
+# déjà (elle exécute du code in-repo de l'agent : conftest.py, modules de test). PYTHONPATH
+# en fait partie — `PYTHONPATH=src uv run …` est un usage standard et ne donne pas plus
+# que le `Bash(uv:*)/Bash(python3:*)` que l'agent a déjà.
+# Refusées (bloquées) : les clés qui détournent d'AUTRES process/shells/binaires —
+# LD_PRELOAD, LD_LIBRARY_PATH, DYLD_*, BASH_ENV, ENV, PYTHONSTARTUP, PYTHONHOME, PATH —
+# qui seraient une escalade réelle (RCE sans shell hors du périmètre des tests).
+VERIFY_ENV_ALLOWED = {
+    "CI",
+    "TZ",
+    "LANG",
+    "LC_ALL",
+    "LC_CTYPE",
+    "NO_COLOR",
+    "PYTHONPATH",
+    "PYTHONDONTWRITEBYTECODE",
+    "PYTEST_ADDOPTS",
+}
+
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
 COST_LOCK = threading.Lock()
 COST_TOTAL = {"usd": 0.0}
+# fd du flock inter-process gardé ouvert toute la durée du run (libéré à la sortie
+# du process par l'OS). Empêche deux orchestrateurs de courser sur le même feature.
+_ORCH_LOCK_FD: int | None = None
+
+
+def acquire_orchestrator_lock(feature: Path) -> None:
+    """flock OS exclusif sur .runs/orchestrator.lock — fail-fast si déjà tenu (finding H6).
+
+    Deux process orchestrate.py sur le même feature corrompraient state.json, l'index
+    git, le journal et le budget (COST_TOTAL est par-process). Les threading.Lock ne
+    protègent QUE l'intra-process. Le fd reste ouvert : l'OS libère à la fin du process.
+    """
+    global _ORCH_LOCK_FD
+    lock_path = feature / ".runs" / "orchestrator.lock"
+    lock_path.parent.mkdir(exist_ok=True, parents=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # exclusif, non bloquant
+    except OSError as e:
+        os.close(fd)
+        raise OSError(
+            f"verrou orchestrateur déjà tenu sur {lock_path} — un autre run tourne "
+            "sur ce feature. Attends sa fin (ou supprime le .lock s'il est éventé)."
+        ) from e
+    _ORCH_LOCK_FD = fd
+
+
+def atomic_write_json(path: Path, obj: dict) -> None:
+    """Écrit un JSON de façon atomique (tempfile + os.replace) — pas de troncature
+    sur SIGKILL en plein write (finding L9)."""
+    path.parent.mkdir(exist_ok=True, parents=True)
+    with tempfile.NamedTemporaryFile(
+        mode="w", dir=str(path.parent), delete=False, suffix=".tmp", encoding="utf-8"
+    ) as f:
+        json.dump(obj, f, indent=2, ensure_ascii=False)
+        tmp = f.name
+    try:
+        os.replace(tmp, str(path))
+    except OSError:
+        try:
+            os.unlink(tmp)
+        except OSError:
+            pass
+        raise
+
+
+def eval_covers(spec_id: str, collected: str) -> bool:
+    """Vrai si une eval collectée porte spec_id, par matching de NODE ID pytest
+    (finding M7). On regarde le nom de test APRÈS « :: » (pas le chemin de fichier),
+    et on interdit qu'un préfixe numérique collisionne : eval_1 ≠ eval_10,
+    et tests/eval_2_helpers.py ne « couvre » pas EVAL-2."""
+    slug = spec_id.lower().replace("-", "_")  # EVAL-1 -> eval_1
+    pat = re.compile(rf"(?<![a-z0-9]){re.escape(slug)}(?![0-9])")
+    for line in collected.splitlines():
+        if "::" not in line:
+            continue
+        node_id = line.rsplit("::", 1)[1]  # nom du test, pas le chemin
+        if pat.search(node_id.lower()):
+            return True
+    return False
 
 
 @dataclass
@@ -212,6 +320,47 @@ def _paths_overlap(a: str, b: str) -> bool:
     return a == b or a.startswith(b + "/") or b.startswith(a + "/")
 
 
+def parse_verify(cmd: str) -> tuple[list[str], dict[str, str]]:
+    """Découpe une commande `verify` en (argv, env_overrides) — SANS shell (finding H2).
+
+    Gère les préfixes d'environnement `VAR=val` restreints à VERIFY_ENV_ALLOWED
+    (ex. `CI=1 …`, `PYTHONPATH=src uv run …`). Les clés détournant d'autres
+    process/shells/binaires (LD_PRELOAD, DYLD_*, BASH_ENV, PYTHONSTARTUP, PATH…)
+    sont refusées : ce serait une escalade RCE hors du périmètre des tests.
+    Lève ValueError si : métacaractères shell, parsing impossible (guillemets non
+    fermés), vide, ou commande hors de VERIFY_ALLOWED. L'appelant exécute ensuite
+    l'argv tel quel (`shell=False`), ce qui neutralise tout chaînage/injection même
+    si cette validation était contournée.
+    """
+    if _SHELL_META.search(cmd):
+        raise ValueError(
+            "métacaractères shell interdits dans verify (; & | $ ` > < newline) — "
+            "une verify est une commande unique, pas un script shell"
+        )
+    tokens = shlex.split(cmd)  # peut lever ValueError (guillemets non fermés)
+    env: dict[str, str] = {}
+    while tokens and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[0]):
+        k, _, v = tokens[0].partition("=")
+        if k not in VERIFY_ENV_ALLOWED:
+            raise ValueError(
+                f"préfixe d'environnement « {k}= » interdit dans verify — "
+                f"clés autorisées : {', '.join(sorted(VERIFY_ENV_ALLOWED))}. "
+                "PYTHONPATH/PYTHONSTARTUP/LD_PRELOAD/BASH_ENV… permettent d'injecter "
+                "du code chargé par la commande (RCE sans shell)."
+            )
+        env[k] = v
+        tokens = tokens[1:]
+    if not tokens:
+        raise ValueError("verify vide (après les éventuels préfixes d'environnement)")
+    prog = Path(tokens[0]).name
+    if prog not in VERIFY_ALLOWED:
+        raise ValueError(
+            f"commande verify « {tokens[0]} » hors allowlist — "
+            f"autorisées : {', '.join(sorted(VERIFY_ALLOWED))}"
+        )
+    return tokens, env
+
+
 def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], list[str]]:
     """Plan-lint. Retourne (erreurs, avertissements)."""
     errors: list[str] = []
@@ -270,6 +419,11 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
             warnings.append(
                 f"{n.id} : pas de verify exécutable — le done_when ne sera pas vérifié mécaniquement"
             )
+        else:
+            try:
+                parse_verify(n.verify)
+            except ValueError as e:
+                errors.append(f"{n.id} : verify invalide (`{n.verify}`) — {e}")
 
     # IDs de spec
     spec_path = feature / "spec.md"
@@ -289,6 +443,21 @@ def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], lis
                 warnings.append(
                     f"{ev} déclarée dans spec.md §7 mais portée par aucune tâche (implements)"
                 )
+        # finding L4 : la couverture par ID ne valide que les EVAL-*. Un plan qui
+        # implémente des comportements/invariants SANS aucune EVAL-* repose sur des
+        # tests hors-plan — on le signale (le gate dur reste sur les EVAL-*).
+        impl_behaviors = {
+            s
+            for n in nodes
+            for t in n.implements
+            for s in SPEC_ID.findall(t)
+            if s.startswith(("BHV-", "INV-"))
+        }
+        if impl_behaviors and not any(s.startswith("EVAL-") for s in claimed):
+            warnings.append(
+                f"des comportements/invariants sont implémentés ({sorted(impl_behaviors)[:3]}…) "
+                "mais aucune tâche ne porte d'EVAL-* : la couverture eval repose sur des tests hors-plan"
+            )
         # Dérive documentaire : les pointeurs « # version : x.y.z » doivent suivre la spec
         sv = re.search(r"^version:\s*([\d.]+)", spec_text, re.M)
         if sv:
@@ -399,15 +568,26 @@ def _gchat(msg: str) -> None:
 
 def notify(msg: str) -> None:
     print(f"🔔 {msg}", flush=True)
-    _gchat(msg)
-    if os.environ.get("LAB_NO_NOTIFY"):  # tests / CI : pas de notif macOS
+    if os.environ.get(
+        "LAB_NO_NOTIFY"
+    ):  # tests / CI : aucune notif externe (incl. _gchat)
         return
+    _gchat(msg)
     try:
+        # msg passé en argv (item 1 of argv), JAMAIS interpolé dans la source
+        # AppleScript : une `reason` agent-générée ne peut plus injecter de
+        # `do shell script` via osascript (finding M2).
         subprocess.run(
             [
                 "osascript",
                 "-e",
-                f'display notification "{msg}" with title "Lab IA-natif" sound name "Glass"',
+                "on run argv",
+                "-e",
+                'display notification (item 1 of argv) with title (item 2 of argv) sound name "Glass"',
+                "-e",
+                "end run",
+                msg,
+                "Lab IA-natif",
             ],
             capture_output=True,
             timeout=10,
@@ -448,9 +628,17 @@ def run_claude(
         cmd += ["--model", model]
     if resume:
         cmd += ["--resume", resume]
+    # Le secret d'approbation ne doit JAMAIS être visible par un sous-agent : sinon
+    # il pourrait signer sa propre validation de checkpoint (finding H1).
+    child_env = {k: v for k, v in os.environ.items() if k != approvals.ENV_SECRET}
     try:
         p = subprocess.run(
-            cmd, cwd=ROOT, capture_output=True, text=True, timeout=TASK_TIMEOUT_S
+            cmd,
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            timeout=TASK_TIMEOUT_S,
+            env=child_env,
         )
     except subprocess.TimeoutExpired:
         return {
@@ -518,11 +706,40 @@ def evals_collected() -> str:
 
 
 def scoped_commit(node: Node, feature: Path, message: str) -> None:
-    """Stage uniquement le périmètre de la tâche, sous verrou (vagues parallèles)."""
+    """Stage uniquement le périmètre de la tâche, sous verrou (vagues parallèles).
+
+    On ne stage PLUS `tests`/`evals` en bloc (findings H3/H5) : par convention,
+    files_touched contient déjà les chemins de tests/evals de la tâche. Le staging
+    en bloc aspirait les fichiers d'autres tâches de la vague ET les oracles
+    `evals/golden/**` — un golden altéré hors-scope se retrouvait auto-commité,
+    corrompant la vérité terrain du scorecard. On stage donc node.files + le dossier
+    feature (spec/design/tasks), puis on dé-stage tout golden non déclaré.
+    """
     with COMMIT_LOCK:
-        paths = [*node.files, "tests", "evals", str(feature.relative_to(ROOT))]
+        paths = [*node.files, str(feature.relative_to(ROOT))]
         for p in paths:
             subprocess.run(["git", "add", "--", p], cwd=ROOT, capture_output=True)
+        # Garde-fou oracle : un golden n'est commité que s'il est explicitement dans
+        # files_touched. Sinon on le dé-stage (finding H3, anti-tamper du scorecard).
+        staged = subprocess.run(
+            ["git", "diff", "--cached", "--name-only"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+        ).stdout.splitlines()
+        for f in staged:
+            if f.startswith("evals/golden/") and not any(
+                _paths_overlap(f, d) for d in node.files
+            ):
+                subprocess.run(
+                    ["git", "reset", "-q", "HEAD", "--", f],
+                    cwd=ROOT,
+                    capture_output=True,
+                )
+                print(
+                    f"⚠️  {node.id} : golden hors files_touched dé-stagé (oracle protégé) : {f}",
+                    flush=True,
+                )
         leftover = subprocess.run(
             ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True
         ).stdout
@@ -612,8 +829,20 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             )
 
         if node.verify:
+            try:
+                argv, venv = parse_verify(node.verify)
+            except ValueError as e:
+                # Ne devrait pas arriver (plan-lint bloque déjà), mais défense en
+                # profondeur si exécuté sous --force : on ne lance jamais de shell.
+                extra = f"\n\n⛔ verify invalide (`{node.verify}`) : {e}"
+                run_log(feature, node, "implementer", f"verify INVALIDE (t{attempt})")
+                continue
             v = subprocess.run(
-                node.verify, shell=True, cwd=ROOT, capture_output=True, text=True
+                argv,
+                cwd=ROOT,
+                capture_output=True,
+                text=True,
+                env={**os.environ, **venv} if venv else None,
             )
             if v.returncode != 0:
                 extra = f"\n\n⛔ verify a échoué (`{node.verify}`) :\n{(v.stdout + v.stderr)[-2000:]}"
@@ -621,28 +850,44 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 continue
 
         ok, out = run_evals()
-        if ok and real_ids:
+        # Anti-gate-vide : une tâche qui touche du code source DOIT avoir des evals,
+        # même sans implements déclaré (finding M6) — sinon `make evals` vert par
+        # absence (exit-5 masqué) laisserait passer du code non gaté.
+        touches_source = any(
+            f.endswith(".py") and not f.startswith(("tests/", "evals/"))
+            for f in node.files
+        ) or any(
+            _paths_overlap(f, p)
+            for f in node.files
+            for p in ("src", "app", "lib", "modules")
+        )
+        if ok and (real_ids or touches_source):
             collected = evals_collected()
             if "::" not in collected:
                 ok = False
-                out = (
-                    "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée alors que la tâche "
-                    f"implémente {node.implements}. Écris les evals de spec.md §7 (pytest -m eval) — "
-                    "pas d'eval, pas de done."
+                reason = (
+                    f"implémente {node.implements}"
+                    if real_ids
+                    else f"modifie du code source {node.files}"
                 )
-            else:
-                low = collected.lower()
+                out = (
+                    "Gate vide : `make evals` est vert mais AUCUNE eval n'est collectée "
+                    f"alors que la tâche {reason}. Écris les evals de spec.md §7 "
+                    "(pytest -m eval) — pas d'eval, pas de done."
+                )
+            elif real_ids:
+                # Couverture par ID : matching de node-id pytest (finding M7).
                 missing = [
                     i
                     for i in real_ids
-                    if i.startswith("EVAL-") and i.lower().replace("-", "_") not in low
+                    if i.startswith("EVAL-") and not eval_covers(i, collected)
                 ]
                 if missing:
                     ok = False
                     out = (
-                        f"Couverture eval incomplète : aucune eval collectée ne porte {missing}. "
-                        f"Convention : nom de test contenant l'ID en minuscules, "
-                        f"ex. test_{missing[0].lower().replace('-', '_')}_<cas>."
+                        f"Couverture eval incomplète : aucun test collecté ne porte {missing}. "
+                        f"Convention : node-id `test_{missing[0].lower().replace('-', '_')}_<cas>` "
+                        "(ID en minuscules, tirets→underscores)."
                     )
         if ok:
             run_log(feature, node, "implementer", f"done, evals vertes (t{attempt})")
@@ -770,8 +1015,16 @@ def wait_checkpoint(
             )
         elif verdict == "PASS" and evals_ok:
             approval.parent.mkdir(exist_ok=True)
+            # Signé comme une approbation humaine (l'orchestrateur a le secret) pour
+            # rester vérifiable si le jeton est relu ; « auto-approved » reste dans
+            # l'auteur pour la traçabilité (finding H1, cohérence du chemin auto).
             approval.write_text(
-                f"auto-approved (evals vertes + panel reviewer PASS) at={datetime.now().isoformat()}\n"
+                approvals.sign(
+                    feature,
+                    node.id,
+                    "auto-approved (evals vertes + panel reviewer PASS)",
+                    datetime.now().isoformat(),
+                )
             )
             run_log(
                 feature, node, "reviewer", "checkpoint auto-validé (PASS, evals vertes)"
@@ -803,6 +1056,29 @@ def wait_checkpoint(
             )
             return "rejected", info
         if approval.exists():
+            ok, why = approvals.verify(
+                feature, node.id, approval.read_text(encoding="utf-8")
+            )
+            if not ok:
+                # Jeton forgé / signature invalide : on l'écarte et on continue
+                # d'attendre une vraie validation humaine (finding H1).
+                approval.rename(
+                    approval.parent / f"{node.id}.invalid-{datetime.now():%Y%m%d%H%M%S}"
+                )
+                journal(
+                    feature, event="checkpoint_forgery_rejected", id=node.id, why=why
+                )
+                notify(
+                    f"⛔ {node.id} : approbation REJETÉE ({why}) — jeton écarté, "
+                    "toujours en attente d'une validation humaine signée."
+                )
+                continue
+            if "non signé" in why:
+                notify(f"⚠️ {node.id} : approbation acceptée mais {why}")
+            # Consommé après honoration : un jeton ne se rejoue pas (finding H4).
+            approval.rename(
+                approval.parent / f"{node.id}.handled-{datetime.now():%Y%m%d%H%M%S}"
+            )
             run_log(feature, node, "owner", "checkpoint validé")
             notify(f"{node.id} validé — reprise de l'exécution")
             return "approved", {}
@@ -856,6 +1132,14 @@ def main() -> int:
             print(f"  ❌ {e}")
         if not errors and not warnings:
             print("  ✅ aucun problème")
+        if args.validate:
+            # Surfacer chaque verify : l'Owner signe ces commandes en approuvant le
+            # plan (elles s'exécuteront sur l'hôte, sans shell — finding H2).
+            verifs = [(n.id, n.verify) for n in nodes if n.verify]
+            if verifs:
+                print("\n  Commandes verify (exécutées sans shell, à valider) :")
+                for nid, vcmd in verifs:
+                    print(f"    {nid}: {vcmd}")
     if args.validate:
         return 1 if errors else 0
     if errors and not args.force:
@@ -865,6 +1149,23 @@ def main() -> int:
     if fm.get("status") != "approved" and not (args.dry_run or args.force):
         print(
             f"⛔ tasks.md a status '{fm.get('status')}' — un plan doit être 'approved' par l'Owner avant exécution."
+        )
+        return 1
+
+    # Fail-closed (finding H1) : un plan avec checkpoints exige un secret de
+    # signature, sinon n'importe quel fichier .approvals/<CP> (qu'un agent peut
+    # écrire via Bash) serait honoré. Sans secret on REFUSE de démarrer, sauf
+    # opt-in explicite LAB_ALLOW_UNSIGNED_APPROVALS=1 (rétro-compat / legacy).
+    has_checkpoint = any(n.is_checkpoint for n in nodes)
+    # .strip() : un secret vide/blanc compte comme absent (cohérent avec approvals._secret).
+    secret_set = bool((os.environ.get(approvals.ENV_SECRET) or "").strip())
+    allow_unsigned = os.environ.get("LAB_ALLOW_UNSIGNED_APPROVALS") == "1"
+    if has_checkpoint and not secret_set and not allow_unsigned and not args.dry_run:
+        print(
+            "⛔ Plan avec checkpoint mais LAB_APPROVAL_SECRET non défini : une "
+            "approbation non signée serait falsifiable par un agent (finding H1). "
+            "Exporte LAB_APPROVAL_SECRET (recommandé) ou, en connaissance de cause, "
+            "LAB_ALLOW_UNSIGNED_APPROVALS=1 pour autoriser les jetons non signés."
         )
         return 1
 
@@ -883,14 +1184,32 @@ def main() -> int:
     rejections: dict[str, int] = {}
     state_f = feature / ".runs" / "state.json"
     state_f.parent.mkdir(exist_ok=True)
+    if not args.dry_run:
+        # Verrou inter-process (finding H6) : interdit deux runs concurrents sur le
+        # même feature (course sur state.json / index git / journal / budget).
+        try:
+            acquire_orchestrator_lock(feature)
+        except OSError as e:
+            print(f"⛔ {e}", file=sys.stderr)
+            return 1
     if state_f.exists() and not args.dry_run:
-        for nid, st in json.loads(state_f.read_text()).items():
+        # Reprise tolérante (finding L9) : un state.json tronqué (kill en plein write)
+        # ne doit pas crasher la reprise — on repart propre plutôt que de planter.
+        try:
+            restored = json.loads(state_f.read_text(encoding="utf-8"))
+        except (json.JSONDecodeError, OSError) as e:
+            print(
+                f"⚠️  state.json illisible ({e}) — reprise à neuf (toutes les tâches pending).",
+                file=sys.stderr,
+            )
+            restored = {}
+        for nid, st in restored.items():
             if nid in by_id and st == "done":
                 by_id[nid].status = "done"
 
     def save() -> None:
         if not args.dry_run:
-            state_f.write_text(json.dumps({n.id: n.status for n in nodes}, indent=2))
+            atomic_write_json(state_f, {n.id: n.status for n in nodes})
 
     while any(n.status == "pending" for n in nodes):
         if BUDGET_USD and COST_TOTAL["usd"] >= BUDGET_USD:
