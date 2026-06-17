@@ -19,7 +19,7 @@ jobs:
       - uses: actions/checkout@v6
         with:
           fetch-depth: 0 # historique complet : nécessaire pour diff vs la base
-      - uses: astral-sh/setup-uv@v8
+      - uses: astral-sh/setup-uv@v8.2.0
       - run: uv python install 3.12
       - run: make install
       - name: Content guard + plan-lint (features changées)
