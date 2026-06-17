@@ -26,13 +26,24 @@ fs = funcs()
 
 def is_round(fn):  # demi-supérieur (2 args)
     try:
-        return approx(fn(2.675, 2), 2.68) and approx(fn(0.125, 2), 0.13) and approx(fn(2.674, 2), 2.67)
+        spec = approx(fn(2.675, 2), 2.68) and approx(fn(0.125, 2), 0.13) and approx(fn(2.674, 2), 2.67)
+        # Held-out (finding M8) : demi-supérieurs hors spec — discriminent round() natif.
+        held = (
+            approx(fn(1.005, 2), 1.01)
+            and approx(fn(3.445, 2), 3.45)
+            and approx(fn(99.995, 2), 100.00)
+            and approx(fn(10.156, 2), 10.16)
+        )
+        return spec and held
     except Exception:
         return False
 
 def is_ttc(fn):  # TVA 20 % (1 arg)
     try:
-        return approx(fn(10.0), 12.0)
+        spec = approx(fn(10.0), 12.0)
+        # Held-out (finding M8) : TTC hors spec (×1.20, arrondi demi-supérieur 2 déc.).
+        held = approx(fn(0.01), 0.01) and approx(fn(999.99), 1199.99) and approx(fn(1.234), 1.48)
+        return spec and held
     except Exception:
         return False
 
