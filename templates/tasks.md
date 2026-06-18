@@ -1,5 +1,5 @@
 ---
-artifact: tasks
+type: tasks
 feature: <feature-slug>
 version: 0.1.0
 status: proposed         # proposed | approved | in_progress | done

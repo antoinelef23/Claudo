@@ -1,5 +1,5 @@
 ---
-artifact: tasks
+type: tasks
 feature: devis-pose
 version: 0.1.0
 status: approved

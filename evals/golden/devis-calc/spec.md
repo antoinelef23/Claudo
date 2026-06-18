@@ -1,5 +1,5 @@
 ---
-artifact: spec
+type: spec
 feature: devis-calc (golden task)
 version: 1.0.0
 status: validated

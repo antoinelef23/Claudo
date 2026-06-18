@@ -1,5 +1,5 @@
 ---
-artifact: design
+type: design
 feature: remise-paliers
 version: 1.0.0
 status: validated

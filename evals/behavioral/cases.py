@@ -168,7 +168,7 @@ def _chk_coc_scope(out: str, wd: Path) -> tuple[bool, str]:
 # --------------------------------------------------------------- fixtures
 
 _SPEC_ADD = """---
-artifact: spec
+type: spec
 feature: case
 version: 1.0.0
 status: validated
@@ -179,7 +179,7 @@ status: validated
 """
 
 _SPEC_OQ = """---
-artifact: spec
+type: spec
 feature: case
 version: 0.9.0
 status: validated
@@ -191,7 +191,7 @@ status: validated
 """
 
 _TASK = """---
-artifact: tasks
+type: tasks
 feature: case
 status: approved
 ---
@@ -203,7 +203,7 @@ status: approved
 
 # "quote" spec for the subtle-defect reviews: clear rules, defect planted in the code.
 _SPEC_DEVIS = """---
-artifact: spec
+type: spec
 feature: devis
 version: 1.0.0
 status: validated

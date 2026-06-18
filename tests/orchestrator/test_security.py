@@ -21,7 +21,7 @@ def state(sandbox: Path) -> dict:
     return json.loads((sandbox / "work" / "feat" / ".runs" / "state.json").read_text())
 
 
-FM = "---\nartifact: tasks\nfeature: feat\nstatus: approved\n---\n\n# Tasks — feat\n"
+FM = "---\ntype: tasks\nfeature: feat\nstatus: approved\n---\n\n# Tasks — feat\n"
 
 
 def write_tasks(sandbox: Path, body: str) -> None:

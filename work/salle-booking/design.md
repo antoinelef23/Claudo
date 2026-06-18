@@ -1,5 +1,5 @@
 ---
-artifact: design
+type: design
 feature: salle-booking
 version: 1.0.1
 status: validated
