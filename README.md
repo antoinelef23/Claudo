@@ -146,12 +146,17 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 
 ## Trust model (read this)
 
-Agent code runs **on the host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, `.claude/settings.json` denies) — there is **no OS sandbox in this tree**. An implementer that runs its own tests necessarily has code execution, so the signed-approval boundary and allowlists are *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent. The intended threat model is a **trusted but possibly-misaligned** agent, not a malicious external one. Real confinement (a container + egress allowlist) is tracked as backlog below and is the only thing that turns the approval crypto into a true boundary.
+The orchestrator drives agents through an `AgentRunner` interface (`scripts/runner.py`), so the execution backend is swappable:
+
+- **`claude-cli`** (default) — runs on the **host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, `.claude/settings.json` denies). An implementer that runs its own tests has code execution, so here the signed-approval boundary is *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent.
+- **`sandbox`** (`LAB_RUNNER=sandbox`, see [docs/sandbox.md](docs/sandbox.md)) — runs the same call in a hardened container: only the repo is mounted, the approval secret is never passed in, egress is allowlisted, non-root + read-only rootfs + dropped caps. This makes the secret **unreachable** by the agent, which is what turns the approval crypto into a true boundary. Validated end-to-end on Docker (the secret is provably absent inside the container); the egress-allowlist proxy is operator infrastructure.
+
+Intended threat model: a **trusted-but-possibly-misaligned** agent on the host runner; a **malicious** agent under the sandbox runner.
 
 ## Backlog (acknowledged, not shipped)
 
-- **Sandbox** — run agents in a container with an egress allowlist and no host filesystem access; the only thing that makes the approval secret truly unreachable by the agent.
-- **Cross-vendor runner** — abstract the `claude -p` call behind a runner interface so the registry's model-swappability extends across providers (not testable here without other-provider access).
+- **Egress-allowlist proxy** — the sandbox restricts egress to a network you control; a bundled filtering proxy (model API + package registry only) is documented in docs/sandbox.md but not shipped.
+- **Cross-vendor provider runner** — the `AgentRunner` seam exists; a Vertex/Gemini implementation is a drop-in (not testable here without other-provider access).
 - **Git worktree per parallel task** — makes file collision *impossible* rather than *forbidden*; deferred to avoid destabilizing the verified orchestrator, deserves its own PR.
 
 ## Start a unit of work
