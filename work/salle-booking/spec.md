@@ -1,92 +1,92 @@
 ---
 artifact: spec
 feature: salle-booking
-version: 1.0.0
+version: 1.0.1
 status: validated
-owner: Antoine (test E2E)
-validated_by: métier simulé — 2026-06-15
+owner: Antoine (E2E test)
+validated_by: simulated business — 2026-06-15
 ---
 
-# Spec — Réservation de salles
+# Spec — Room booking
 
-> **Le QUOI. Le contrat du métier.** Gestionnaire de réservations de salles de réunion :
-> réserver un créneau, refuser les chevauchements, annuler, calculer les disponibilités.
-> Périmètre **pur et déterministe** (en mémoire, pas d'I/O, le temps est une donnée d'entrée,
-> jamais `now()`) — pour qu'il soit testable de bout en bout.
+> **The WHAT. The business contract.** Meeting-room booking manager:
+> book a slot, reject overlaps, cancel, compute availability.
+> Scope is **pure and deterministic** (in memory, no I/O, time is an input,
+> never `now()`) — so it is end-to-end testable.
 
 ## 1. Intent
 
-Les collaborateurs perdent du temps à coordonner les salles par e-mail et se retrouvent
-en double-booking. Cette feature fournit le cœur métier qui garantit qu'une salle n'est
-jamais réservée deux fois, et expose les créneaux libres.
+Employees waste time coordinating rooms by email and end up double-booking.
+This feature provides the business core that guarantees a room is never
+booked twice, and exposes free slots.
 
-**KPI cible :** taux de double-booking 0 % (vs incidents réguliers aujourd'hui).
+**Target KPI:** double-booking rate 0% (vs regular incidents today).
 
 ## 2. Glossary
 
-| Terme métier (FR) | Nom canonique (code) | Définition |
+| Business term (EN) | Canonical name (code) | Definition |
 |---|---|---|
-| Réservation | `booking` | Occupation d'une salle sur un créneau, avec un statut |
-| Salle | `room_id` | Identifiant de salle (chaîne) |
-| Créneau | `slot` | Intervalle `[start, end)` en **minutes depuis minuit** (0 à 1440) |
-| Chevauchement | `overlap` | Deux créneaux de la même salle dont les intervalles s'intersectent |
-| Disponibilité | `availability` | Trous libres d'une salle dans une fenêtre donnée |
+| Booking | `booking` | Occupation of a room over a slot, with a status |
+| Room | `room_id` | Room identifier (string) |
+| Slot | `slot` | Interval `[start, end)` in **minutes since midnight** (0 to 1440) |
+| Overlap | `overlap` | Two slots of the same room whose intervals intersect |
+| Availability | `availability` | Free gaps of a room within a given window |
 
 ## 3. Invariants
 
-- **INV-1** — Deux réservations `confirmed` de la MÊME salle ne se chevauchent JAMAIS.
-- **INV-2** — Toute réservation respecte `0 ≤ start < end ≤ 1440`.
-- **INV-3** — La durée d'une réservation MUST être ≤ 240 minutes (`end - start ≤ 240`).
+- **INV-1** — Two `confirmed` bookings of the SAME room NEVER overlap.
+- **INV-2** — Every booking respects `0 ≤ start < end ≤ 1440`.
+- **INV-3** — A booking's duration MUST be ≤ 240 minutes (`end - start ≤ 240`).
 
 ## 4. Behaviors
 
-### BHV-1 — Réserver un créneau libre
-- **Given** une salle sans réservation chevauchante sur `[start, end)`
-- **When** on réserve `(room_id, start, end, holder)`
-- **Then** une réservation est créée avec un `id` unique et `status = "confirmed"`
-- **Edge cases :**
-  - **BHV-1a** — créneaux **adjacents** (`fin de A == début de B`, même salle) : autorisé (pas de chevauchement, `[start, end)` est demi-ouvert).
-  - **BHV-1b** — `start >= end` ou hors `[0, 1440]` : rejet, raison `invalid_slot` (INV-2).
-  - **BHV-1c** — durée > 240 : rejet, raison `too_long` (INV-3).
+### BHV-1 — Book a free slot
+- **Given** a room with no overlapping booking on `[start, end)`
+- **When** booking `(room_id, start, end, holder)`
+- **Then** a booking is created with a unique `id` and `status = "confirmed"`
+- **Edge cases:**
+  - **BHV-1a** — **adjacent** slots (`end of A == start of B`, same room): allowed (no overlap, `[start, end)` is half-open).
+  - **BHV-1b** — `start >= end` or outside `[0, 1440]`: rejected, reason `invalid_slot` (INV-2).
+  - **BHV-1c** — duration > 240: rejected, reason `too_long` (INV-3).
 
-### BHV-2 — Refuser un chevauchement
-- **Given** une réservation `confirmed` existante sur la salle qui intersecte `[start, end)`
-- **When** on tente de réserver le même créneau (même salle)
-- **Then** rejet, raison `overlap`, aucune réservation créée
-- **Edge cases :**
-  - **BHV-2a** — chevauchement sur une AUTRE salle : autorisé.
-  - **BHV-2b** — chevauchement avec une réservation `cancelled` : autorisé (l'annulée ne compte pas).
+### BHV-2 — Reject an overlap
+- **Given** an existing `confirmed` booking on the room that intersects `[start, end)`
+- **When** attempting to book the same slot (same room)
+- **Then** rejected, reason `overlap`, no booking created
+- **Edge cases:**
+  - **BHV-2a** — overlap on ANOTHER room: allowed.
+  - **BHV-2b** — overlap with a `cancelled` booking: allowed (the cancelled one does not count).
 
-### BHV-3 — Annuler une réservation
-- **Given** une réservation `confirmed` d'`id` donné
-- **When** on l'annule
-- **Then** son `status` passe à `"cancelled"` et son créneau redevient réservable (BHV-2b)
-- **Edge cases :** **BHV-3a** — annuler un `id` inexistant : rejet, raison `not_found`.
+### BHV-3 — Cancel a booking
+- **Given** a `confirmed` booking with a given `id`
+- **When** it is cancelled
+- **Then** its `status` becomes `"cancelled"` and its slot becomes bookable again (BHV-2b)
+- **Edge cases:** **BHV-3a** — cancelling a non-existent `id`: rejected, reason `not_found`.
 
-### BHV-4 — Calculer les disponibilités
-- **Given** une salle et une fenêtre `[window_start, window_end)`
-- **When** on demande `availability(room_id, window_start, window_end)`
-- **Then** retourne la liste des trous libres `(start, end)` dans la fenêtre, **triés par start**,
-  en excluant les réservations `confirmed` et en fusionnant les trous adjacents.
+### BHV-4 — Compute availability
+- **Given** a room and a window `[window_start, window_end)`
+- **When** requesting `availability(room_id, window_start, window_end)`
+- **Then** returns the list of free gaps `(start, end)` within the window, **sorted by start**,
+  excluding `confirmed` bookings and merging adjacent gaps.
 
 ## 5. Examples
 
-### EX-1 — réservation nominale
+### EX-1 — nominal booking
 ```yaml
 input: { op: book, room_id: "A", start: 540, end: 600, holder: "alice" }   # 09:00–10:00
 expected_output: { status: "confirmed" }
 covers: [BHV-1]
 ```
 
-### EX-2 — chevauchement refusé
+### EX-2 — overlap rejected
 ```yaml
 given: [{ room_id: "A", start: 540, end: 600 }]
-input: { op: book, room_id: "A", start: 570, end: 630 }   # 09:30–10:30 chevauche
+input: { op: book, room_id: "A", start: 570, end: 630 }   # 09:30–10:30 overlaps
 expected_output: { rejected: "overlap" }
 covers: [BHV-2]
 ```
 
-### EX-3 — créneaux adjacents autorisés
+### EX-3 — adjacent slots allowed
 ```yaml
 given: [{ room_id: "A", start: 540, end: 600 }]
 input: { op: book, room_id: "A", start: 600, end: 660 }   # 10:00–11:00 adjacent
@@ -94,7 +94,7 @@ expected_output: { status: "confirmed" }
 covers: [BHV-1a]
 ```
 
-### EX-4 — disponibilités
+### EX-4 — availability
 ```yaml
 given: [{ room_id: "A", start: 540, end: 600 }, { room_id: "A", start: 660, end: 720 }]
 input: { op: availability, room_id: "A", window_start: 480, window_end: 780 }  # 08:00–13:00
@@ -102,7 +102,7 @@ expected_output: { gaps: [[480, 540], [600, 660], [720, 780]] }
 covers: [BHV-4]
 ```
 
-### EX-5 — durée trop longue refusée
+### EX-5 — duration too long rejected
 ```yaml
 input: { op: book, room_id: "B", start: 540, end: 800 }   # 260 min > 240
 expected_output: { rejected: "too_long" }
@@ -111,26 +111,27 @@ covers: [BHV-1c]
 
 ## 6. Non-goals
 
-- **NG-1** — Persistance (base de données) : hors scope, le store est en mémoire.
-- **NG-2** — Fuseaux horaires / dates calendaires : on raisonne en minutes depuis minuit sur une journée.
-- **NG-3** — Réservations récurrentes : hors scope.
+- **NG-1** — Persistence (database): out of scope, the store is in memory.
+- **NG-2** — Time zones / calendar dates: we reason in minutes since midnight over a single day.
+- **NG-3** — Recurring bookings: out of scope.
 
 ## 7. Evals — merge gate
 
-*Convention : test pytest `@pytest.mark.eval`, nom contenant l'ID en minuscules.*
+*Convention: a pytest test marked `@pytest.mark.eval`, name containing the ID in lowercase.*
 
-| ID | Type | Description | Couvre | Seuil |
+| ID | Type | Description | Covers | Threshold |
 |---|---|---|---|---|
-| EVAL-1 | deterministic | EX-1 à EX-5 vérifiés exactement | BHV-1, BHV-1a, BHV-1c, BHV-2, BHV-4 | 100 % |
-| EVAL-2 | property-based | sur 500 séquences de réservations acceptées (seed fixe), INV-1 tient (aucun chevauchement confirmé) | INV-1, INV-2, INV-3 | 100 % |
-| EVAL-3 | deterministic | `availability` fusionne les trous adjacents et exclut les `cancelled` (BHV-2b) | BHV-4, BHV-3 | 100 % |
+| EVAL-1 | deterministic | EX-1 to EX-5 verified exactly | BHV-1, BHV-1a, BHV-1c, BHV-2, BHV-4 | 100% |
+| EVAL-2 | property-based | over 500 sequences of accepted bookings (fixed seed), INV-1 holds (no confirmed overlap) | INV-1, INV-2, INV-3 | 100% |
+| EVAL-3 | deterministic | `availability` merges adjacent gaps and excludes `cancelled` ones (BHV-2b) | BHV-4, BHV-3 | 100% |
 
 ## 8. Open questions
 
-*(aucune — spec close pour le test E2E)*
+*(none — spec closed for the E2E test)*
 
 ## 9. Changelog
 
-| Version | Date | Auteur | Changement |
+| Version | Date | Author | Change |
 |---|---|---|---|
-| 1.0.0 | 2026-06-15 | métier (simulé E2E) | Création — contrat v1 |
+| 1.0.0 | 2026-06-15 | business (E2E simulated) | Creation — contract v1 |
+| 1.0.1 | 2026-06-18 | translation | English translation (form only, no substance change) |

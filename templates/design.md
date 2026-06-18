@@ -1,104 +1,104 @@
 ---
 artifact: design
-feature: <slug-de-la-feature>
+feature: <feature-slug>
 version: 0.1.0
 status: draft            # draft | validated | superseded
-owner: <Owner courant>
-validated_by: <FDE — nom + date>
-spec: ./spec.md          # version de spec couverte : <x.y.z>
+owner: <current Owner>
+validated_by: <FDE — name + date>
+spec: ./spec.md          # spec version covered: <x.y.z>
 ---
 
-# Design — <Nom de la feature>
+# Design — <Feature name>
 
-> **Le COMMENT. L'architecture.** Principe fondateur : **on n'invente pas d'architecture, on s'adosse**.
-> Tout choix technique doit pointer soit vers un repo interne de référence, soit vers une grande application
-> open source Python qui a prouvé le pattern en production. L'agent qui implémente cite le pattern
-> de référence (repo + chemin de fichier) dans son code review.
+> **The HOW. The architecture.** Founding principle: **we don't invent architecture, we lean on existing one**.
+> Every technical choice must point either to an internal reference repo, or to a large
+> open source Python application that has proven the pattern in production. The agent that implements cites the reference
+> pattern (repo + file path) in its code review.
 
 ## 1. Architecture overview
 
-*Schéma (mermaid) + 5-10 lignes. Les bounded contexts, les flux principaux, ce qui est synchrone/asynchrone.*
+*Diagram (mermaid) + 5-10 lines. The bounded contexts, the main flows, what is synchronous/asynchronous.*
 
 ```mermaid
 flowchart LR
-    A[<composant>] --> B[<composant>]
+    A[<component>] --> B[<component>]
 ```
 
-## 2. Reference repositories — la fondation
+## 2. Reference repositories — the foundation
 
-### 2.1 Repos internes de référence *(à collecter AVANT toute décision — checklist Owner)*
+### 2.1 Internal reference repos *(to collect BEFORE any decision — Owner checklist)*
 
-*Demander aux équipes leurs repos existants sur le périmètre. Pour chaque repo : ce qu'on en reprend (conventions, patterns, contrats d'API) et ce qu'on ne reprend PAS. L'agent `design-scout` produit cette analyse.*
+*Ask the teams for their existing repos on the scope. For each repo: what we reuse from it (conventions, patterns, API contracts) and what we do NOT reuse. The `design-scout` agent produces this analysis.*
 
-| Repo | Équipe / contact | Accès J1 ? | Ce qu'on reprend | Ce qu'on écarte |
+| Repo | Team / contact | Access on day 1? | What we reuse | What we drop |
 |---|---|---|---|---|
-| `<org>/<repo>` | <équipe> | ☐ | <pattern, contrat, convention> | <legacy, anti-pattern> |
+| `<org>/<repo>` | <team> | ☐ | <pattern, contract, convention> | <legacy, anti-pattern> |
 
-**Checklist de collecte :**
-- ☐ Repos du domaine métier concerné (le code existant EST la doc du comportement actuel)
-- ☐ Repo des contrats d'API / schémas d'événements du SI
-- ☐ Repo Design System + exemples d'intégration existants
-- ☐ Pipelines CI/CD de référence (Global Ready)
-- ☐ Conventions de l'équipe : lint, structure, nommage
+**Collection checklist:**
+- ☐ Repos of the business domain concerned (the existing code IS the documentation of the current behavior)
+- ☐ Repo of the API contracts / event schemas of the information system
+- ☐ Design System repo + existing integration examples
+- ☐ Reference CI/CD pipelines (Global Ready)
+- ☐ Team conventions: lint, structure, naming
 
-### 2.2 Références open source Python *(les patterns éprouvés à grande échelle)*
+### 2.2 Open source Python references *(the patterns proven at scale)*
 
-*Pour chaque problème d'architecture, on identifie LA grande app OSS Python qui l'a résolu en production, et on emprunte son pattern — pas son code. Exemples de viviers : **FastAPI full-stack-template** (structure service), **Django** (ORM, migrations, admin), **Sentry** (monorepo Python à l'échelle, feature flags), **Saleor** (e-commerce, catalogue, checkout), **PostHog** (produit + analytics, plugin system), **Airflow** (orchestration DAG), **LangGraph/agents** (workflows agentiques).*
+*For each architecture problem, we identify THE large OSS Python app that solved it in production, and we borrow its pattern — not its code. Example pools: **FastAPI full-stack-template** (service structure), **Django** (ORM, migrations, admin), **Sentry** (Python monorepo at scale, feature flags), **Saleor** (e-commerce, catalog, checkout), **PostHog** (product + analytics, plugin system), **Airflow** (DAG orchestration), **LangGraph/agents** (agentic workflows).*
 
-| Problème | Référence OSS | Pattern emprunté | Lien (fichier/module précis) |
+| Problem | OSS reference | Borrowed pattern | Link (specific file/module) |
 |---|---|---|---|
-| <ex : structure du service> | `fastapi/full-stack-fastapi-template` | <layout src/, deps, settings Pydantic> | <URL ou chemin> |
-| <ex : modèle catalogue> | `saleor/saleor` | <modélisation produit/variante> | <URL ou chemin> |
+| <e.g. service structure> | `fastapi/full-stack-fastapi-template` | <src/ layout, deps, Pydantic settings> | <URL or path> |
+| <e.g. catalog model> | `saleor/saleor` | <product/variant modeling> | <URL or path> |
 
 ## 3. Stack
 
-| Couche | Choix | Justifié par (réf §2) |
+| Layer | Choice | Justified by (ref §2) |
 |---|---|---|
-| Runtime | Python 3.12, FastAPI, Pydantic v2 | <réf> |
-| Données | <PostgreSQL / BigQuery / …> | <réf> |
-| IA | <Vertex AI / Claude API, modèles, fallbacks> | <réf> |
-| Front | <Design System + …> | repo Design System interne |
-| Infra | GCP : <Cloud Run / GKE / …> | pipeline Global Ready |
+| Runtime | Python 3.12, FastAPI, Pydantic v2 | <ref> |
+| Data | <PostgreSQL / BigQuery / …> | <ref> |
+| AI | <Vertex AI / Claude API, models, fallbacks> | <ref> |
+| Front | <Design System + …> | internal Design System repo |
+| Infra | GCP: <Cloud Run / GKE / …> | Global Ready pipeline |
 
 ## 4. ADRs — Architecture Decision Records
 
-*Une ADR par décision structurante. Format court, versionné ici (pas de doc externe).*
+*One ADR per structural decision. Short format, versioned here (no external doc).*
 
-### ADR-1 — <titre de la décision>
-- **Status :** accepted | proposed | superseded by ADR-n
-- **Context :** <le problème, en 2-3 lignes>
-- **Decision :** <ce qu'on fait>
-- **Anchored on :** <repo de référence §2 + pattern>
-- **Alternatives considered :** <option B (rejetée car…), option C (rejetée car…)>
-- **Consequences :** <ce que ça implique, dettes acceptées>
+### ADR-1 — <title of the decision>
+- **Status:** accepted | proposed | superseded by ADR-n
+- **Context:** <the problem, in 2-3 lines>
+- **Decision:** <what we do>
+- **Anchored on:** <reference repo §2 + pattern>
+- **Alternatives considered:** <option B (rejected because…), option C (rejected because…)>
+- **Consequences:** <what it implies, accepted debts>
 
 ## 5. Contracts & data
 
-*Contrats d'API (OpenAPI généré par FastAPI), schémas d'événements, modèle de données. Pointer les fichiers, ne pas dupliquer.*
+*API contracts (OpenAPI generated by FastAPI), event schemas, data model. Point to the files, do not duplicate.*
 
-- API : `src/<service>/api/` — contrat généré, snapshot commité dans `contracts/openapi.json`
-- Événements : <schémas + topic(s)>
-- Données : <diagramme ou lien vers migrations>
+- API: `src/<service>/api/` — generated contract, snapshot committed in `contracts/openapi.json`
+- Events: <schemas + topic(s)>
+- Data: <diagram or link to migrations>
 
 ## 6. Design System & Global Ready
 
-- **Design System :** composants utilisés, tokens, écarts éventuels (à faire valider).
-- **Global Ready :** ☐ CI conforme ☐ SAST/DAST ☐ gestion des secrets ☐ i18n ☐ RGPD/données perso ☐ accessibilité.
+- **Design System:** components used, tokens, any deviations (to be validated).
+- **Global Ready:** ☐ compliant CI ☐ SAST/DAST ☐ secrets management ☐ i18n ☐ GDPR/personal data ☐ accessibility.
 
 ## 7. Observability & rollout
 
-- **Mesures :** lead time, part de code IA, défauts, coût complet (cf. Twin Track).
-- **Rollout :** <feature flag, % de trafic, plan de rollback>.
-- **SLO :** <latence p95, dispo, budget erreur>.
+- **Metrics:** lead time, share of AI-written code, defects, full cost (cf. Twin Track).
+- **Rollout:** <feature flag, % of traffic, rollback plan>.
+- **SLO:** <p95 latency, availability, error budget>.
 
 ## 8. Risks
 
-| Risque | Probabilité | Impact | Mitigation |
+| Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| <risque> | L/M/H | L/M/H | <action> |
+| <risk> | L/M/H | L/M/H | <action> |
 
 ## 9. Changelog
 
-| Version | Date | Auteur | Changement |
+| Version | Date | Author | Change |
 |---|---|---|---|
-| 0.1.0 | <date> | <Owner> + design-scout | Création |
+| 0.1.0 | <date> | <Owner> + design-scout | Created |

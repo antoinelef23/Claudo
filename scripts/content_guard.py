@@ -1,27 +1,27 @@
 #!/usr/bin/env python3
-"""Garde-fou FOND vs FORME pour spec.md et design.md.
+"""SUBSTANCE vs FORM guardrail for spec.md and design.md.
 
-Principe : le **fond** (le contrat métier de la spec, l'image technique du design) ne
-change QUE par amendement humain explicite (bump de version). La **forme** (mise en page,
-table↔liste, gras, ordre des sections, reformulation de prose) peut évoluer librement —
-notamment pour qu'un autre modèle comprenne mieux — MAIS sans jamais altérer le fond.
+Principle: the **substance** (the spec's business contract, the design's technical
+picture) changes ONLY by explicit human amendment (version bump). The **form** (layout,
+table↔list, bold, section order, prose rewording) may evolve freely — notably so another
+model understands it better — BUT without ever altering the substance.
 
-Ce script rend la règle mécanique : il extrait une **empreinte de fond** robuste à la forme
-et refuse tout changement de fond qui ne s'accompagne pas d'un bump de version.
+This script makes the rule mechanical: it extracts a **substance fingerprint** robust to
+form and refuses any substance change that does not come with a version bump.
 
-L'empreinte = contenu STRUCTURÉ et testable, normalisé (formatage retiré) :
-  - les assertions par ID : INV / BHV / EX / EVAL / NG / OQ (spec) et ADR (design),
-    avec leurs lignes de continuation (Given/When/Then, YAML d'exemple, décision d'ADR) ;
-  - les noms canoniques du glossaire (le code DOIT les utiliser → c'est du fond) ;
-  - les lignes KPI (valeurs chiffrées = fond).
-La prose libre (intent, commentaires) n'est PAS dans l'empreinte : sa reformulation est de la forme.
+The fingerprint = STRUCTURED, testable content, normalized (formatting stripped):
+  - the per-ID assertions: INV / BHV / EX / EVAL / NG / OQ (spec) and ADR (design),
+    with their continuation lines (Given/When/Then, example YAML, ADR decision);
+  - the canonical glossary names (the code MUST use them → that's substance);
+  - the KPI lines (numeric values = substance).
+Free prose (intent, comments) is NOT in the fingerprint: rewording it is form.
 
-Usage :
-  content_guard.py <ancien.md> <nouveau.md>      # compare deux fichiers
-  content_guard.py --git work/feat/spec.md        # compare l'arbre de travail à HEAD
-                                                   # exit 1 si le fond change sans bump de version
-  content_guard.py --against <ref> work/feat/spec.md  # compare l'arbre de travail à <ref>
-                                                   # (CI : <ref> = branche de base, pas HEAD)
+Usage:
+  content_guard.py <old.md> <new.md>              # compare two files
+  content_guard.py --git work/feat/spec.md        # compare the working tree to HEAD
+                                                   # exit 1 if the substance changes without a version bump
+  content_guard.py --against <ref> work/feat/spec.md  # compare the working tree to <ref>
+                                                   # (CI: <ref> = base branch, not HEAD)
 """
 
 from __future__ import annotations
@@ -32,38 +32,38 @@ import sys
 from pathlib import Path
 
 ID = r"(?:INV|BHV|EX|EVAL|NG|OQ|ADR)-\w+"
-# Inclut chiffres / « . » / « ) » : une liste numérotée « 1. **INV-1** … » doit aussi
-# voir son ID capté (finding M1) — sinon l'ID et ses lignes de continuation tombent de
-# l'empreinte et le fond peut changer sans bump de version.
+# Includes digits / "." / ")": a numbered list "1. **INV-1** …" must also have
+# its ID captured (finding M1) — otherwise the ID and its continuation lines drop
+# out of the fingerprint and the substance can change without a version bump.
 _LEADING = re.compile(r"^[\s#\-*|`>.)0-9]+")
 _DEF = re.compile(rf"^\*{{0,2}}({ID})")
-_HEAD2 = re.compile(r"^#{1,2}\s")  # ## section → reset du contexte d'ID
+_HEAD2 = re.compile(r"^#{1,2}\s")  # ## section → reset of the ID context
 _KPI = re.compile(r"KPI", re.I)
 _FMT = re.compile(r"[`*_#>|]")
 
 
 def _norm(s: str) -> str:
-    """Normalise une ligne : retire le formatage markdown (gras, table, puces,
-    séparateurs em-dash) pour que liste↔table↔prose donnent le même fond."""
+    """Normalize a line: strip markdown formatting (bold, table, bullets,
+    em-dash separators) so list↔table↔prose yield the same substance."""
     s = _FMT.sub(" ", s)  # ` * _ # > |
     s = re.sub(
         r"^\s*\d+[.)]\s+", " ", s
-    )  # numérotation « 1. » / « 2) » en tête (M1 : liste↔num)
-    s = re.sub(r"^\s*[-*]\s+", " ", s)  # puce de liste en tête
-    # Seuls les tirets TYPOGRAPHIQUES « — »/« – » sont des séparateurs de prose. Le
-    # trait d'union ASCII « - » est conservé : sinon « end - start » ≡ « end start »
-    # masquerait une suppression d'opérateur (finding L2).
-    s = re.sub(r"\s+[—–]\s+", " ", s)  # séparateurs « — » / « – » espacés
+    )  # leading numbering "1." / "2)" (M1: list↔num)
+    s = re.sub(r"^\s*[-*]\s+", " ", s)  # leading list bullet
+    # Only TYPOGRAPHIC dashes "—"/"–" are prose separators. The ASCII hyphen "-"
+    # is kept: otherwise "end - start" ≡ "end start" would mask an operator
+    # removal (finding L2).
+    s = re.sub(r"\s+[—–]\s+", " ", s)  # spaced "—" / "–" separators
     return re.sub(r"\s+", " ", s).strip()
 
 
 def extract_content(text: str) -> dict[str, str]:
-    """Empreinte de fond : {clé -> texte normalisé}. Robuste à la forme.
+    """Substance fingerprint: {key -> normalized text}. Robust to form.
 
-    Limite de périmètre connue (finding L1) : seule la substance PORTÉE PAR UN ID
-    (INV/BHV/EX/EVAL/NG/OQ/ADR), le glossaire et les KPI est empreintée. La prose
-    normative SANS ID (« - X MUST be positive ») n'est pas suivie — c'est un choix
-    assumé (convention : tout fond testable porte un ID)."""
+    Known scope limit (finding L1): only the substance CARRIED BY AN ID
+    (INV/BHV/EX/EVAL/NG/OQ/ADR), the glossary and the KPIs is fingerprinted.
+    Normative prose WITHOUT an ID ("- X MUST be positive") is not tracked — that
+    is a deliberate choice (convention: all testable substance carries an ID)."""
     content: dict[str, list[str]] = {}
     current: str | None = None
     in_glossary = False
@@ -72,11 +72,11 @@ def extract_content(text: str) -> dict[str, str]:
         line = raw.rstrip()
         stripped = _LEADING.sub("", line)
         m = _DEF.match(stripped)
-        if m:  # une ligne qui INTRODUIT un ID (def, pas mention inline)
+        if m:  # a line that INTRODUCES an ID (def, not inline mention)
             current = m.group(1)
             content.setdefault(current, []).append(_norm(line))
             continue
-        if _HEAD2.match(line):  # frontière de section
+        if _HEAD2.match(line):  # section boundary
             current = None
             in_glossary = (
                 "gloss—" in line.lower()
@@ -84,15 +84,15 @@ def extract_content(text: str) -> dict[str, str]:
                 or "glossaire" in line.lower()
             )
             continue
-        # lignes de continuation rattachées à l'ID courant (Given/When/Then, YAML, ADR…)
+        # continuation lines attached to the current ID (Given/When/Then, YAML, ADR…)
         if current and line.strip():
             content[current].append(_norm(line))
             continue
-        # glossaire : noms canoniques (code), quelle que soit la forme (table OU liste)
+        # glossary: canonical names (code), whatever the form (table OR list)
         if in_glossary:
             for c in re.findall(r"`([^`]+)`", line):
                 content[f"GLOSS:{c}"] = [c]
-        # lignes KPI hors ID
+        # KPI lines outside an ID
         if _KPI.search(line):
             content.setdefault("KPI", []).append(_norm(line))
 
@@ -100,7 +100,7 @@ def extract_content(text: str) -> dict[str, str]:
 
 
 def diff_content(old: str, new: str) -> dict[str, tuple[str, str]]:
-    """Renvoie {clé -> (avant, après)} pour chaque élément de fond modifié/ajouté/supprimé."""
+    """Returns {key -> (before, after)} for each modified/added/removed substance element."""
     a, b = extract_content(old), extract_content(new)
     changed: dict[str, tuple[str, str]] = {}
     for k in sorted(set(a) | set(b)):
@@ -115,8 +115,8 @@ def _version(text: str) -> str | None:
 
 
 def _focus(a: str, b: str, ctx: int = 25, tail: int = 70) -> tuple[str, str]:
-    """Cadre l'aperçu autour de la PREMIÈRE divergence (sinon une diff loin
-    dans une longue ligne reste invisible — les deux côtés paraissent identiques)."""
+    """Frame the preview around the FIRST divergence (otherwise a diff far
+    into a long line stays invisible — both sides look identical)."""
     i = 0
     while i < min(len(a), len(b)) and a[i] == b[i]:
         i += 1
@@ -131,10 +131,10 @@ def _focus(a: str, b: str, ctx: int = 25, tail: int = 70) -> tuple[str, str]:
 
 
 def main() -> int:
-    # NB (finding L3) : --git compare l'arbre de travail à HEAD — c'est un garde-fou
-    # AVISEUR (pré-commit / pré-revue), pas une barrière au moment du commit. Les octets
-    # déjà dans HEAD n'ont jamais été gardés. Pour une barrière dure, brancher en hook
-    # pre-commit sur le contenu indexé.
+    # NB (finding L3): --git compares the working tree to HEAD — it is an ADVISORY
+    # guardrail (pre-commit / pre-review), not a barrier at commit time. The bytes
+    # already in HEAD were never guarded. For a hard barrier, hook into pre-commit
+    # on the indexed content.
     args = sys.argv[1:]
     if args and args[0] == "--git":
         path = args[1]
@@ -155,12 +155,12 @@ def main() -> int:
                 check=True,
             ).stdout
         except subprocess.CalledProcessError:
-            print(f"✅ {path} : nouveau fichier (pas de version HEAD à comparer)")
+            print(f"✅ {path}: new file (no HEAD version to compare)")
             return 0
     elif len(args) == 3 and args[0] == "--against":
-        # CI (finding M11) : compare l'arbre de travail à une base arbitraire (la
-        # branche de base), pas HEAD — sinon en checkout propre arbre==HEAD et le
-        # garde-fou passerait toujours trivialement.
+        # CI (finding M11): compare the working tree to an arbitrary base (the
+        # base branch), not HEAD — otherwise on a clean checkout tree==HEAD and the
+        # guardrail would always pass trivially.
         ref, path = args[1], args[2]
         new = Path(path).read_text(encoding="utf-8")
         rel = (
@@ -175,7 +175,7 @@ def main() -> int:
             ["git", "show", f"{ref}:{rel}"], capture_output=True, text=True
         )
         if shown.returncode != 0:
-            print(f"✅ {path} : absent de {ref} (nouveau fichier) — rien à comparer.")
+            print(f"✅ {path}: absent from {ref} (new file) — nothing to compare.")
             return 0
         old = shown.stdout
     elif len(args) == 2:
@@ -188,25 +188,25 @@ def main() -> int:
 
     changed = diff_content(old, new)
     if not changed:
-        print(f"✅ {path} : fond identique — la forme peut évoluer librement.")
+        print(f"✅ {path}: substance identical — the form may evolve freely.")
         return 0
 
     bumped = _version(old) != _version(new)
     print(
-        f"{'✅' if bumped else '⛔'} {path} : {len(changed)} élément(s) de fond modifié(s) :"
+        f"{'✅' if bumped else '⛔'} {path}: {len(changed)} substance element(s) modified:"
     )
     for k, (av, ap) in changed.items():
         fa, fb = _focus(av, ap)
-        print(f"  • {k}\n      avant : {fa}\n      après : {fb}")
+        print(f"  • {k}\n      before: {fa}\n      after: {fb}")
     if bumped:
         print(
-            f"→ version bumpée ({_version(old)} → {_version(new)}) : amendement assumé, OK."
+            f"→ version bumped ({_version(old)} → {_version(new)}): amendment assumed, OK."
         )
         return 0
     print(
-        "→ ⛔ le FOND a changé SANS bump de version. Un reformat ne doit toucher que la FORME.\n"
-        "  Si c'est volontaire (amendement métier/technique), bumpe `version:` + changelog\n"
-        "  (commit séparé). Sinon, restaure le fond et ne garde que la mise en forme."
+        "→ ⛔ the SUBSTANCE changed WITHOUT a version bump. A reformat must only touch the FORM.\n"
+        "  If intentional (business/technical amendment), bump `version:` + changelog\n"
+        "  (separate commit). Otherwise, restore the substance and keep only the formatting."
     )
     return 1
 

@@ -1,18 +1,18 @@
 ---
 artifact: design
 feature: devis-pose
-version: 1.0.0
+version: 1.0.1
 status: validated
 owner: Antoine (simulation)
-validated_by: FDE simulé — 2026-06-10
-spec: ./spec.md          # version : 1.0.0
+validated_by: simulated FDE — 2026-06-10
+spec: ./spec.md          # version : 1.0.1
 ---
 
-# Design — Devis de pose salle de bain
+# Design — Bathroom installation quote
 
-> Périmètre de simulation : fonctions pures + CLI, zéro I/O réseau. L'objectif est de
-> valider le pipeline orchestré (plan-lint → vagues parallèles → evals → checkpoints),
-> pas de produire l'architecture cible d'Agent Douche.
+> Simulation scope: pure functions + CLI, zero network I/O. The goal is to
+> validate the orchestrated pipeline (plan-lint → parallel waves → evals → checkpoints),
+> not to produce the target architecture of Agent Douche.
 
 ## 1. Architecture overview
 
@@ -23,56 +23,57 @@ flowchart LR
     CALC --> FMT
 ```
 
-Trois modules sous `src/devis/` : `calc.py` (domaine pur), `format.py` (présentation pure),
-`cli.py` (entrée argparse). `format_quote` consomme le dict produit par `compute_quote`
-(contrat = clés des Examples de la spec).
+Three modules under `src/devis/`: `calc.py` (pure domain), `format.py` (pure presentation),
+`cli.py` (argparse entry). `format_quote` consumes the dict produced by `compute_quote`
+(contract = keys of the spec's Examples).
 
 ## 2. Reference repositories
 
-| Problème | Référence OSS | Pattern emprunté | Lien |
+| Problem | OSS reference | Borrowed pattern | Link |
 |---|---|---|---|
-| Domaine pur testable | `cosmicpython/code` | fonctions de domaine sans I/O, testées par exemples | chap. 1, `model.py` |
-| Arrondi monétaire | stdlib Python | `round(x, 2)` suffisant en simulation (EUR, 2 déc.) | — |
+| Testable pure domain | `cosmicpython/code` | domain functions without I/O, tested by examples | ch. 1, `model.py` |
+| Monetary rounding | Python stdlib | `round(x, 2)` is enough for the simulation (EUR, 2 dec.) | — |
 
 ## 3. Stack
 
-| Couche | Choix | Justifié par |
+| Layer | Choice | Justified by |
 |---|---|---|
-| Runtime | Python 3.12, stdlib uniquement | simulation : zéro dépendance runtime |
-| Tests/evals | pytest (marker `eval`), uv | conventions du lab (CLAUDE.md) |
+| Runtime | Python 3.12, stdlib only | simulation: zero runtime dependency |
+| Tests/evals | pytest (marker `eval`), uv | lab conventions (CLAUDE.md) |
 
 ## 4. ADRs
 
-### ADR-1 — Calcul en fonctions pures, montants en float arrondis à 2 décimales
-- **Status :** accepted
-- **Context :** simulation courte ; le vrai Agent Douche utilisera Decimal côté prod.
-- **Decision :** `compute_quote(products_subtotal_eur: float, surface_m2: float) -> dict`,
-  arrondis `round(x, 2)` aux frontières.
-- **Anchored on :** cosmicpython — domaine pur.
-- **Alternatives considered :** Decimal (rejeté : sur-dimensionné pour la simulation).
-- **Consequences :** dette assumée NG côté prod réelle.
+### ADR-1 — Computation in pure functions, amounts as floats rounded to 2 decimals
+- **Status:** accepted
+- **Context:** short simulation; the real Agent Douche will use Decimal on the prod side.
+- **Decision:** `compute_quote(products_subtotal_eur: float, surface_m2: float) -> dict`,
+  `round(x, 2)` at the boundaries.
+- **Anchored on:** cosmicpython — pure domain.
+- **Alternatives considered:** Decimal (rejected: over-engineered for the simulation).
+- **Consequences:** debt assumed as NG on the real prod side.
 
 ## 5. Contracts & data
 
-Contrat de `compute_quote` = clés exactes des Examples : `products_eur`, `installation_eur`,
-`total_eur`, `is_estimate`. C'est le contrat d'entrée de `format_quote`.
+`compute_quote` contract = exact keys of the Examples: `products_eur`, `installation_eur`,
+`total_eur`, `is_estimate`. This is the input contract of `format_quote`.
 
 ## 6. Design System & Global Ready
 
-N/A en simulation (pas de front).
+N/A in simulation (no front end).
 
 ## 7. Observability & rollout
 
-N/A en simulation.
+N/A in simulation.
 
 ## 8. Risks
 
-| Risque | Probabilité | Impact | Mitigation |
+| Risk | Probability | Impact | Mitigation |
 |---|---|---|---|
-| Flottants → erreurs d'arrondi | M | L | EVAL-1 vérifie à l'euro près sur les Examples |
+| Floats → rounding errors | M | L | EVAL-1 verifies to the euro on the Examples |
 
 ## 9. Changelog
 
-| Version | Date | Auteur | Changement |
+| Version | Date | Author | Change |
 |---|---|---|---|
-| 1.0.0 | 2026-06-10 | simulation | Création |
+| 1.0.0 | 2026-06-10 | simulation | Creation |
+| 1.0.1 | 2026-06-18 | translation | English translation (form only, no substance change) |

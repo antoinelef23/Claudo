@@ -1,10 +1,10 @@
-"""Evals du module calc — spec devis-pose §7 (EVAL-1, EVAL-2)."""
+"""Evals for the calc module — spec devis-pose §7 (EVAL-1, EVAL-2)."""
 
 import pytest
 
 from devis.calc import compute_quote
 
-# EX-1, EX-2, EX-3 — spec.md §5, vérifiés à l'euro près (EVAL-1)
+# EX-1, EX-2, EX-3 — spec.md §5, checked to the nearest euro (EVAL-1)
 EXAMPLES = [
     pytest.param(
         {"products_subtotal_eur": 1500.00, "surface_m2": 10},
@@ -14,7 +14,7 @@ EXAMPLES = [
             "total_eur": 1950.00,
             "is_estimate": True,
         },
-        id="ex-1-nominal-sans-remise",
+        id="ex-1-nominal-no-discount",
     ),
     pytest.param(
         {"products_subtotal_eur": 2500.00, "surface_m2": 20},
@@ -24,12 +24,12 @@ EXAMPLES = [
             "total_eur": 3275.00,
             "is_estimate": True,
         },
-        id="ex-2-remise-volume-pose-intacte",
+        id="ex-2-volume-discount-installation-intact",
     ),
     pytest.param(
         {"products_subtotal_eur": 100.00, "surface_m2": 0},
         {"total_eur": 100.00},
-        id="ex-3-surface-nulle",
+        id="ex-3-zero-surface",
     ),
 ]
 
@@ -42,12 +42,12 @@ def test_eval_1_exemples_exacts(inputs: dict, expected: dict) -> None:
         if isinstance(value, bool):
             assert quote[key] is value
         else:
-            assert quote[key] == pytest.approx(value, abs=0.5)  # à l'euro près
+            assert quote[key] == pytest.approx(value, abs=0.5)  # to the nearest euro
 
 
 def _grille() -> list[tuple[float, float]]:
-    # EVAL-2 : montants 0→10⁶, surfaces 0→500, plus les bords métier
-    # (seuil de remise BHV-2/BHV-2a, surface nulle BHV-1a).
+    # EVAL-2: amounts 0→10^6, surfaces 0→500, plus the business edges
+    # (discount threshold BHV-2/BHV-2a, zero surface BHV-1a).
     montants = [i * 1_000_000 / 40 for i in range(41)]
     montants += [0.01, 1999.99, 2000.00, 2000.01, 2050.55]
     surfaces = [i * 500 / 20 for i in range(21)]

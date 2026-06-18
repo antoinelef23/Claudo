@@ -1,18 +1,18 @@
 ---
 artifact: design
 feature: salle-booking
-version: 1.0.0
+version: 1.0.1
 status: validated
-owner: Antoine (test E2E)
-validated_by: FDE simulé — 2026-06-15
-spec: ./spec.md          # version : 1.0.0
+owner: Antoine (E2E test)
+validated_by: simulated FDE — 2026-06-15
+spec: ./spec.md          # version : 1.0.1
 ---
 
-# Design — Réservation de salles
+# Design — Room booking
 
-> **Le COMMENT.** Cœur métier pur en mémoire, sans I/O. On s'adosse au pattern « domaine pur +
-> store en mémoire » (cosmicpython, *Architecture Patterns with Python*, chap. 1-2) : entités et
-> règles testables sans infrastructure. *(Pour une vraie feature : design-scout sur les repos réels.)*
+> **The HOW.** Pure business core in memory, no I/O. We lean on the "pure domain +
+> in-memory store" pattern (cosmicpython, *Architecture Patterns with Python*, ch. 1-2):
+> entities and rules testable without infrastructure. *(For a real feature: design-scout on the real repos.)*
 
 ## 1. Architecture overview
 
@@ -25,65 +25,66 @@ flowchart LR
     STORE --> AVAIL
 ```
 
-Quatre modules sous `src/booking/` :
-- `model.py` — `Booking` (dataclass : id, room_id, start, end, holder, status) + validation INV-2/INV-3 + test de chevauchement entre deux créneaux.
-- `store.py` — `BookingStore` en mémoire : `book(...)`, `cancel(id)`, `confirmed(room_id)`. Applique INV-1 (refus overlap) en s'appuyant sur `model`.
-- `availability.py` — `availability(store, room_id, window_start, window_end)` : calcule les trous à partir des réservations `confirmed`.
-- `cli.py` — argparse minimal pour une démo manuelle.
+Four modules under `src/booking/`:
+- `model.py` — `Booking` (dataclass: id, room_id, start, end, holder, status) + INV-2/INV-3 validation + overlap test between two slots.
+- `store.py` — in-memory `BookingStore`: `book(...)`, `cancel(id)`, `confirmed(room_id)`. Enforces INV-1 (overlap rejection) by relying on `model`.
+- `availability.py` — `availability(store, room_id, window_start, window_end)`: computes gaps from `confirmed` bookings.
+- `cli.py` — minimal argparse for a manual demo.
 
 ## 2. Reference repositories
 
-| Problème | Référence OSS | Pattern emprunté | Lien |
+| Problem | OSS reference | Borrowed pattern | Link |
 |---|---|---|---|
-| Domaine pur + store en mémoire | `cosmicpython/code` | entités/règles sans I/O, store injecté | chap. 1-2 |
-| Détection de chevauchement | algorithme standard | `a.start < b.end and b.start < a.end` (intervalles demi-ouverts) | — |
+| Pure domain + in-memory store | `cosmicpython/code` | entities/rules without I/O, injected store | ch. 1-2 |
+| Overlap detection | standard algorithm | `a.start < b.end and b.start < a.end` (half-open intervals) | — |
 
 ## 3. Stack
 
-| Couche | Choix | Justifié par |
+| Layer | Choice | Justified by |
 |---|---|---|
-| Runtime | Python 3.12, stdlib uniquement | feature pure, zéro dépendance runtime |
-| Tests/evals | pytest (marker `eval`), `random` à seed fixe pour EVAL-2 | conventions du lab |
+| Runtime | Python 3.12, stdlib only | pure feature, zero runtime dependency |
+| Tests/evals | pytest (marker `eval`), `random` with fixed seed for EVAL-2 | lab conventions |
 
 ## 4. ADRs
 
-### ADR-1 — Intervalles demi-ouverts `[start, end)`, temps en minutes (int)
-- **Status :** accepted
-- **Context :** il faut que les créneaux adjacents ne comptent pas comme chevauchement (BHV-1a), et rester déterministe (pas de `datetime.now`).
-- **Decision :** créneaux `[start, end)` en minutes depuis minuit (int 0..1440). Chevauchement = `a.start < b.end and b.start < a.end`.
-- **Anchored on :** algorithme d'intersection d'intervalles standard.
-- **Alternatives :** datetime (rejeté : non déterministe, hors scope NG-2).
-- **Consequences :** une journée = 0..1440 ; pas de multi-jours (assumé, NG-2).
+### ADR-1 — Half-open intervals `[start, end)`, time in minutes (int)
+- **Status:** accepted
+- **Context:** adjacent slots must not count as an overlap (BHV-1a), and we must stay deterministic (no `datetime.now`).
+- **Decision:** slots `[start, end)` in minutes since midnight (int 0..1440). Overlap = `a.start < b.end and b.start < a.end`.
+- **Anchored on:** standard interval-intersection algorithm.
+- **Alternatives:** datetime (rejected: non-deterministic, out of scope NG-2).
+- **Consequences:** one day = 0..1440; no multi-day (assumed, NG-2).
 
-### ADR-2 — Store en mémoire, `status` plutôt que suppression
-- **Status :** accepted
-- **Context :** annuler doit libérer le créneau (BHV-3) mais garder une trace.
-- **Decision :** `cancel` passe `status="cancelled"` ; seules les `confirmed` comptent pour overlap et availability.
-- **Consequences :** soft-delete ; l'historique reste interrogeable.
+### ADR-2 — In-memory store, `status` rather than deletion
+- **Status:** accepted
+- **Context:** cancelling must free the slot (BHV-3) but keep a trace.
+- **Decision:** `cancel` sets `status="cancelled"`; only `confirmed` ones count for overlap and availability.
+- **Consequences:** soft-delete; the history stays queryable.
 
 ## 5. Contracts & data
 
-- `BookingStore.book(room_id, start, end, holder) -> dict` : `{"status":"confirmed","id":...}` ou `{"rejected": <raison>}` (raisons : `invalid_slot`, `too_long`, `overlap`).
-- `BookingStore.cancel(booking_id) -> dict` : `{"status":"cancelled"}` ou `{"rejected":"not_found"}`.
-- `availability(store, room_id, ws, we) -> list[tuple[int,int]]` : trous triés, fusionnés.
+- `BookingStore.book(room_id, start, end, holder) -> dict`: `{"status":"confirmed","id":...}` or `{"rejected": <reason>}` (reasons: `invalid_slot`, `too_long`, `overlap`).
+- `BookingStore.cancel(booking_id) -> dict`: `{"status":"cancelled"}` or `{"rejected":"not_found"}`.
+- `availability(store, room_id, ws, we) -> list[tuple[int,int]]`: sorted, merged gaps.
 
 ## 6. Design System & Global Ready
 
-N/A en test E2E (pas de front).
+N/A in E2E test (no front end).
 
 ## 7. Observability & rollout
 
-N/A en test E2E.
+N/A in E2E test.
 
 ## 8. Risks
 
-| Risque | Prob. | Impact | Mitigation |
+| Risk | Prob. | Impact | Mitigation |
 |---|---|---|---|
-| Bug de borne sur l'adjacence (BHV-1a) | M | M | EVAL-1 EX-3 + EVAL-2 property-based |
-| Trous mal fusionnés en availability | M | L | EVAL-3 cas adjacents |
+| Boundary bug on adjacency (BHV-1a) | M | M | EVAL-1 EX-3 + EVAL-2 property-based |
+| Gaps merged incorrectly in availability | M | L | EVAL-3 adjacent cases |
 
 ## 9. Changelog
 
-| Version | Date | Auteur | Changement |
+| Version | Date | Author | Change |
 |---|---|---|---|
-| 1.0.0 | 2026-06-15 | FDE (simulé) + design-scout | Création |
+| 1.0.0 | 2026-06-15 | FDE (simulated) + design-scout | Creation |
+| 1.0.1 | 2026-06-18 | translation | English translation (form only, no substance change) |

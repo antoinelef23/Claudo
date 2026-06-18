@@ -1,134 +1,135 @@
 ---
 artifact: spec
 feature: agent-douche
-version: 1.0.0
-status: draft            # → validated après Vibe Workshop avec le métier the client
+version: 1.0.1
+status: draft            # → validated after the Vibe Workshop with the client's business team
 owner: <Owner the client>
-validated_by: <métier the client — à signer en clôture du Vibe Workshop>
+validated_by: <the client's business team — to be signed off at the close of the Vibe Workshop>
 ---
 
-# Spec — Agent Douche (configurateur salle de bain)
+# Spec — Agent Douche (bathroom configurator)
 
-> ⚠️ **Exemple illustratif.** Les valeurs chiffrées et les exemples sont des hypothèses à confirmer
-> en Vibe Workshop avec le métier the client. Échéance : fête des projets mi-octobre 2026.
+> ⚠️ **Illustrative example.** The numeric values and the examples are assumptions to be confirmed
+> in a Vibe Workshop with the client's business team. Deadline: projects fair mid-October 2026.
 
 ## 1. Intent
 
-Un client dépose une photo de sa salle de bain ; l'agent lui propose 3 ambiances (moderne, naturel, classique) reconstituées avec des produits réels du catalogue the client, puis l'emmène jusqu'au panier avec les services associés (livraison, pose, devis). On supprime la friction entre l'inspiration et l'achat.
+A customer uploads a photo of their bathroom; the agent proposes 3 moods (modern, natural, classic) reconstructed with real products from the client catalog, then takes them all the way to the cart with the associated services (delivery, installation, quote). We remove the friction between inspiration and purchase.
 
-**KPI cible :** taux de conversion photo → panier ≥ 8 % ; panier moyen du tunnel ≥ 1,5× le panier moyen rayon salle de bain. Horizon : fête des projets mi-octobre.
+**Target KPI:** photo → cart conversion rate ≥ 8%; average cart of the funnel ≥ 1.5× the average cart of the bathroom department. Horizon: projects fair mid-October.
 
 ## 2. Glossary
 
-| Terme métier (FR) | Nom canonique (code) | Définition |
+| Business term (EN) | Canonical name (code) | Definition |
 |---|---|---|
-| Ambiance | `ambiance` | Univers décoratif généré : exactement un parmi `moderne`, `naturel`, `classique` |
-| Photo client | `room_photo` | Image de la salle de bain existante déposée par le client (JPEG/PNG/HEIC, ≤ 15 Mo) |
-| Produit matché | `matched_product` | Référence active du catalogue the client retenue pour une ambiance |
-| Rendu | `render` | Visualisation de la salle de bain du client recomposée dans une ambiance |
-| Tunnel | `checkout_flow` | Parcours panier + services (livraison, pose, devis) |
+| Mood | `ambiance` | Generated decorative theme: exactly one of `moderne`, `naturel`, `classique` |
+| Customer photo | `room_photo` | Image of the existing bathroom uploaded by the customer (JPEG/PNG/HEIC, ≤ 15 MB) |
+| Matched product | `matched_product` | Active reference from the client catalog selected for a mood |
+| Render | `render` | Visualization of the customer's bathroom recomposed in a mood |
+| Funnel | `checkout_flow` | Cart + services journey (delivery, installation, quote) |
 
 ## 3. Invariants
 
-- **INV-1** — Tout produit affiché MUST exister au catalogue the client, être actif et disponible (stock ou délai affiché). Jamais de produit halluciné.
-- **INV-2** — Chaque rendu MUST proposer exactement 3 ambiances : `moderne`, `naturel`, `classique`.
-- **INV-3** — Le prix affiché MUST être le prix catalogue temps réel au moment de l'affichage ; tout écart au panier est recalculé.
-- **INV-4** — La photo client MUST NOT être conservée au-delà de la session sans consentement explicite (RGPD) et MUST NOT servir à l'entraînement de modèles.
-- **INV-5** — Le système MUST NOT produire de devis ferme : le devis pose est une estimation, marquée comme telle, transmise au réseau de pose pour validation.
-- **INV-6** — Si la photo ne contient pas de salle de bain identifiable, le système MUST le dire et redemander — jamais de génération à l'aveugle.
+- **INV-1** — Every displayed product MUST exist in the client catalog, be active and available (in stock or with a displayed lead time). Never a hallucinated product.
+- **INV-2** — Each render MUST propose exactly 3 moods: `moderne`, `naturel`, `classique`.
+- **INV-3** — The displayed price MUST be the real-time catalog price at the moment of display; any discrepancy at the cart is recomputed.
+- **INV-4** — The customer photo MUST NOT be kept beyond the session without explicit consent (GDPR) and MUST NOT be used for model training.
+- **INV-5** — The system MUST NOT produce a firm quote: the installation quote is an estimate, marked as such, forwarded to the installation network for validation.
+- **INV-6** — If the photo does not contain an identifiable bathroom, the system MUST say so and ask again — never blind generation.
 
 ## 4. Behaviors
 
-### BHV-1 — Dépôt de la photo
-- **Given** un client sur le configurateur, sans compte requis
-- **When** il dépose une photo (JPEG/PNG/HEIC ≤ 15 Mo)
-- **Then** le système détecte la pièce, ses éléments (douche/baignoire, vasque, sol, murs, fenêtre) et affiche un récapitulatif « voici ce que j'ai compris » en ≤ 10 s (p95)
-- **Edge cases :**
-  - **BHV-1a** — photo floue/sombre : demande de reprise avec conseil de cadrage, max 3 tentatives
-  - **BHV-1b** — pièce ≠ salle de bain : message explicite (INV-6)
-  - **BHV-1c** — personnes visibles sur la photo : visages floutés avant tout traitement
+### BHV-1 — Photo upload
+- **Given** a customer on the configurator, with no account required
+- **When** they upload a photo (JPEG/PNG/HEIC ≤ 15 MB)
+- **Then** the system detects the room, its elements (shower/bathtub, washbasin, floor, walls, window) and displays a "here is what I understood" summary within ≤ 10 s (p95)
+- **Edge cases:**
+  - **BHV-1a** — blurry/dark photo: request to retake with framing advice, max 3 attempts
+  - **BHV-1b** — room ≠ bathroom: explicit message (INV-6)
+  - **BHV-1c** — people visible in the photo: faces blurred before any processing
 
-### BHV-2 — Proposition des 3 ambiances
-- **Given** une photo analysée avec succès
-- **When** le client demande les propositions
-- **Then** 3 rendus (un par ambiance, INV-2) s'affichent en ≤ 30 s (p95), chacun respectant la géométrie de la pièce (emplacements eau/évacuations inchangés)
+### BHV-2 — Proposal of the 3 moods
+- **Given** a successfully analyzed photo
+- **When** the customer requests the proposals
+- **Then** 3 renders (one per mood, INV-2) are displayed within ≤ 30 s (p95), each respecting the geometry of the room (water/drainage locations unchanged)
 
-### BHV-3 — Produits matchés
-- **Given** une ambiance sélectionnée
-- **When** le client ouvre le détail
-- **Then** la liste des produits du rendu s'affiche : référence, prix temps réel, dispo, lien fiche produit ; chaque élément visuel majeur du rendu correspond à un produit (INV-1)
-- **Edge cases :**
-  - **BHV-3a** — produit devenu indisponible : substitution par l'équivalent le plus proche, badge « remplacé »
+### BHV-3 — Matched products
+- **Given** a selected mood
+- **When** the customer opens the detail
+- **Then** the list of the render's products is displayed: reference, real-time price, availability, product-page link; each major visual element of the render corresponds to a product (INV-1)
+- **Edge cases:**
+  - **BHV-3a** — product become unavailable: substitution with the closest equivalent, "replaced" badge
 
-### BHV-4 — Panier + services
-- **Given** une sélection de produits dans une ambiance
-- **When** le client valide
-- **Then** le panier the client est créé avec les produits, et les services proposés : livraison (créneaux réels), pose (estimation, INV-5), prise de RDV devis
+### BHV-4 — Cart + services
+- **Given** a selection of products in a mood
+- **When** the customer confirms
+- **Then** the client cart is created with the products, and the proposed services: delivery (real time slots), installation (estimate, INV-5), quote appointment booking
 
 ## 5. Examples
 
-### EX-1 — cas nominal
+### EX-1 — nominal case
 ```yaml
 input:
-  room_photo: "sdb_6m2_baignoire_carrelage_blanc.jpg"   # 6 m², baignoire, fenêtre nord
-  action: "proposer les ambiances"
+  room_photo: "sdb_6m2_baignoire_carrelage_blanc.jpg"   # 6 m², bathtub, north window
+  action: "propose the moods"
 expected_output:
   renders: 3
   ambiances: [moderne, naturel, classique]
   naturel:
     produits_exemple:
-      - { ref: "vasque à poser bambou", prix: "catalogue temps réel", dispo: true }
-      - { ref: "receveur 120x90 effet pierre", prix: "catalogue temps réel", dispo: true }
-    geometrie: "baignoire remplacée par douche au même emplacement d'évacuation"
+      - { ref: "bamboo countertop washbasin", prix: "real-time catalog", dispo: true }
+      - { ref: "120x90 stone-effect shower tray", prix: "real-time catalog", dispo: true }
+    geometrie: "bathtub replaced by a shower at the same drainage location"
 covers: [BHV-2, BHV-3, INV-1, INV-2]
 ```
 
-### EX-2 — photo hors sujet
+### EX-2 — off-topic photo
 ```yaml
 input:
   room_photo: "salon_canape.jpg"
 expected_output:
-  message: "Je ne reconnais pas de salle de bain sur cette photo — pouvez-vous photographier la pièce à rénover ?"
+  message: "I do not recognize a bathroom in this photo — could you photograph the room to be renovated?"
   renders: 0
 covers: [BHV-1b, INV-6]
 ```
 
-### EX-3 — produit indisponible entre rendu et panier
+### EX-3 — product unavailable between render and cart
 ```yaml
 input:
-  action: "ajouter au panier"
-  produit: { ref: "carrelage X", statut_stock: "rupture nationale" }
+  action: "add to cart"
+  produit: { ref: "tile X", statut_stock: "national stockout" }
 expected_output:
-  panier: "créé avec substitut équivalent (même gamme de prix ±10 %), badge 'remplacé'"
+  panier: "created with an equivalent substitute (same price range ±10%), 'replaced' badge"
 covers: [BHV-3a, INV-1, INV-3]
 ```
 
 ## 6. Non-goals
 
-- **NG-1** — Pas de plan technique / plomberie : on ne déplace pas les arrivées d'eau (réduit le risque, géré par le service pose).
-- **NG-2** — Pas de paiement dans le configurateur : on alimente le panier the client existant (critère « risque maîtrisé » du lab).
-- **NG-3** — Pas d'autres pièces que la salle de bain en V1.
-- **NG-4** — Pas de compte requis avant le panier.
+- **NG-1** — No technical / plumbing plan: we do not move the water inlets (reduces risk, handled by the installation service).
+- **NG-2** — No payment in the configurator: we feed the existing client cart (the lab's "controlled risk" criterion).
+- **NG-3** — No rooms other than the bathroom in V1.
+- **NG-4** — No account required before the cart.
 
 ## 7. Evals — merge gate
 
-| ID | Type | Description | Couvre | Seuil de succès |
+| ID | Type | Description | Covers | Success threshold |
 |---|---|---|---|---|
-| EVAL-1 | deterministic | Toute réf produit retournée existe et est active dans le catalogue (jeu de 200 rendus) | INV-1, BHV-3 | 100 % |
-| EVAL-2 | deterministic | 3 ambiances exactement, nommage conforme, sur 50 photos de test | INV-2, BHV-2 | 100 % |
-| EVAL-3 | llm-judge | Cohérence rendu ↔ ambiance ↔ géométrie de la pièce (rubrique en annexe) | BHV-2 | ≥ 8/10 sur 50 cas |
-| EVAL-4 | deterministic | Photos hors sujet (30 images pièges) → refus explicite, 0 rendu | INV-6, BHV-1b | 100 % |
-| EVAL-5 | property-based | Prix panier = somme prix catalogue temps réel, sur paniers générés | INV-3 | 100 % |
-| EVAL-6 | deterministic | Latence p95 : analyse ≤ 10 s, rendus ≤ 30 s (banc de 100 photos) | BHV-1, BHV-2 | p95 sous seuil |
+| EVAL-1 | deterministic | Every returned product ref exists and is active in the catalog (set of 200 renders) | INV-1, BHV-3 | 100% |
+| EVAL-2 | deterministic | Exactly 3 moods, compliant naming, over 50 test photos | INV-2, BHV-2 | 100% |
+| EVAL-3 | llm-judge | Consistency render ↔ mood ↔ room geometry (rubric in appendix) | BHV-2 | ≥ 8/10 over 50 cases |
+| EVAL-4 | deterministic | Off-topic photos (30 trap images) → explicit refusal, 0 render | INV-6, BHV-1b | 100% |
+| EVAL-5 | property-based | Cart price = sum of real-time catalog prices, over generated carts | INV-3 | 100% |
+| EVAL-6 | deterministic | p95 latency: analysis ≤ 10 s, renders ≤ 30 s (bench of 100 photos) | BHV-1, BHV-2 | p95 under threshold |
 
 ## 8. Open questions
 
-- **OQ-1** — Quel périmètre catalogue exact J1 (rayon sanitaire complet ? carrelage ?) → bloque BHV-3.
-- **OQ-2** — Le service pose est-il disponible sur toute la France ou par zone ? → impacte BHV-4.
-- **OQ-3** — Génération des rendus : contrainte de marque sur les images (mention « image générée ») ?
+- **OQ-1** — What exact catalog scope on day 1 (full sanitary department? tiling?) → blocks BHV-3.
+- **OQ-2** — Is the installation service available across all of France or by zone? → impacts BHV-4.
+- **OQ-3** — Render generation: brand constraint on the images ("generated image" notice)?
 
 ## 9. Changelog
 
-| Version | Date | Auteur | Changement |
+| Version | Date | Author | Change |
 |---|---|---|---|
-| 1.0.0 | <date Vibe Workshop> | Vibe Workshop (PE + métier) | Création — exemple pré-rempli SFEIR à valider |
+| 1.0.0 | <Vibe Workshop date> | Vibe Workshop (PE + business) | Creation — SFEIR pre-filled example to validate |
+| 1.0.1 | 2026-06-18 | translation | English translation (form only, no substance change) |

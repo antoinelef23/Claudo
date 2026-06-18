@@ -1,8 +1,8 @@
-# Miroir CI du merge gate local (findings L5/L6/M10/M11) :
-#  - lint NON mutant (gate-ci : ruff --check, ne masque pas la dérive)
-#  - tests + evals (suite orchestrateur via shim claude déterministe)
-#  - content_guard sur les features changées vs la base (fond sacré : bump de version)
-#  - plan-lint (make validate) informatif sur les features changées
+# CI mirror of the local merge gate (findings L5/L6/M10/M11):
+#  - NON-mutating lint (gate-ci: ruff --check, does not mask drift)
+#  - tests + evals (orchestrator suite via deterministic claude shim)
+#  - content_guard on changed features vs the base (sacred substance: version bump)
+#  - plan-lint (make validate) informative on changed features
 name: gate
 
 on:
@@ -18,11 +18,11 @@ jobs:
     steps:
       - uses: actions/checkout@v6
         with:
-          fetch-depth: 0 # historique complet : nécessaire pour diff vs la base
+          fetch-depth: 0 # full history: needed for diff vs the base
       - uses: astral-sh/setup-uv@v8.2.0
       - run: uv python install 3.12
       - run: make install
-      - name: Content guard + plan-lint (features changées)
+      - name: Content guard + plan-lint (changed features)
         run: |
           if [ -n "${{ github.base_ref }}" ]; then
             BASE="origin/${{ github.base_ref }}"

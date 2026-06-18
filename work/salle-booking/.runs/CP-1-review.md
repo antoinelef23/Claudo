@@ -1,52 +1,52 @@
-# Revue CP-1 — panel de 1 — verdict agrégé : PASS (PASS)
+# Review CP-1 — panel of 1 — aggregated verdict: PASS (PASS)
 
-## Paneliste 1 — claude-opus-4-8 — angle : revue complète
+## Panelist 1 — claude-opus-4-8 — angle: full review
 VERDICT: PASS
 
-Toutes les vérifications mécaniques passent. Je rédige le rapport de revue.
+All mechanical checks pass. I'm writing the review report.
 
 ---
 
-# Rapport de revue — CP-1 · vertical slice du domaine (salle-booking)
+# Review report — CP-1 · domain vertical slice (salle-booking)
 
-**Tâches couvertes :** T1 — Domaine pur `model` + `store` + `availability` (+ EVAL-2)
-**Angle :** revue complète · **Mode checkpoint :** auto
+**Tasks covered:** T1 — Pure domain `model` + `store` + `availability` (+ EVAL-2)
+**Angle:** full review · **Checkpoint mode:** auto
 
-## ✅ Conforme
+## ✅ Conformant
 
-**Traçabilité**
-- ✅ Les deux commits T1 référencent des IDs de spec valides — `f2debb2` porte `[INV-1, INV-2, INV-3, BHV-1, BHV-1a/b/c, BHV-2, BHV-2a/b, BHV-3, BHV-3a, BHV-4, EVAL-2]`, exactement le `implements:` de la tâche (`tasks.md:40`).
-- ✅ Le commit de correction `a30e59c` trace le motif du rejet CP-1 précédent : `store.book() délègue INV-1 à model.overlaps() [INV-1, BHV-2…]`.
-- ✅ Chaque BHV/INV de la tâche se retrouve dans un test nommé : `test_model.py`, `test_store.py`, `test_availability.py` couvrent INV-2/INV-3/BHV-1..4 par nom explicite ; EVAL-2 dans `test_eval_2_property.py:16`.
+**Traceability**
+- ✅ Both T1 commits reference valid spec IDs — `f2debb2` carries `[INV-1, INV-2, INV-3, BHV-1, BHV-1a/b/c, BHV-2, BHV-2a/b, BHV-3, BHV-3a, BHV-4, EVAL-2]`, exactly the task's `implements:` (`tasks.md:40`).
+- ✅ The fix commit `a30e59c` traces the reason for the previous CP-1 rejection: `store.book() delegates INV-1 to model.overlaps() [INV-1, BHV-2…]`.
+- ✅ Each BHV/INV of the task is found in a named test: `test_model.py`, `test_store.py`, `test_availability.py` cover INV-2/INV-3/BHV-1..4 by explicit name; EVAL-2 in `test_eval_2_property.py:16`.
 
-**Reprise sur rejet (audit du cycle CP-1)**
-- ✅ Le rejet précédent (« réutilise `model.overlaps()` au lieu de réimplémenter le chevauchement inline », `tasks.md:150`) est **effectivement corrigé** : `store.py:27` appelle `overlaps(existing, candidate)` importé de `model` (`store.py:5`). Une seule définition de l'invariant — enforcement et EVAL-2 partagent `overlaps()`, plus de risque de divergence.
+**Recovery from rejection (CP-1 cycle audit)**
+- ✅ The previous rejection ("reuse `model.overlaps()` instead of reimplementing the overlap inline", `tasks.md:150`) is **effectively fixed**: `store.py:27` calls `overlaps(existing, candidate)` imported from `model` (`store.py:5`). A single definition of the invariant — enforcement and EVAL-2 share `overlaps()`, no more divergence risk.
 
-**Conformité design**
-- ✅ ADR-1 (intervalles demi-ouverts, minutes int) : `overlaps` = `a.start < b.end and b.start < a.end` (`model.py:27`), adjacence `fin==début` autorisée — testée `test_model.py:74`, `test_availability.py:66`.
-- ✅ ADR-2 (soft-delete) : `cancel` passe `status="cancelled"` (`store.py:37`) ; `confirmed()` filtre sur `status=="confirmed"` (`store.py:44`) → annulée ignorée pour overlap (`test_store.py:57`) et availability (`test_availability.py:58`).
-- ✅ Contrats design §5 respectés à l'identique : `book → {"status":"confirmed","id":…}` / `{"rejected":<raison>}`, raisons `invalid_slot|too_long|overlap` ; `cancel → {"status":"cancelled"}|{"rejected":"not_found"}` ; `availability → list[tuple[int,int]]`.
-- ✅ Pureté : aucun `now()`/`datetime`/I/O, temps en entrée, stdlib uniquement (NG-1/NG-2 respectés).
+**Design conformance**
+- ✅ ADR-1 (half-open intervals, int minutes): `overlaps` = `a.start < b.end and b.start < a.end` (`model.py:27`), adjacency `end==start` allowed — tested `test_model.py:74`, `test_availability.py:66`.
+- ✅ ADR-2 (soft-delete): `cancel` sets `status="cancelled"` (`store.py:37`); `confirmed()` filters on `status=="confirmed"` (`store.py:44`) → cancelled ignored for overlap (`test_store.py:57`) and availability (`test_availability.py:58`).
+- ✅ Design §5 contracts respected identically: `book → {"status":"confirmed","id":…}` / `{"rejected":<reason>}`, reasons `invalid_slot|too_long|overlap`; `cancel → {"status":"cancelled"}|{"rejected":"not_found"}`; `availability → list[tuple[int,int]]`.
+- ✅ Purity: no `now()`/`datetime`/I/O, time as input, stdlib only (NG-1/NG-2 respected).
 
 **Scope**
-- ✅ Diff strictement dans le périmètre — `src/booking/` + `tests/booking_core/` + artefacts/`.runs`. Aucun fichier hors scope touché (vérifié vs base de merge `b4f4492`). EVAL-1/EVAL-3/CLI bien absentes (réservées T2/T3/T4).
+- ✅ Diff strictly within scope — `src/booking/` + `tests/booking_core/` + artifacts/`.runs`. No out-of-scope file touched (verified vs merge base `b4f4492`). EVAL-1/EVAL-3/CLI correctly absent (reserved for T2/T3/T4).
 
-**Qualité / evals**
-- ✅ `pytest tests/booking_core` : **52 passed**. `-m eval` : **1 passed** (EVAL-2, 500 séquences seed=42). `done_when` de T1 satisfait.
-- ✅ `ruff check src/booking tests/booking_core` : All checks passed.
-- ✅ Types annotés, pas de secret, pas de TODO orphelin. Code `[auto]` — aucune ligne manuelle à justifier.
+**Quality / evals**
+- ✅ `pytest tests/booking_core`: **52 passed**. `-m eval`: **1 passed** (EVAL-2, 500 sequences seed=42). T1 `done_when` satisfied.
+- ✅ `ruff check src/booking tests/booking_core`: All checks passed.
+- ✅ Types annotated, no secret, no orphan TODO. Code `[auto]` — no manual line to justify.
 
-## ⚠️ Observations (non bloquantes, hors scope T1)
+## ⚠️ Observations (non-blocking, out of T1 scope)
 
-- ⚠️ **Forme du contrat `availability`** : la fonction retourne des `tuple` (`availability.py:14`, conforme design §5 `list[tuple[int,int]]`), alors que spec EX-4 (`spec.md:101`) écrit les gaps en listes `[[480,540],…]`. Source du métier = YAML d'exemple ; le design tranche en `tuple`. À cadrer dans EVAL-1 (T2) pour que la comparaison soit explicite — pas un défaut de T1.
-- ⚠️ **Fenêtre `availability` inversée non spécifiée** : `availability(store, room, ws, we)` avec `ws ≥ we` renvoie `[]` silencieusement. BHV-4 suppose une fenêtre valide ; aucun invariant ne le couvre. À noter comme angle mort éventuel pour une future spec, sans impact ici.
+- ⚠️ **Form of the `availability` contract**: the function returns `tuple`s (`availability.py:14`, conformant to design §5 `list[tuple[int,int]]`), whereas spec EX-4 (`spec.md:101`) writes the gaps as lists `[[480,540],…]`. Business source = example YAML; the design decides on `tuple`. To be framed in EVAL-1 (T2) so the comparison is explicit — not a T1 defect.
+- ⚠️ **Inverted `availability` window unspecified**: `availability(store, room, ws, we)` with `ws ≥ we` returns `[]` silently. BHV-4 assumes a valid window; no invariant covers it. To be noted as a possible blind spot for a future spec, no impact here.
 
-## ❌ Bloquants
+## ❌ Blockers
 
-Aucun.
+None.
 
 ---
 
-Checkpoint `mode: auto` : EVAL-2 verte, reviewer sans écart bloquant, rejet précédent corrigé, scope propre, design respecté. Les deux ⚠️ sont des points d'attention pour T2, pas des écarts sur T1.
+Checkpoint `mode: auto`: EVAL-2 green, reviewer with no blocking gap, previous rejection fixed, clean scope, design respected. The two ⚠️ are points of attention for T2, not gaps on T1.
 
 VERDICT: PASS

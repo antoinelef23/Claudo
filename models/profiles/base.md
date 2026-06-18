@@ -1,5 +1,5 @@
-# Profil de contexte — base
+# Context profile — base
 
-Profil par défaut : **aucun ajout de contexte**. L'agent s'appuie sur `CLAUDE.md`
-(règles du lab) et sur le `.md` de son rôle. C'est la ligne de base d'équité : tous
-les modèles sont évalués avec le même contexte minimal, sans avantage de scaffolding.
+Default profile: **no added context**. The agent relies on `CLAUDE.md`
+(lab rules) and on the `.md` of its role. This is the fairness baseline: all
+models are evaluated with the same minimal context, with no scaffolding advantage.

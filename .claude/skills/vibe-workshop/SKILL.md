@@ -1,21 +1,21 @@
 ---
 name: vibe-workshop
-description: Anime le Vibe Workshop (105 min, 6-8 personnes) qui produit spec.md v1.0. Utiliser quand le PE lance un atelier de spec avec le métier — Claude médie en partage d'écran et rédige la spec en direct.
+description: Facilitates the Spec Workshop (105 min, 6-8 people) that produces spec.md v1.0. Use when the PE kicks off a spec workshop with the business — Claude mediates over screen share and writes the spec live.
 ---
 
-# Vibe Workshop — la fabrique de la spec
+# Spec Workshop — the spec factory
 
-Tu médies l'atelier en partage d'écran. Le métier parle, tu structures en direct dans le format templates/spec.md. Objectif de sortie : spec.md v1.0 commitée.
+You mediate the workshop over screen share. The business talks, you structure live in the templates/spec.md format. Output goal: spec.md v1.0 committed.
 
-## Déroulé (105 min)
-1. **Pitch d'intention métier (15 min)** → §1 Intent + KPI cible. Reformule jusqu'à accord explicite.
-2. **Event Storming digital (30 min)** → événements métier, acteurs, commandes. Alimente §2 Glossary (exige un nom canonique par terme) et la liste brute des BHV.
-3. **Sweep d'invariants & cas limites (25 min)** → « qu'est-ce qui ne doit JAMAIS arriver ? » → §3 INV-n. Puis pour chaque BHV : « et si… ? » → edge cases BHV-na, nb…
-4. **Galerie d'exemples (25 min)** → §5. Données réalistes exigées (vrais produits, vrais montants). Chaque exemple tague ce qu'il couvre. En cas de désaccord prose/exemple : l'exemple gagne.
-5. **Clôture (10 min)** → relecture des OQ-n restantes, proposition d'evals (§7) dérivées des exemples, commit `spec.md v1.0` + tag.
+## Agenda (105 min)
+1. **Business intent pitch (15 min)** → §1 Intent + target KPI. Rephrase until explicit agreement.
+2. **Digital Event Storming (30 min)** → business events, actors, commands. Feeds §2 Glossary (require a canonical name per term) and the raw list of BHVs.
+3. **Invariants & edge-cases sweep (25 min)** → "what must NEVER happen?" → §3 INV-n. Then for each BHV: "what if…?" → edge cases BHV-na, nb…
+4. **Examples gallery (25 min)** → §5. Realistic data required (real products, real amounts). Each example tags what it covers. In case of a prose/example disagreement: the example wins.
+5. **Wrap-up (10 min)** → review the remaining OQ-n, propose evals (§7) derived from the examples, commit `spec.md v1.0` + tag.
 
-## Règles d'animation
-- Bannis les mots flous : « rapide », « pertinent », « simple » → exige un chiffre ou un exemple.
-- Une question à la fois, jamais de jargon technique avec le métier.
-- Tout désaccord non tranché en séance devient une OQ-n, pas un compromis mou.
-- Le métier valide à l'écran section par section : la spec est SON contrat.
+## Facilitation rules
+- Ban fuzzy words: "fast", "relevant", "simple" → require a number or an example.
+- One question at a time, never technical jargon with the business.
+- Any disagreement not settled in session becomes an OQ-n, not a soft compromise.
+- The business validates on screen section by section: the spec is THEIR contract.

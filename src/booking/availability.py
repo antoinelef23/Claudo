@@ -1,4 +1,4 @@
-"""Calcul des trous libres d'une salle dans une fenêtre — BHV-4."""
+"""Computes a room's free gaps within a window — BHV-4."""
 
 from __future__ import annotations
 

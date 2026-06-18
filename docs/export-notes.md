@@ -1,15 +1,15 @@
-# Export du devis — notes préparatoires
+# Quote export — preparatory notes
 
-> ⚠️ **Note historique (T1, rédigée avant la résolution d'OQ-1).** Depuis la spec v1.0.0,
-> OQ-1 est résolue : export **texte brut** via `format_quote` (PDF = phase 2). Le contenu
-> ci-dessous reflète l'état au moment de la rédaction, conservé pour l'audit trail.
+> ⚠️ **Historical note (T1, written before OQ-1 was resolved).** Since spec v1.0.0,
+> OQ-1 is resolved: **plain text** export via `format_quote` (PDF = phase 2). The content
+> below reflects the state at the time of writing, kept for the audit trail.
 
-La spec export-devis (v0.9.0) est validée mais **OQ-1 reste ouverte** : le format
-contractuel d'export (PDF, CSV, ou les deux) n'est pas tranché par le métier.
-Tant qu'OQ-1 n'est pas résolue, le module export (BHV-1, EVAL-1) est bloqué.
+The export-devis spec (v0.9.0) is validated but **OQ-1 remains open**: the contractual
+export format (PDF, CSV, or both) has not been decided by the business.
+As long as OQ-1 is not resolved, the export module (BHV-1, EVAL-1) is blocked.
 
-Options : **PDF** (document contractuel lisible, remis au client) ou **CSV**
-(données structurées, réutilisables dans un tableur ou un SI tiers).
-Critères de décision pour le sponsor : usage client visé (lecture vs retraitement),
-valeur contractuelle attendue, coût d'implémentation et de maintenance.
-Quel que soit le format, la mention « estimation » est requise (INV-1).
+Options: **PDF** (readable contractual document, handed to the client) or **CSV**
+(structured data, reusable in a spreadsheet or a third-party IS).
+Decision criteria for the sponsor: intended client use (reading vs reprocessing),
+expected contractual value, implementation and maintenance cost.
+Whatever the format, the "estimate" mention is required (INV-1).

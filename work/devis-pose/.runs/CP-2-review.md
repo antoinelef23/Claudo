@@ -1,41 +1,41 @@
-Revue CP-2 terminée. Voici le rapport.
+Review CP-2 complete. Here is the report.
 
 ---
 
-# Rapport de revue — CP-2 (merge) · feature `devis-pose` · tâche T4
+# Review report — CP-2 (merge) · feature `devis-pose` · task T4
 
-## ✅ Conformes
+## ✅ Conformant
 
-**Traçabilité**
-- ✅ Commit `22972dd` référence `[BHV-1, BHV-3]` — exactement les `implements` de T4 dans tasks.md:79.
-- ✅ BHV-1 et BHV-3 se retrouvent dans le diff : enchaînement `compute_quote` → `format_quote` (`src/devis/cli.py:28-29`), assertions « estimation » + lignes Produits/Pose (`tests/devis_cli/test_cli.py:11-18`).
-- ✅ Commit `220ae3e` `[auto]` ne contient que les métadonnées d'orchestration (approbation CP-1, run log) — pas de code.
+**Traceability**
+- ✅ Commit `22972dd` references `[BHV-1, BHV-3]` — exactly the `implements` of T4 in tasks.md:79.
+- ✅ BHV-1 and BHV-3 are found in the diff: chaining `compute_quote` → `format_quote` (`src/devis/cli.py:28-29`), assertions "estimation" + Products/Installation lines (`tests/devis_cli/test_cli.py:11-18`).
+- ✅ Commit `220ae3e` `[auto]` only contains orchestration metadata (CP-1 approval, run log) — no code.
 
-**Conformité design**
-- ✅ `src/devis/cli.py:14-26` : argparse `--products-eur` / `--surface-m2`, stdlib uniquement, conforme à design.md §1 et §3 (zéro dépendance runtime).
-- ✅ Contrat de données respecté : le dict de `compute_quote` (clés des Examples, design.md §5) est consommé tel quel par `format_quote`.
+**Design conformance**
+- ✅ `src/devis/cli.py:14-26`: argparse `--products-eur` / `--surface-m2`, stdlib only, conformant to design.md §1 and §3 (zero runtime dependency).
+- ✅ Data contract respected: the dict from `compute_quote` (Examples keys, design.md §5) is consumed as-is by `format_quote`.
 
 **Scope**
-- ✅ Commit T4 ne touche que `src/devis/cli.py` + `tests/devis_cli/` — exactement les `files_touched` de tasks.md:81. Aucun scope creep imputable à l'implementer.
+- ✅ The T4 commit only touches `src/devis/cli.py` + `tests/devis_cli/` — exactly the `files_touched` of tasks.md:81. No scope creep attributable to the implementer.
 
-**Qualité / gates**
-- ✅ Eval gate : `make -s evals` → **1062 passed** (EVAL-1, EVAL-2, EVAL-3 vertes).
-- ✅ Suite complète : `uv run pytest -q` → **1064 passed**, dont le test non-eval T4 sur EX-1 (capsys, conforme au prompt de la tâche).
-- ✅ `ruff format --check` : 10 fichiers propres. Aucun TODO/FIXME, aucun secret dans `src/` et `tests/`.
+**Quality / gates**
+- ✅ Eval gate: `make -s evals` → **1062 passed** (EVAL-1, EVAL-2, EVAL-3 green).
+- ✅ Full suite: `uv run pytest -q` → **1064 passed**, including the non-eval T4 test on EX-1 (capsys, conformant to the task prompt).
+- ✅ `ruff format --check`: 10 clean files. No TODO/FIXME, no secret in `src/` and `tests/`.
 
-## ⚠️ Écarts à arbitrer
+## ⚠️ Gaps to arbitrate
 
-1. **Lint non propre** — `ruff check` remonte 2 × E741 (variable ambiguë `l`) à `tests/devis_format/test_evals.py:28` et `tests/devis_format/test_evals.py:29`. C'est du code T3 (déjà validé à CP-1), pas T4, mais CP-2 couvre le diff de bout en bout et CLAUDE.md exige « ruff propre ».
-2. **ruff absent des dépendances dev** — `uv run ruff` échoue (non déclaré dans `pyproject.toml`) ; j'ai dû l'exécuter via `uv run --with ruff`. Le gate lint n'est donc pas reproductible en l'état, ce qui explique que l'écart n°1 soit passé inaperçu.
-3. **Worktree non propre pour le merge** — `work/devis-pose/.runs/state.json` est modifié et non commité. À committer (métadonnées d'orchestration) ou à écarter avant le merge.
-4. **Note d'information** — `scripts/orchestrate.py` (+7 lignes) figure dans le diff de branche sans appartenir aux `files_touched` d'aucune tâche ; il vient du commit de setup `9b5e0b0` (patch harness, antérieur à T1), pas d'un implementer. Pas un scope creep d'agent, mais l'Owner doit le savoir puisque le diff mergé l'inclut.
+1. **Lint not clean** — `ruff check` reports 2 × E741 (ambiguous variable `l`) at `tests/devis_format/test_evals.py:28` and `tests/devis_format/test_evals.py:29`. This is T3 code (already validated at CP-1), not T4, but CP-2 covers the diff end to end and CLAUDE.md requires "ruff clean".
+2. **ruff missing from dev dependencies** — `uv run ruff` fails (not declared in `pyproject.toml`); I had to run it via `uv run --with ruff`. The lint gate is therefore not reproducible as is, which explains why gap #1 went unnoticed.
+3. **Worktree not clean for the merge** — `work/devis-pose/.runs/state.json` is modified and uncommitted. To be committed (orchestration metadata) or discarded before the merge.
+4. **Informational note** — `scripts/orchestrate.py` (+7 lines) appears in the branch diff without belonging to the `files_touched` of any task; it comes from the setup commit `9b5e0b0` (harness patch, prior to T1), not from an implementer. Not an agent scope creep, but the Owner should know since the merged diff includes it.
 
-## ❌ Bloquants
+## ❌ Blockers
 
-Aucun.
+None.
 
 ---
 
-**Synthèse pour l'Owner :** T4 est conforme à la spec, au design et à son périmètre ; tous les gates exécutables sont verts. Les écarts sont périphériques (lint sur un fichier T3, outillage ruff, état de worktree) et relèvent d'un arbitrage avant merge — CP-2 étant `mode: blocking`, la décision vous revient de toute façon.
+**Summary for the Owner:** T4 is conformant to the spec, the design and its scope; all executable gates are green. The gaps are peripheral (lint on a T3 file, ruff tooling, worktree state) and call for an arbitration before merge — CP-2 being `mode: blocking`, the decision is yours anyway.
 
 VERDICT: WARN

@@ -1,5 +1,5 @@
-"""Garde-fou fond/forme : la forme peut bouger librement, le fond ne change que par
-amendement (bump de version). Tests directs sur extract_content / diff_content + git.
+"""Substance/form guardrail: the form may move freely, the substance changes only by
+amendment (version bump). Direct tests on extract_content / diff_content + git.
 """
 
 from __future__ import annotations
@@ -22,38 +22,38 @@ SPEC_LIST = """---
 version: 1.0.0
 ---
 ## 2. Glossary
-| Terme | Nom canonique | Définition |
+| Term | Canonical name | Definition |
 |---|---|---|
-| Devis | `quote` | estimation |
+| Quote | `quote` | estimate |
 
 ## 3. Invariants
-- **INV-1** — Le total MUST être ≥ 0.
-- **INV-2** — `is_estimate` MUST valoir True.
+- **INV-1** — The total MUST be >= 0.
+- **INV-2** — `is_estimate` MUST be True.
 
 ## 4. Behaviors
-### BHV-1 — pose
-- **Given** une surface > 0
-- **Then** pose = surface × 45.0
+### BHV-1 — installation
+- **Given** a surface > 0
+- **Then** installation = surface × 45.0
 """
 
-# MÊME FOND, forme différente : table au lieu de liste, gras déplacé, sections réordonnées
+# SAME SUBSTANCE, different form: table instead of list, bold moved, sections reordered
 SPEC_TABLE = """---
 version: 1.0.0
 ---
 ## 4. Behaviors
 
-### BHV-1 — pose
-**Given** une surface > 0 **Then** pose = surface × 45.0
+### BHV-1 — installation
+**Given** a surface > 0 **Then** installation = surface × 45.0
 
 ## 3. Invariants
 
-| ID | Règle |
+| ID | Rule |
 |---|---|
-| INV-1 | Le total MUST être ≥ 0. |
-| INV-2 | `is_estimate` MUST valoir True. |
+| INV-1 | The total MUST be >= 0. |
+| INV-2 | `is_estimate` MUST be True. |
 
 ## 2. Glossary
-- Devis (`quote`) : estimation
+- Quote (`quote`): estimate
 """
 
 
@@ -64,7 +64,7 @@ def test_form_change_preserves_content():
 
 
 def test_changed_invariant_is_detected():
-    altered = SPEC_LIST.replace("MUST être ≥ 0", "MUST être > 0")
+    altered = SPEC_LIST.replace("MUST be >= 0", "MUST be > 0")
     changed = cg.diff_content(SPEC_LIST, altered)
     assert "INV-1" in changed
 
@@ -115,18 +115,18 @@ def test_git_reformat_ok_but_content_change_blocked(tmp_path):
     _git(wd, "add", "-A")
     _git(wd, "commit", "-qm", "v1")
 
-    # reformat pur (table) → fond identique → exit 0
+    # pure reformat (table) → substance identical → exit 0
     f.write_text(SPEC_TABLE)
     r = _run_guard(wd, "work/spec.md")
     assert r.returncode == 0, r.stdout
 
-    # changement de fond SANS bump de version → exit 1
+    # substance change WITHOUT a version bump → exit 1
     f.write_text(SPEC_LIST.replace("× 45.0", "× 50.0"))
     r = _run_guard(wd, "work/spec.md")
     assert r.returncode == 1, r.stdout
-    assert "FOND a changé SANS bump" in r.stdout
+    assert "SUBSTANCE changed WITHOUT" in r.stdout
 
-    # même changement AVEC bump de version (amendement) → exit 0
+    # same change WITH a version bump (amendment) → exit 0
     f.write_text(
         SPEC_LIST.replace("× 45.0", "× 50.0").replace(
             "version: 1.0.0", "version: 1.1.0"
@@ -136,41 +136,41 @@ def test_git_reformat_ok_but_content_change_blocked(tmp_path):
     assert r.returncode == 0, r.stdout
 
 
-# ----------------------------------------------------- M1 : listes numérotées
+# ----------------------------------------------------- M1: numbered lists
 
 
 def test_numbered_list_ids_are_captured():
-    # finding M1 : « 1. **INV-1** … » doit voir son ID capté dans l'empreinte.
+    # finding M1: "1. **INV-1** …" must have its ID captured in the fingerprint.
     numbered = """---
 version: 1.0.0
 ---
 ## 3. Invariants
-1. **INV-1** — Le total MUST être ≥ 0.
-2. **INV-2** — `is_estimate` MUST valoir True.
+1. **INV-1** — The total MUST be >= 0.
+2. **INV-2** — `is_estimate` MUST be True.
 """
     content = cg.extract_content(numbered)
     assert "INV-1" in content and "INV-2" in content
 
 
 def test_bullet_to_numbered_is_form_only():
-    # Reformater puce → numéro est de la FORME : aucun changement de fond.
-    bullet = "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1** — total ≥ 0\n"
-    numbered = "---\nversion: 1.0.0\n---\n## Inv\n1. **INV-1** — total ≥ 0\n"
+    # Reformatting bullet → number is FORM: no substance change.
+    bullet = "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1** — total >= 0\n"
+    numbered = "---\nversion: 1.0.0\n---\n## Inv\n1. **INV-1** — total >= 0\n"
     assert cg.diff_content(bullet, numbered) == {}
 
 
 def test_substance_change_in_numbered_list_is_detected():
-    # Le fond change dans une liste numérotée → détecté (avant M1 : invisible).
-    a = "---\nversion: 1.0.0\n---\n## Inv\n1. **INV-1** — total ≥ 0\n"
-    b = "---\nversion: 1.0.0\n---\n## Inv\n1. **INV-1** — total ≥ 100\n"
+    # The substance changes in a numbered list → detected (before M1: invisible).
+    a = "---\nversion: 1.0.0\n---\n## Inv\n1. **INV-1** — total >= 0\n"
+    b = "---\nversion: 1.0.0\n---\n## Inv\n1. **INV-1** — total >= 100\n"
     assert "INV-1" in cg.diff_content(a, b)
 
 
-# ----------------------------------------------------- L2 : trait d'union opérateur
+# ----------------------------------------------------- L2: operator hyphen
 
 
 def test_operator_hyphen_drop_is_detected():
-    # finding L2 : « price - discount » → « price discount » = changement de fond.
+    # finding L2: "price - discount" → "price discount" = substance change.
     with_op = (
         "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1** — cost = price - discount\n"
     )
@@ -179,26 +179,26 @@ def test_operator_hyphen_drop_is_detected():
 
 
 def test_typographic_dash_separator_is_still_form():
-    # Le tiret typographique « — » reste un séparateur de forme (normalisé).
-    a = "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1** — total ≥ 0\n"
-    b = "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1**   total ≥ 0\n"
+    # The typographic dash "—" stays a form separator (normalized).
+    a = "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1** — total >= 0\n"
+    b = "---\nversion: 1.0.0\n---\n## Inv\n- **INV-1**   total >= 0\n"
     assert cg.diff_content(a, b) == {}
 
 
 def test_inline_id_crossref_is_not_a_definition():
-    # Un design.md qui RÉFÉRENCE un ID inline (sans le définir) reste valide : son fond
-    # n'est pas empreinté par cet ID, et un reformat de la prose ne déclenche rien.
-    a = "---\nversion: 1.0.0\n---\n# Design\nRéutilise le socle (ADR-1 : fonctions pures).\n"
-    b = "---\nversion: 1.0.0\n---\n# Design\nS'appuie sur le socle (ADR-1 : fonctions pures).\n"
-    assert cg.diff_content(a, b) == {}  # prose libre = forme
+    # A design.md that REFERENCES an ID inline (without defining it) stays valid: its
+    # substance is not fingerprinted by that ID, and a prose reformat triggers nothing.
+    a = "---\nversion: 1.0.0\n---\n# Design\nReuses the base (ADR-1: pure functions).\n"
+    b = "---\nversion: 1.0.0\n---\n# Design\nBuilds on the base (ADR-1: pure functions).\n"
+    assert cg.diff_content(a, b) == {}  # free prose = form
 
 
-# ----------------------------------------------------- M11 : --against <ref> (CI)
+# ----------------------------------------------------- M11: --against <ref> (CI)
 
 
 def test_against_ref_detects_change_vs_base(tmp_path):
-    # finding M11 : --against compare l'arbre de travail à une BASE arbitraire (pas HEAD)
-    # — c'est le seul mode utile en CI (en checkout propre, arbre==HEAD).
+    # finding M11: --against compares the working tree to an arbitrary BASE (not HEAD)
+    # — it is the only useful mode in CI (on a clean checkout, tree==HEAD).
     wd = tmp_path / "r"
     (wd / "work").mkdir(parents=True)
     f = wd / "work" / "spec.md"
@@ -208,7 +208,7 @@ def test_against_ref_detects_change_vs_base(tmp_path):
     _git(wd, "commit", "-qm", "v1")
     _git(wd, "branch", "base")
 
-    # même contenu que base → pas de changement (le mode --against fonctionne hors HEAD)
+    # same content as base → no change (the --against mode works outside HEAD)
     r = subprocess.run(
         [
             sys.executable,
@@ -223,7 +223,7 @@ def test_against_ref_detects_change_vs_base(tmp_path):
     )
     assert r.returncode == 0, r.stdout
 
-    # change le fond sans bump → détecté vs base
+    # change the substance without a bump → detected vs base
     f.write_text(SPEC_LIST.replace("× 45.0", "× 99.0"))
     r = subprocess.run(
         [
@@ -238,12 +238,12 @@ def test_against_ref_detects_change_vs_base(tmp_path):
         text=True,
     )
     assert r.returncode == 1, r.stdout
-    assert "FOND a changé SANS bump" in r.stdout
+    assert "SUBSTANCE changed WITHOUT" in r.stdout
 
 
 def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
-    # finding M11/L5 : ci_checks.sh découvre les features changées vs BASE et bloque un
-    # changement de fond sans bump ; le bump le débloque.
+    # finding M11/L5: ci_checks.sh discovers the features changed vs BASE and blocks a
+    # substance change without a bump; the bump unblocks it.
     import os
     import shutil
 
@@ -253,9 +253,9 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
     shutil.copy(REPO / "Makefile", wd / "Makefile")
     (wd / "work" / "feat").mkdir(parents=True)
     (wd / "work" / "feat" / "spec.md").write_text(SPEC_LIST)
-    # -b base : branche initiale déterministe (sinon « main » en local mais « master »
-    # sur le git d'Ubuntu CI → la base serait introuvable et le skip fail-safe ferait
-    # passer le test à tort).
+    # -b base: deterministic initial branch (otherwise "main" locally but "master"
+    # on Ubuntu CI's git → the base would be missing and the fail-safe skip would
+    # make the test pass wrongly).
     _git(wd, "init", "-q", "-b", "base")
     _git(wd, "add", "-A")
     _git(wd, "commit", "-qm", "base")
@@ -274,7 +274,7 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
     assert r.returncode == 1, r.stdout + r.stderr
     assert "work/feat" in r.stdout
 
-    # bump → débloque
+    # bump → unblocks
     (wd / "work" / "feat" / "spec.md").write_text(
         SPEC_LIST.replace("× 45.0", "× 99.0").replace(
             "version: 1.0.0", "version: 1.1.0"

@@ -1,4 +1,4 @@
-"""Régression du hook eval_gate.sh — findings H7/H8 (gate d'evals interactif)."""
+"""Regression of the eval_gate.sh hook — findings H7/H8 (interactive eval gate)."""
 
 from __future__ import annotations
 
@@ -15,9 +15,9 @@ def _git(repo: Path, *args: str) -> None:
 
 
 def test_eval_gate_sees_new_untracked_package_dir(tmp_path: Path) -> None:
-    # finding H7 : un module neuf non suivi s'affiche `?? newpkg/` (une seule ligne) ;
-    # sans --untracked-files=all le grep le rate et le gate SAUTE. Ici les evals sont
-    # rouges : le gate corrigé DOIT tourner et sortir 2 (pas sauter en 0).
+    # finding H7: a new untracked module shows as `?? newpkg/` (a single line);
+    # without --untracked-files=all the grep misses it and the gate SKIPS. Here the
+    # evals are red: the fixed gate MUST run and exit 2 (not skip with 0).
     repo = tmp_path / "r"
     repo.mkdir()
     (repo / "pyproject.toml").write_text("[project]\nname = 'x'\nversion = '0'\n")
@@ -28,7 +28,7 @@ def test_eval_gate_sees_new_untracked_package_dir(tmp_path: Path) -> None:
     _git(repo, "add", "-A")
     _git(repo, "commit", "-qm", "init")
 
-    # Feature livrée comme NOUVEAU package non suivi.
+    # Feature delivered as a NEW untracked package.
     (repo / "newpkg").mkdir()
     (repo / "newpkg" / "mod.py").write_text("x = 1\n")
 
@@ -36,14 +36,14 @@ def test_eval_gate_sees_new_untracked_package_dir(tmp_path: Path) -> None:
         ["bash", str(HOOK)], cwd=repo, input="{}", text=True, capture_output=True
     )
     assert r.returncode == 2, (
-        f"le gate devrait TOURNER (rouge) sur un module neuf non suivi, "
-        f"pas sauter ; rc={r.returncode}\n{r.stdout}{r.stderr}"
+        f"the gate should RUN (red) on a new untracked module, "
+        f"not skip; rc={r.returncode}\n{r.stdout}{r.stderr}"
     )
-    assert "EVAL GATE ROUGE" in r.stderr
+    assert "EVAL GATE RED" in r.stderr
 
 
 def test_eval_gate_skips_when_no_code_changed(tmp_path: Path) -> None:
-    # Sanity : sans changement de code, le gate ne paie pas les evals (exit 0).
+    # Sanity: with no code change, the gate does not pay for the evals (exit 0).
     repo = tmp_path / "r"
     repo.mkdir()
     (repo / "pyproject.toml").write_text("[project]\nname = 'x'\nversion = '0'\n")
@@ -57,4 +57,4 @@ def test_eval_gate_skips_when_no_code_changed(tmp_path: Path) -> None:
     r = subprocess.run(
         ["bash", str(HOOK)], cwd=repo, input="{}", text=True, capture_output=True
     )
-    assert r.returncode == 0, f"rien n'a changé → pas de gate ; {r.stderr}"
+    assert r.returncode == 0, f"nothing changed → no gate; {r.stderr}"

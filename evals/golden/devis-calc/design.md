@@ -3,10 +3,10 @@ artifact: design
 feature: devis-calc
 version: 1.0.0
 status: validated
-spec: ./spec.md          # version : 1.0.0
+spec: ./spec.md          # version: 1.0.0
 ---
 
-# Design — devis-calc (tâche-or)
+# Design — devis-calc (golden task)
 
-Fonction pure, stdlib uniquement. `compute.py::compute_quote`, arrondis `round(x, 2)`
-aux frontières. Aucune I/O.
+Pure function, stdlib only. `compute.py::compute_quote`, rounding with `round(x, 2)`
+at the boundaries. No I/O.

@@ -1,4 +1,4 @@
-"""BookingStore — store en mémoire, INV-1 enforced, ADR-2 soft-delete."""
+"""BookingStore — in-memory store, INV-1 enforced, ADR-2 soft-delete."""
 
 from uuid import uuid4
 
