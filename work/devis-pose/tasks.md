@@ -6,7 +6,7 @@ status: approved
 generated_by: planner (simulated)
 approved_by: Antoine — 2026-06-10 (simulation, CP-1 auto / CP-2 blocking validated)
 spec: ./spec.md          # version : 1.0.1
-design: ./design.md      # version : 1.0.1
+design: ./design.md      # version : 1.0.2
 ---
 
 # Tasks — Installation quote
