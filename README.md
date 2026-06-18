@@ -36,7 +36,7 @@ ai-native-lab/
 │   ├── statusline.py          # Status line: live orchestrator run state (state.json)
 │   ├── settings.json          # Hooks + statusLine + permission denies
 │   └── skills/                # vibe-workshop (spec), commit (why→git), diataxis (docs)
-├── docs/                      # how-to / reference (commit-format, sandbox, automation…)
+├── docs/                      # Diátaxis: tutorials/ how-to/ explanation/ reference/ (see docs/README.md)
 ├── models/                    # registry.toml, profiles/, EVOLUTION.md, scorecards/
 ├── evals/                     # golden/ (oracles) + behavioral/ (model governance)
 └── src/                       # Features built by the method
@@ -94,7 +94,7 @@ flowchart TD
 3. **Anti-empty-gate**: a task that implements spec IDs — or merely touches source code — FAILS if no eval is collected (`pytest -m eval --collect-only`). A green `just evals` with zero evals validates nothing. Eval coverage is matched by pytest **node-id** (so `eval_1` ≠ `eval_10`, and a file path doesn't count as coverage).
 4. **Per-task verify**: the `verify` command in tasks.md materializes `done_when`. It is parsed to an argv list and run **without a shell** (no metacharacters, command + env-prefix allowlists) — checked mechanically after each agent, before the evals.
 5. **Failure containment**: failed/blocked only neutralizes dependents (`skipped`); other branches continue. The run always ends on a summary, never on a mid-course abort.
-6. **Scoped commits, why in git**: only the task's `files_touched` (+ the feature dir) are staged, under a lock — two parallel agents don't pollute each other, and the golden oracles can't be swept into a task commit. Out-of-scope changes are reported, not committed. Every commit follows the canonical format ([docs/commit-format.md](docs/commit-format.md)): a `Why:` body + git trailers (`Spec-IDs`, `Version-Bump`, …), the same shape the human `/commit` skill writes — so the *reasoning* behind a change (not just the diff) lives in git, where the reviewer/planner/scout agents recover it via `git log`/`blame`. The `version:` bump stays the *fusible* (intent); git carries the *why*.
+6. **Scoped commits, why in git**: only the task's `files_touched` (+ the feature dir) are staged, under a lock — two parallel agents don't pollute each other, and the golden oracles can't be swept into a task commit. Out-of-scope changes are reported, not committed. Every commit follows the canonical format ([docs/reference/commit-format.md](docs/reference/commit-format.md)): a `Why:` body + git trailers (`Spec-IDs`, `Version-Bump`, …), the same shape the human `/commit` skill writes — so the *reasoning* behind a change (not just the diff) lives in git, where the reviewer/planner/scout agents recover it via `git log`/`blame`. The `version:` bump stays the *fusible* (intent); git carries the *why*.
 7. **Signed human approvals**: checkpoint approvals are HMAC-signed (`scripts/approve.sh`) and verified before they're honored, then consumed (no replay). **Fail-closed by default**: a plan with checkpoints refuses to start without `LAB_APPROVAL_SECRET` (opt-out `LAB_ALLOW_UNSIGNED_APPROVALS=1`). The secret is stripped from the agent's environment, and `.approvals/`/`.runs/` are denied to the agent's edit tools.
 8. **Concurrency safety**: an OS `flock` (`.runs/orchestrator.lock`) fails a second run on the same feature fast; `state.json` is written atomically and resume tolerates a truncated file.
 9. **Documented `auto` checkpoints**: before every checkpoint, the `reviewer` report is written to `.runs/CP-n-review.md`. Auto = green evals AND `VERDICT: PASS`; on any doubt it falls back to human validation.
@@ -120,6 +120,10 @@ scripts/reject.sh CP-1 work/my-feature "the quote doesn't show the discount" T2
 ```
 
 Recovery: state lives in `<feature>/.runs/state.json` — re-running the same command resumes where it stopped (`done` nodes don't replay; `blocked` nodes retry after you answer their open questions). Prerequisites: `claude` CLI authenticated, `uv` installed.
+
+## Documentation
+
+Full docs live in [`docs/`](docs/README.md), organized by the [Diátaxis](https://diataxis.fr/) method: **[tutorials/](docs/tutorials/)** (learn by doing — start with [getting-started](docs/tutorials/getting-started.md)), **[how-to/](docs/how-to/)** (run the orchestrator, commit with rationale, sandbox, automate, evaluate models), **[explanation/](docs/explanation/)** (architecture, git-as-memory), **[reference/](docs/reference/)** (CLI, environment variables, commit format, status line, agents & skills).
 
 ## Model evaluation
 
@@ -155,13 +159,13 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 The orchestrator drives agents through an `AgentRunner` interface (`scripts/runner.py`), so the execution backend is swappable:
 
 - **`claude-cli`** (default) — runs on the **host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, `.claude/settings.json` denies). An implementer that runs its own tests has code execution, so here the signed-approval boundary is *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent.
-- **`sandbox`** (`LAB_RUNNER=sandbox`, see [docs/sandbox.md](docs/sandbox.md)) — runs the same call in a hardened container: only the repo is mounted, the approval secret is never passed in, egress is allowlisted, non-root + read-only rootfs + dropped caps. This makes the secret **unreachable** by the agent, which is what turns the approval crypto into a true boundary. Validated end-to-end on Docker (the secret is provably absent inside the container); the egress-allowlist proxy is operator infrastructure.
+- **`sandbox`** (`LAB_RUNNER=sandbox`, see [docs/how-to/use-the-sandbox.md](docs/how-to/use-the-sandbox.md)) — runs the same call in a hardened container: only the repo is mounted, the approval secret is never passed in, egress is allowlisted, non-root + read-only rootfs + dropped caps. This makes the secret **unreachable** by the agent, which is what turns the approval crypto into a true boundary. Validated end-to-end on Docker (the secret is provably absent inside the container); the egress-allowlist proxy is operator infrastructure.
 
 Intended threat model: a **trusted-but-possibly-misaligned** agent on the host runner; a **malicious** agent under the sandbox runner.
 
 ## Backlog (acknowledged, not shipped)
 
-- **Egress-allowlist proxy** — the sandbox restricts egress to a network you control; a bundled filtering proxy (model API + package registry only) is documented in docs/sandbox.md but not shipped.
+- **Egress-allowlist proxy** — the sandbox restricts egress to a network you control; a bundled filtering proxy (model API + package registry only) is documented in docs/how-to/use-the-sandbox.md but not shipped.
 - **Cross-vendor provider runner** — the `AgentRunner` seam exists; a Vertex/Gemini implementation is a drop-in (not testable here without other-provider access).
 - **Git worktree per parallel task** — makes file collision *impossible* rather than *forbidden*; deferred to avoid destabilizing the verified orchestrator, deserves its own PR.
 

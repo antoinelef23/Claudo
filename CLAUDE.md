@@ -18,7 +18,7 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 
 - **Eval gate**: no green eval, no merge. Evals are defined in spec.md (Evals section) and run via `just evals`.
 - **Human checkpoint**: never execute a plan (tasks.md) without explicit Owner approval. Never merge, deploy, or delete data without human agreement. A checkpoint may be `mode: auto` (auto-validated if evals green + reviewer PASS) — but that choice belongs to the Owner at approval time, and the final (merge) checkpoint is always human.
-- **Traceability & the why lives in git**: every commit follows the canonical format (`docs/commit-format.md`) — subject `type(feature): node title [BHV-3, INV-2]`, a mandatory `Why:` body (the decision/trigger, not the diff), and git trailers (`Spec-IDs`, `Version-Bump`, `Checkpoint`, `Run`). The repo is the memory: the `version:` bump is only a *fusible* (it proves a substance change was intentional), the **reasoning** belongs in the commit, where `git log`/`git blame` recover it forever. Humans commit via the `/commit` skill; the orchestrator's `[auto]` commits use the same shape. Before re-deciding a choice, read its recorded `Why:` rather than re-litigating it.
+- **Traceability & the why lives in git**: every commit follows the canonical format (`docs/reference/commit-format.md`) — subject `type(feature): node title [BHV-3, INV-2]`, a mandatory `Why:` body (the decision/trigger, not the diff), and git trailers (`Spec-IDs`, `Version-Bump`, `Checkpoint`, `Run`). The repo is the memory: the `version:` bump is only a *fusible* (it proves a substance change was intentional), the **reasoning** belongs in the commit, where `git log`/`git blame` recover it forever. Humans commit via the `/commit` skill; the orchestrator's `[auto]` commits use the same shape. Before re-deciding a choice, read its recorded `Why:` rather than re-litigating it.
 - **Anchored design**: never invent an architecture. Lean on the reference repos listed in design.md §2. If no reference pattern covers the need, flag it in an ADR rather than improvise.
 - **Spec immutable during a task**: if implementation reveals a gap in the spec, stop, amend the spec (separate commit), then resume.
 - **Amendment = coherence pass**: any spec amendment requires updating the `# version :` pointers in design.md/tasks.md and re-reading dependent docs (a note written before the amendment may now be false). Plan-lint flags version drift.
@@ -46,7 +46,7 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 
 Sub-agents available in `.claude/agents/`: `design-scout`, `planner`, `implementer`, `eval-runner`, `reviewer`. Their orchestration is described in README.md and in each tasks.md.
 
-Skills in `.claude/skills/`: `vibe-workshop` (facilitates the spec workshop), `commit` (writes the canonical why-in-git commit — see `docs/commit-format.md`), `diataxis` (organizes/creates docs by the Diátaxis method — use it when writing or restructuring `docs/`). The status line (`.claude/statusline.py`, wired in `settings.json`) surfaces the live orchestrator run state.
+Skills in `.claude/skills/`: `vibe-workshop` (facilitates the spec workshop), `commit` (writes the canonical why-in-git commit — see `docs/reference/commit-format.md`), `diataxis` (organizes/creates docs by the Diátaxis method — use it when writing or restructuring `docs/`). The status line (`.claude/statusline.py`, wired in `settings.json`) surfaces the live orchestrator run state.
 
 ## Models
 

@@ -13,7 +13,7 @@ You prepare the human review by the Owner (and by Owner_N-1). You modify nothing
 
 ## Recover the "why" first (git archaeology)
 Before calling anything a deviation, check whether it was a *recorded decision*. The repo is
-the memory; the reasoning lives in commit bodies (see `docs/commit-format.md`):
+the memory; the reasoning lives in commit bodies (see `docs/reference/commit-format.md`):
 - `git log --format='%h %s%n%b' -- <file>` — full message incl. the `Why:` body line (Why is a body paragraph, NOT a trailer — don't query it with `%(trailers:key=Why)`, that returns nothing).
 - `git blame -L <a>,<b> work/<feature>/spec.md` — who/why on a specific ID line.
 - `git log --format='%(trailers:key=Version-Bump,valueonly)' -- work/<feature>/spec.md` — contract amendments (Version-Bump IS a trailer).

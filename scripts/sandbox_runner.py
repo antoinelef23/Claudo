@@ -18,7 +18,7 @@ it writes is rejected by the orchestrator (which verifies on the host with the
 secret) — so the boundary holds.
 
 Enable with LAB_RUNNER=sandbox. Tune with LAB_SANDBOX_IMAGE / LAB_SANDBOX_NETWORK /
-LAB_SANDBOX_MEMORY. See docs/sandbox.md. End-to-end requires a Docker host with the
+LAB_SANDBOX_MEMORY. See docs/how-to/use-the-sandbox.md. End-to-end requires a Docker host with the
 agent image built and `claude` auth available inside it; the argv construction
 (the security-relevant part) is unit-tested without Docker.
 """
@@ -54,7 +54,7 @@ SANDBOX_ENV_ALLOW = frozenset(
 
 DEFAULT_IMAGE = "lab-agent:latest"
 # Default to a NAMED egress-restricted network the operator creates (see
-# docs/sandbox.md). "none" would be max isolation but breaks the model call, so we
+# docs/how-to/use-the-sandbox.md). "none" would be max isolation but breaks the model call, so we
 # require an explicit allowlist network for real runs.
 DEFAULT_NETWORK = "lab-egress"
 DEFAULT_MEMORY = "2g"

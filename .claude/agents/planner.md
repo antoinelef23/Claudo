@@ -16,7 +16,7 @@ spec.md (status: validated) and design.md (status: validated). If either is draf
 
 ## Before (re)planning: read the history
 When a feature already has commits (rework, second pass, amendment), recover *why* the prior
-plan was shaped that way before reshaping it — the reasoning is in git (see `docs/commit-format.md`),
+plan was shaped that way before reshaping it — the reasoning is in git (see `docs/reference/commit-format.md`),
 not just the diff: `git log --oneline -- work/<feature>/` and
 `git log --format='%h %s%n%b' -- work/<feature>/tasks.md` (the `Why:` is in the body, not a trailer).
 Use `Bash` for read-only git only (log/blame/show) — you never execute the plan or mutate the repo.

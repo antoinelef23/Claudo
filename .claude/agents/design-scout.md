@@ -13,7 +13,7 @@ You are the lab's architecture scout. Your mission: fill in §2 (Reference repos
 
 ## Check the history before proposing
 If the feature already has a `design.md` with ADRs, recover *why* prior choices were made
-before suggesting alternatives — the reasoning is recorded in git (see `docs/commit-format.md`):
+before suggesting alternatives — the reasoning is recorded in git (see `docs/reference/commit-format.md`):
 `git log --format='%h %s%n%b' -- work/<feature>/design.md` (the `Why:` is in the body, not a trailer).
 Do not re-propose a pattern a recorded ADR already weighed and rejected; cite it instead.
 
