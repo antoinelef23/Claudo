@@ -287,6 +287,31 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         subprocess.run(["git", "commit", "-m", message], cwd=ROOT, capture_output=True)
 
 
+def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
+    """Canonical commit format (docs/commit-format.md): subject + Why + trailers.
+
+    The orchestrator's [auto] commits use the SAME shape as the human `/commit` skill,
+    so git history — the project's memory — reads uniformly and agents can mine the
+    `Why:` line and the trailers to recover the reasoning behind a change. The deep
+    "why" of a contract lives in the human spec-amendment commits; an [auto] commit
+    implements an already-approved task, so its why is the task itself.
+    """
+    tag = f"[{', '.join(real_ids)}]" if real_ids else "[auto]"
+    # Flatten newlines: a newline in title/done_when would split the subject line
+    # or forge a fake "Key: value" line in the body (commit-structure integrity).
+    title = node.title.strip().replace("\n", " ")
+    dw = node.done_when.strip().replace("\n", " ")
+    subject = f"feat({feature.name}): {node.id} {title} {tag}"
+    why = title + (f" — done when: {dw}" if dw else "")
+    lines = [subject, "", f"Why: {why}", ""]
+    if real_ids:
+        lines.append(f"Spec-IDs: {', '.join(real_ids)}")
+    if node.files:
+        lines.append(f"Artifacts: {', '.join(node.files)}")
+    lines.append("Run: auto")
+    return "\n".join(lines)
+
+
 def _build_base_prompt(node: Node, feature: Path) -> str:
     return (
         f"You act as the implementer agent (.claude/agents/implementer.md). "
@@ -380,7 +405,6 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
     real_ids = list(
         dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t))
     )
-    trace = f"[{', '.join(real_ids)}]" if real_ids else "[auto]"
     mid = resolve_model("implementer", node.model, REGISTRY)
     base_prompt = _build_base_prompt(node, feature) + REGISTRY.profile_text(mid)
     session: str | None = None
@@ -439,11 +463,7 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         ok, out = _eval_gate(node, real_ids)
         if ok:
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
-            scoped_commit(
-                node,
-                feature,
-                f"feat({feature.name}): {node.id} {node.title} {trace} [auto]",
-            )
+            scoped_commit(node, feature, _commit_message(node, feature, real_ids))
             journal(feature, event="task_done", id=node.id, attempts=attempt)
             return "done"
         extra = f"\n\n⛔ EVAL GATE RED on the previous attempt. Fix:\n{out}"
