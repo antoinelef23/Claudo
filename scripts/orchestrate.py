@@ -56,6 +56,7 @@ from pathlib import Path
 
 import approvals
 from registry import load_registry, resolve_model
+from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 
 # LAB_ROOT: override for tests (sandbox) — default: the repo root
 ROOT = Path(os.environ.get("LAB_ROOT") or Path(__file__).resolve().parent.parent)
@@ -69,19 +70,13 @@ BUDGET_USD = float(os.environ.get("LAB_BUDGET_USD", "0") or 0)  # 0 = no cap
 TASK_TIMEOUT_S = int(
     os.environ.get("LAB_TASK_TIMEOUT", "2400")
 )  # wall per agent: 40 min
-CLAUDE_ARGS = [
-    "--permission-mode",
-    "acceptEdits",
-    "--max-turns",
-    "100",
-    # headless: acceptEdits covers edits, not Bash — minimal whitelist so the
-    # implementer can run its tests (otherwise it codes blind)
-    "--allowedTools",
-    "Bash(uv:*),Bash(make:*),Bash(python3:*),Bash(mkdir:*),Bash(ls:*),Bash(git diff:*),Bash(git log:*)",
-    # structured output: result + session_id (retry resume) + total_cost_usd (journal)
-    "--output-format",
-    "json",
-]
+MAX_TURNS = 100
+# Bash whitelist so the implementer can run its tests (acceptEdits covers edits,
+# not Bash). NOT a security boundary — real confinement is the sandbox runner.
+ALLOWED_TOOLS = list(DEFAULT_ALLOWED_TOOLS)
+# Execution backend (LAB_RUNNER: claude-cli default | sandbox). The orchestrator
+# depends on this interface, not on the `claude` binary.
+RUNNER = get_runner()
 SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
 
 # Commands allowed as a task's `verify` (finding H2). A verify is a test/build
@@ -623,55 +618,27 @@ def run_claude(
     cost, aggregated into COST_TOTAL for the summary (Twin Track metric).
     model: --model passed as-is (CLI default if None).
     """
-    cmd = ["claude", "-p", prompt, *CLAUDE_ARGS]
-    if model:
-        cmd += ["--model", model]
-    if resume:
-        cmd += ["--resume", resume]
     # The approval secret must NEVER be visible to a sub-agent: otherwise
     # it could sign its own checkpoint validation (finding H1).
     child_env = {k: v for k, v in os.environ.items() if k != approvals.ENV_SECRET}
-    try:
-        p = subprocess.run(
-            cmd,
-            cwd=ROOT,
-            capture_output=True,
-            text=True,
-            timeout=TASK_TIMEOUT_S,
-            env=child_env,
-        )
-    except subprocess.TimeoutExpired:
-        return {
-            "ok": False,
-            "text": "",
-            "session_id": None,
-            "cost_usd": 0.0,
-            "error": f"timeout: agent killed after {TASK_TIMEOUT_S}s (LAB_TASK_TIMEOUT)",
-        }
-    if p.returncode != 0:
-        return {
-            "ok": False,
-            "text": p.stdout,
-            "session_id": None,
-            "cost_usd": 0.0,
-            "error": p.stderr[-2000:] or p.stdout[-2000:],
-        }
-    text, session_id, cost = p.stdout, None, 0.0
-    try:
-        data = json.loads(p.stdout)
-        text = data.get("result") or ""
-        session_id = data.get("session_id")
-        cost = float(data.get("total_cost_usd") or 0.0)
-    except (json.JSONDecodeError, TypeError):
-        pass  # non-JSON output: keep the raw text
+    r = RUNNER.run(
+        prompt,
+        cwd=ROOT,
+        model=model,
+        resume=resume,
+        allowed_tools=ALLOWED_TOOLS,
+        max_turns=MAX_TURNS,
+        timeout=TASK_TIMEOUT_S,
+        env=child_env,
+    )
     with COST_LOCK:
-        COST_TOTAL["usd"] += cost
+        COST_TOTAL["usd"] += r.cost_usd
     return {
-        "ok": True,
-        "text": text,
-        "session_id": session_id,
-        "cost_usd": cost,
-        "error": "",
+        "ok": r.ok,
+        "text": r.text,
+        "session_id": r.session_id,
+        "cost_usd": r.cost_usd,
+        "error": r.error,
     }
 
 
@@ -771,7 +738,10 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         f'"STATUS: done" or "STATUS: blocked — <reason, e.g. OQ-3>".\n{node.prompt}{node.rework}'
     )
     if dry:
-        print(f"  [dry-run] claude -p '<prompt {node.id}>' {' '.join(CLAUDE_ARGS)}")
+        print(
+            f"  [dry-run] {RUNNER.name} run: {node.id} "
+            f"(acceptEdits, max_turns={MAX_TURNS}, {len(ALLOWED_TOOLS)} allowed tools)"
+        )
         return "done"
 
     real_ids = list(
