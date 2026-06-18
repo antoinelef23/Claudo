@@ -3,7 +3,7 @@
 Each golden `goldeval/check.sh` is run against a KNOWN-GOOD reference impl (must pass,
 exit 0) and a deliberately BROKEN impl (must fail, nonzero). This proves the oracle
 still discriminates correct from incorrect code, so a translation/edit that rots an
-oracle's math is caught by `make gate` instead of silently failing a correct model
+oracle's math is caught by `just gate` instead of silently failing a correct model
 in a billed run (review finding: golden integrity was un-gated).
 """
 

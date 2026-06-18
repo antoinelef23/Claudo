@@ -73,7 +73,7 @@ covers: [BHV-1, INV-2]
 
 *Each eval is executable (`pytest -m eval`). No green eval, no merge. An eval references the BHVs/INVs it covers. Every BHV and every INV must be covered by at least one eval.*
 
-*Executable convention: an eval = a pytest test marked `@pytest.mark.eval` whose name contains the ID in lowercase (e.g. `test_eval_1_matching_exact`). This is what lets the orchestrator mechanically verify that an eval exists (anti-empty-gate: a green `make evals` with zero evals collected validates NOTHING) and, eventually, eval ↔ spec coverage.*
+*Executable convention: an eval = a pytest test marked `@pytest.mark.eval` whose name contains the ID in lowercase (e.g. `test_eval_1_matching_exact`). This is what lets the orchestrator mechanically verify that an eval exists (anti-empty-gate: a green `just evals` with zero evals collected validates NOTHING) and, eventually, eval ↔ spec coverage.*
 
 | ID | Type | Description | Covers | Success threshold |
 |---|---|---|---|---|
