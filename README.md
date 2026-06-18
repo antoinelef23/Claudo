@@ -36,7 +36,7 @@ ai-native-lab/
 │   ├── statusline.py          # Status line: live orchestrator run state (state.json)
 │   ├── settings.json          # Hooks + statusLine + permission denies
 │   └── skills/                # vibe-workshop (spec), commit (why→git), diataxis (docs)
-├── docs/                      # how-to / reference (commit-format, sandbox, automation…)
+├── docs/                      # Diátaxis: tutorials/ how-to/ explanation/ reference/ (see docs/README.md)
 ├── models/                    # registry.toml, profiles/, EVOLUTION.md, scorecards/
 ├── evals/                     # golden/ (oracles) + behavioral/ (model governance)
 └── src/                       # Features built by the method
@@ -120,6 +120,10 @@ scripts/reject.sh CP-1 work/my-feature "the quote doesn't show the discount" T2
 ```
 
 Recovery: state lives in `<feature>/.runs/state.json` — re-running the same command resumes where it stopped (`done` nodes don't replay; `blocked` nodes retry after you answer their open questions). Prerequisites: `claude` CLI authenticated, `uv` installed.
+
+## Documentation
+
+Full docs live in [`docs/`](docs/README.md), organized by the [Diátaxis](https://diataxis.fr/) method: **[tutorials/](docs/tutorials/)** (learn by doing — start with [getting-started](docs/tutorials/getting-started.md)), **[how-to/](docs/how-to/)** (run the orchestrator, commit with rationale, sandbox, automate, evaluate models), **[explanation/](docs/explanation/)** (architecture, git-as-memory), **[reference/](docs/reference/)** (CLI, environment variables, commit format, status line, agents & skills).
 
 ## Model evaluation
 
