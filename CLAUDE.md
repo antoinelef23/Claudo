@@ -18,7 +18,7 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 
 - **Eval gate**: no green eval, no merge. Evals are defined in spec.md (Evals section) and run via `just evals`.
 - **Human checkpoint**: never execute a plan (tasks.md) without explicit Owner approval. Never merge, deploy, or delete data without human agreement. A checkpoint may be `mode: auto` (auto-validated if evals green + reviewer PASS) — but that choice belongs to the Owner at approval time, and the final (merge) checkpoint is always human.
-- **Traceability**: every commit references the spec IDs it implements (e.g. `feat: product matching [BHV-3, INV-2]`).
+- **Traceability & the why lives in git**: every commit follows the canonical format (`docs/commit-format.md`) — subject `type(feature): node title [BHV-3, INV-2]`, a mandatory `Why:` body (the decision/trigger, not the diff), and git trailers (`Spec-IDs`, `Version-Bump`, `Checkpoint`, `Run`). The repo is the memory: the `version:` bump is only a *fusible* (it proves a substance change was intentional), the **reasoning** belongs in the commit, where `git log`/`git blame` recover it forever. Humans commit via the `/commit` skill; the orchestrator's `[auto]` commits use the same shape. Before re-deciding a choice, read its recorded `Why:` rather than re-litigating it.
 - **Anchored design**: never invent an architecture. Lean on the reference repos listed in design.md §2. If no reference pattern covers the need, flag it in an ADR rather than improvise.
 - **Spec immutable during a task**: if implementation reveals a gap in the spec, stop, amend the spec (separate commit), then resume.
 - **Amendment = coherence pass**: any spec amendment requires updating the `# version :` pointers in design.md/tasks.md and re-reading dependent docs (a note written before the amendment may now be false). Plan-lint flags version drift.
@@ -30,10 +30,7 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 - Python 3.12+, `uv` for dependencies, `ruff` for lint/format, `pytest` for tests, `pytest -m eval` for evals.
 - FastAPI for services, Pydantic v2 for data contracts.
 - Markdown + Git for every artifact. No Confluence, no Jira: the repo is the memory.
-- Language (issue #12): **the team's working language is allowed ONLY in the business prose of the artifacts** (`spec.md` / `design.md` / `tasks.md`), so the business team can read and amend them. Everything else MUST be English:
-  - **Code** — comments, docstrings, identifiers, and CLI/log/error strings;
-  - **Technical docs** — `README.md`, `CLAUDE.md`, `.claude/` (agents, skills, hooks), `justfile`, `pyproject.toml`, CI workflows, `docs/`, and `models/` docs.
-  Code and technical docs are the interface for any engineer or model regardless of language; keeping them English makes them portable and keeps the spec/implementation boundary clean.
+- Language (**supersedes** the English-only rule that issue #12 originally set): **French and English are both allowed throughout the repo** — code, technical docs, and artifacts alike. Write in whichever language serves the reader best; bilingual is fine, and a French docstring next to English code is acceptable. Two *soft* preferences (never gates): keep public identifiers and user-facing error strings readable to a non-French engineer where that costs nothing, and keep a single artifact internally consistent. The one **hard** rule that stays enforced: **no client or brand proper nouns** anywhere committed — the lab is generic / org-neutral, so the de-branding (client names, internal product names) is permanent even though the language constraint is relaxed.
 
 ## Vocabulary (ubiquitous language)
 
@@ -45,9 +42,11 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 | Spec workshop | ~105-minute workshop that produces spec.md v1.0 |
 | Eval | Executable test derived from the spec; a merge condition |
 
-## Agents
+## Agents & skills
 
 Sub-agents available in `.claude/agents/`: `design-scout`, `planner`, `implementer`, `eval-runner`, `reviewer`. Their orchestration is described in README.md and in each tasks.md.
+
+Skills in `.claude/skills/`: `vibe-workshop` (facilitates the spec workshop), `commit` (writes the canonical why-in-git commit — see `docs/commit-format.md`), `diataxis` (organizes/creates docs by the Diátaxis method — use it when writing or restructuring `docs/`). The status line (`.claude/statusline.py`, wired in `settings.json`) surfaces the live orchestrator run state.
 
 ## Models
 
