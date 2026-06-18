@@ -288,7 +288,7 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
 
 
 def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
-    """Canonical commit format (docs/commit-format.md): subject + Why + trailers.
+    """Canonical commit format (docs/reference/commit-format.md): subject + Why + trailers.
 
     The orchestrator's [auto] commits use the SAME shape as the human `/commit` skill,
     so git history — the project's memory — reads uniformly and agents can mine the

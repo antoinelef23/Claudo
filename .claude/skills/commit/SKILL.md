@@ -5,7 +5,7 @@ description: Writes a structured git commit whose body records WHY the change ex
 
 # /commit — put the "why" in git
 
-You produce a commit in the lab's canonical format (see `docs/commit-format.md`). The
+You produce a commit in the lab's canonical format (see `docs/reference/commit-format.md`). The
 repo is the memory: the diff already says *what* changed — your job is to capture *why*,
 so a future reader or agent recovers the reasoning with `git log` instead of re-litigating
 the choice.
@@ -50,7 +50,7 @@ below the tier), so the discount predicate uses `>` not `>=`."
 
 ## Step 4 — Compose and commit
 
-Build the message exactly per `docs/commit-format.md`: subject `type(feature): node title
+Build the message exactly per `docs/reference/commit-format.md`: subject `type(feature): node title
 [IDs]`, blank line, `Why: …`, blank line, then the trailers (`Spec-IDs`, `Artifacts`,
 `Version-Bump` if any, `Checkpoint` if any, `Run: owner`). Show it to the user, then:
 
