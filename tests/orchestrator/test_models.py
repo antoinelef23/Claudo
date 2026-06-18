@@ -328,10 +328,10 @@ def test_pick_reviewer_models_prefers_non_implementer():
 
 
 def test_gchat_no_crash_when_unreachable(monkeypatch):
+    import notify
+
     monkeypatch.setenv("LAB_GCHAT_WEBHOOK", "http://127.0.0.1:9/nope")
-    assert (
-        orchestrate._gchat("test") is None
-    )  # swallows the network error, never raises
+    assert notify._gchat("test") is None  # swallows the network error, never raises
 
 
 def test_budget_stops_run(sandbox: Path) -> None:

@@ -43,20 +43,28 @@ import fcntl
 import json
 import os
 import re
-import shlex
 import subprocess
 import sys
 import tempfile
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
 from datetime import datetime
 from pathlib import Path
 
 import approvals
+from notify import notify
+from planlint import validate
+from plan import (
+    SPEC_ID,
+    Node,
+    parse_tasks_md,
+    paths_overlap,
+    skip_dependents,
+)
 from registry import load_registry, resolve_model
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
+from verify import parse_verify
 
 # LAB_ROOT: override for tests (sandbox) — default: the repo root
 ROOT = Path(os.environ.get("LAB_ROOT") or Path(__file__).resolve().parent.parent)
@@ -77,51 +85,6 @@ ALLOWED_TOOLS = list(DEFAULT_ALLOWED_TOOLS)
 # Execution backend (LAB_RUNNER: claude-cli default | sandbox). The orchestrator
 # depends on this interface, not on the `claude` binary.
 RUNNER = get_runner()
-SPEC_ID = re.compile(r"\b(?:INV|BHV|EX|EVAL|NG)-[A-Za-z0-9]+\b")
-
-# Commands allowed as a task's `verify` (finding H2). A verify is a test/build
-# command, never a shell: we run it WITHOUT a shell (argv), and plan-lint rejects
-# any command outside this list or containing shell metacharacters. Prevents an
-# agent-generated `verify` of the form `pytest; curl|sh`.
-VERIFY_ALLOWED = {
-    "true",
-    "false",
-    "test",
-    "[",
-    "ls",
-    "cat",
-    "grep",
-    "head",
-    "tail",
-    "make",
-    "just",
-    "uv",
-    "python",
-    "python3",
-    "pytest",
-    "ruff",
-}
-# Metacharacters that would only make sense via a shell — forbidden in a verify.
-_SHELL_META = re.compile(r"[;&|`$><\n]")
-# Env prefixes `VAR=val` allowed before a verify (finding H2, env smuggling).
-# Allowlist: keys that add NO privilege beyond what the verify already does
-# (it runs in-repo agent code: conftest.py, test modules). PYTHONPATH is one of
-# them — `PYTHONPATH=src uv run …` is standard usage and grants no more than the
-# `Bash(uv:*)/Bash(python3:*)` the agent already has.
-# Refused (blocked): keys that hijack OTHER processes/shells/binaries —
-# LD_PRELOAD, LD_LIBRARY_PATH, DYLD_*, BASH_ENV, ENV, PYTHONSTARTUP, PYTHONHOME, PATH —
-# which would be a real escalation (RCE without a shell, outside the test scope).
-VERIFY_ENV_ALLOWED = {
-    "CI",
-    "TZ",
-    "LANG",
-    "LC_ALL",
-    "LC_CTYPE",
-    "NO_COLOR",
-    "PYTHONPATH",
-    "PYTHONDONTWRITEBYTECODE",
-    "PYTEST_ADDOPTS",
-}
 
 COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
@@ -189,407 +152,7 @@ def eval_covers(spec_id: str, collected: str) -> bool:
     return False
 
 
-@dataclass
-class Node:
-    id: str
-    title: str
-    is_checkpoint: bool
-    depends_on: list[str] = field(default_factory=list)
-    prompt: str = ""
-    implements: list[str] = field(default_factory=list)
-    files: list[str] = field(default_factory=list)
-    verify: str = ""
-    done_when: str = ""
-    mode: str = "blocking"  # checkpoints: blocking | auto
-    status: str = "pending"  # pending | running | done | failed | blocked | skipped
-    rework: str = ""  # Owner comment after a checkpoint rejection (passed to the agent)
-    model: str = ""  # task model override (otherwise: registry role default)
-    reviewers: int = 1  # size of the reviewer panel (checkpoint) — >=2 = majority vote
-
-
-def parse_tasks_md(path: Path) -> tuple[dict, list[Node]]:
-    text = path.read_text(encoding="utf-8")
-
-    fm = {}
-    m = re.match(r"^---\n(.*?)\n---", text, re.S)
-    if m:
-        for line in m.group(1).splitlines():
-            if ":" in line:
-                k, _, v = line.partition(":")
-                fm[k.strip()] = v.split("#")[0].strip()
-
-    nodes: list[Node] = []
-    sections = re.split(r"\n### ", text)
-    for sec in sections[1:]:
-        header, _, body = sec.partition("\n")
-        hm = re.match(r"(T\d+|CP-\d+)\s*—\s*(.*)", header.strip())
-        if not hm:
-            continue
-        nid, title = hm.group(1), hm.group(2).strip()
-        is_cp = nid.startswith("CP")
-
-        deps: list[str] = []
-        dm = re.search(r"\*\*depends_on\s*:?\*\*\s*\[([^\]]*)\]", body)
-        if dm:
-            deps = [d.strip() for d in dm.group(1).split(",") if d.strip()]
-        if is_cp:
-            tm = re.search(
-                r"\*\*trigger\s*:?\*\*[^\n]*?(?:quand|when)\s+\[?([T\d\s,]+?)\]?\s+(?:(?:sont|are)\s+)?done",
-                body,
-            )
-            if tm:
-                deps = [d.strip() for d in tm.group(1).split(",") if d.strip()]
-
-        pm = re.search(r"\*\*prompt\s*:?\*\*\s*\n?((?:\s*>.*\n?)+)", body)
-        prompt = ""
-        if pm:
-            prompt = "\n".join(
-                line.strip().lstrip("> ") for line in pm.group(1).splitlines()
-            ).strip()
-        if not prompt:
-            pm = re.search(r"\*\*prompt\s*:?\*\*\s*([^\n]+)", body)
-            if pm:
-                prompt = pm.group(1).strip()
-
-        node = Node(nid, title, is_cp, deps, prompt)
-
-        im = re.search(r"\*\*implements\s*:?\*\*\s*\[([^\]]*)\]", body)
-        if im:
-            node.implements = [t.strip() for t in im.group(1).split(",") if t.strip()]
-        fmm = re.search(r"\*\*files_touched\s*:?\*\*\s*([^\n]+)", body)
-        if fmm:
-            node.files = re.findall(r"`([^`]+)`", fmm.group(1))
-        vm = re.search(r"\*\*verify\s*:?\*\*\s*`([^`]+)`", body)
-        if vm:
-            node.verify = vm.group(1).strip()
-        dw = re.search(r"\*\*done_when\s*:?\*\*\s*([^\n]+)", body)
-        if dw:
-            node.done_when = dw.group(1).strip()
-        mm = re.search(r"\*\*mode\s*:?\*\*\s*(auto|blocking)", body)
-        if mm:
-            node.mode = mm.group(1)
-        mom = re.search(r"\*\*model\s*:?\*\*\s*`?([\w.\-]+)`?", body)
-        if mom:
-            node.model = mom.group(1)
-        rm = re.search(r"\*\*reviewers\s*:?\*\*\s*(\d+)", body)
-        if rm:
-            node.reviewers = max(1, int(rm.group(1)))
-
-        nodes.append(node)
-
-    # Each task implicitly depends on every checkpoint defined before it
-    last_cp: str | None = None
-    for n in nodes:
-        if n.is_checkpoint:
-            last_cp = n.id
-        elif last_cp and last_cp not in n.depends_on and not n.depends_on:
-            n.depends_on.append(last_cp)
-    return fm, nodes
-
-
-# ---------------------------------------------------------------- plan-lint
-
-
-def _ancestors(nodes: list[Node]) -> dict[str, set[str]]:
-    by_id = {n.id: n for n in nodes}
-    memo: dict[str, set[str]] = {}
-
-    def walk(nid: str, stack: tuple[str, ...] = ()) -> set[str]:
-        if nid in memo:
-            return memo[nid]
-        if nid in stack:  # cycle — flagged by validate(), we cut here
-            return set()
-        acc: set[str] = set()
-        for d in by_id.get(nid, Node(nid, "", False)).depends_on:
-            acc.add(d)
-            acc |= walk(d, (*stack, nid))
-        memo[nid] = acc
-        return acc
-
-    return {n.id: walk(n.id) for n in nodes}
-
-
-def _paths_overlap(a: str, b: str) -> bool:
-    a, b = a.strip().rstrip("/"), b.strip().rstrip("/")
-    return a == b or a.startswith(b + "/") or b.startswith(a + "/")
-
-
-def parse_verify(cmd: str) -> tuple[list[str], dict[str, str]]:
-    """Split a `verify` command into (argv, env_overrides) — WITHOUT a shell (finding H2).
-
-    Handles environment prefixes `VAR=val` restricted to VERIFY_ENV_ALLOWED
-    (e.g. `CI=1 …`, `PYTHONPATH=src uv run …`). Keys that hijack other
-    processes/shells/binaries (LD_PRELOAD, DYLD_*, BASH_ENV, PYTHONSTARTUP, PATH…)
-    are refused: that would be an RCE escalation outside the test scope.
-    Raises ValueError if: shell metacharacters, unparsable (unclosed quotes),
-    empty, or command outside VERIFY_ALLOWED. The caller then runs the argv
-    as-is (`shell=False`), which neutralizes any chaining/injection even if this
-    validation were bypassed.
-    """
-    if _SHELL_META.search(cmd):
-        raise ValueError(
-            "shell metacharacters forbidden in verify (; & | $ ` > < newline) — "
-            "a verify is a single command, not a shell script"
-        )
-    tokens = shlex.split(cmd)  # may raise ValueError (unclosed quotes)
-    env: dict[str, str] = {}
-    while tokens and re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*=.*", tokens[0]):
-        k, _, v = tokens[0].partition("=")
-        if k not in VERIFY_ENV_ALLOWED:
-            raise ValueError(
-                f'environment prefix "{k}=" forbidden in verify — '
-                f"allowed keys: {', '.join(sorted(VERIFY_ENV_ALLOWED))}. "
-                "PYTHONPATH/PYTHONSTARTUP/LD_PRELOAD/BASH_ENV… let you inject "
-                "code loaded by the command (RCE without a shell)."
-            )
-        env[k] = v
-        tokens = tokens[1:]
-    if not tokens:
-        raise ValueError("empty verify (after any environment prefixes)")
-    prog = Path(tokens[0]).name
-    if prog not in VERIFY_ALLOWED:
-        raise ValueError(
-            f'verify command "{tokens[0]}" outside allowlist — '
-            f"allowed: {', '.join(sorted(VERIFY_ALLOWED))}"
-        )
-    return tokens, env
-
-
-def validate(feature: Path, fm: dict, nodes: list[Node]) -> tuple[list[str], list[str]]:
-    """Plan-lint. Returns (errors, warnings)."""
-    errors: list[str] = []
-    warnings: list[str] = []
-    by_id = {n.id: n for n in nodes}
-
-    if not nodes:
-        return (["no task recognized — check the format `### T1 — title`"], [])
-    seen: set[str] = set()
-    for n in nodes:
-        if n.id in seen:
-            errors.append(f"{n.id}: duplicate ID")
-        seen.add(n.id)
-
-    # Graph
-    for n in nodes:
-        for d in n.depends_on:
-            if d not in by_id:
-                errors.append(f"{n.id}: depends_on [{d}] does not exist")
-    # Cycles (DFS coloring)
-    WHITE, GREY, BLACK = 0, 1, 2
-    color = {n.id: WHITE for n in nodes}
-
-    def dfs(nid: str) -> bool:
-        color[nid] = GREY
-        for d in by_id[nid].depends_on:
-            if d not in by_id:
-                continue
-            if color[d] == GREY:
-                errors.append(f"dependency cycle via {nid} → {d}")
-                return True
-            if color[d] == WHITE and dfs(d):
-                return True
-        color[nid] = BLACK
-        return False
-
-    for n in nodes:
-        if color[n.id] == WHITE and dfs(n.id):
-            break
-
-    # Mandatory task fields
-    for n in nodes:
-        if n.is_checkpoint:
-            continue
-        if not n.done_when:
-            errors.append(
-                f'{n.id}: done_when missing (nothing executable defines "done")'
-            )
-        if not n.files:
-            errors.append(
-                f"{n.id}: files_touched missing or without backticks (parallelism unverifiable)"
-            )
-        if not n.prompt:
-            warnings.append(
-                f"{n.id}: empty prompt — the implementer will only have the title"
-            )
-        if not n.verify:
-            warnings.append(
-                f"{n.id}: no executable verify — done_when will not be checked mechanically"
-            )
-        else:
-            try:
-                parse_verify(n.verify)
-            except ValueError as e:
-                errors.append(f"{n.id}: invalid verify (`{n.verify}`) — {e}")
-
-    # Spec IDs
-    spec_path = feature / "spec.md"
-    if spec_path.exists():
-        spec_text = spec_path.read_text(encoding="utf-8")
-        for n in nodes:
-            for tok in n.implements:
-                for sid in SPEC_ID.findall(tok):
-                    if sid not in spec_text:
-                        errors.append(
-                            f"{n.id}: implements [{sid}] not found in spec.md"
-                        )
-        # Each EVAL-n declared in the spec must be carried by a task
-        claimed = {s for n in nodes for t in n.implements for s in SPEC_ID.findall(t)}
-        for ev in sorted(set(re.findall(r"\bEVAL-\w+\b", spec_text))):
-            if ev not in claimed:
-                warnings.append(
-                    f"{ev} declared in spec.md §7 but carried by no task (implements)"
-                )
-        # finding L4: ID coverage only validates EVAL-*. A plan that implements
-        # behaviors/invariants WITHOUT any EVAL-* relies on off-plan tests — we
-        # flag it (the hard gate stays on EVAL-*).
-        impl_behaviors = {
-            s
-            for n in nodes
-            for t in n.implements
-            for s in SPEC_ID.findall(t)
-            if s.startswith(("BHV-", "INV-"))
-        }
-        if impl_behaviors and not any(s.startswith("EVAL-") for s in claimed):
-            warnings.append(
-                f"behaviors/invariants are implemented ({sorted(impl_behaviors)[:3]}…) "
-                "but no task carries an EVAL-*: eval coverage relies on off-plan tests"
-            )
-        # Documentation drift: the "# version : x.y.z" pointers must track the spec
-        sv = re.search(r"^version:\s*([\d.]+)", spec_text, re.M)
-        if sv:
-            for art in ("tasks.md", "design.md"):
-                p = feature / art
-                if not p.exists():
-                    continue
-                m = re.search(
-                    r"^spec:.*?version\s*:?\s*([\d.]+)",
-                    p.read_text(encoding="utf-8"),
-                    re.M,
-                )
-                if m and m.group(1) != sv.group(1):
-                    warnings.append(
-                        f"{art} references spec v{m.group(1)} but spec.md is at v{sv.group(1)} — "
-                        f"documentation drift, update the pointer after the amendment"
-                    )
-    else:
-        errors.append("spec.md not found next to tasks.md")
-
-    # Parallelism safety: two unordered tasks must not share any path
-    anc = _ancestors(nodes)
-    tasks = [n for n in nodes if not n.is_checkpoint]
-    for i, a in enumerate(tasks):
-        for b in tasks[i + 1 :]:
-            if a.id in anc[b.id] or b.id in anc[a.id]:
-                continue  # ordered by the DAG
-            clash = [
-                (fa, fb) for fa in a.files for fb in b.files if _paths_overlap(fa, fb)
-            ]
-            if clash:
-                errors.append(
-                    f"{a.id} ∥ {b.id}: runnable in parallel but files_touched overlap "
-                    f"({clash[0][0]} ↔ {clash[0][1]}) — add a depends_on or separate the paths"
-                )
-
-    # Checkpoints
-    cps = [n for n in nodes if n.is_checkpoint]
-    if not cps:
-        warnings.append(
-            "no checkpoint — a plan without a human pause violates CLAUDE.md (hard rules)"
-        )
-    dependents = {n.id: [m.id for m in nodes if n.id in m.depends_on] for n in nodes}
-    for cp in cps:
-        if not cp.depends_on:
-            warnings.append(
-                f'{cp.id}: trigger not parsed — add "trigger : auto when [Tn, Tm] done"'
-            )
-        is_sink = not dependents[cp.id]
-        mentions_merge = "merge" in (cp.title + " ").lower()
-        if cp.mode == "auto" and (is_sink or mentions_merge):
-            errors.append(
-                f"{cp.id}: a final/merge checkpoint cannot be mode auto — the merge is human, always"
-            )
-
-    # Separation of duties: one model should not both implement AND arbitrate alone
-    if REGISTRY.models:
-        impl = REGISTRY.role_default("implementer")
-        rev = REGISTRY.role_default("reviewer")
-        if impl and impl == rev:
-            warnings.append(
-                f"separation of duties: reviewer and implementer point to the same model ({impl}) — "
-                "an auto checkpoint will not be able to self-validate (will fall back to human). "
-                "Assign a distinct reviewer model in models/registry.toml."
-            )
-
-    # Models: a task override must name a model eligible for its role
-    if REGISTRY.models:
-        for n in nodes:
-            if not n.model:
-                continue
-            role = "reviewer" if n.is_checkpoint else "implementer"
-            m = REGISTRY.by_id(n.model)
-            if m is None:
-                warnings.append(
-                    f'{n.id}: model "{n.model}" absent from the registry (models/registry.toml)'
-                )
-            elif role not in m.roles:
-                warnings.append(
-                    f'{n.id}: model "{n.model}" not eligible for role {role} (registry: {m.roles})'
-                )
-
-    return errors, warnings
-
-
 # ---------------------------------------------------------------- execution
-
-
-def _gchat(msg: str) -> None:
-    """Google Chat notification (opt-in). No-op if LAB_GCHAT_WEBHOOK absent; never crashes.
-    Lets a squad (not just the Owner at their Mac) see checkpoints/blocks."""
-    url = os.environ.get("LAB_GCHAT_WEBHOOK")
-    if not url:
-        return
-    try:
-        import json as _json
-        import urllib.request
-
-        req = urllib.request.Request(
-            url,
-            data=_json.dumps({"text": f"[Lab IA-natif] {msg}"}).encode(),
-            headers={"Content-Type": "application/json"},
-        )
-        urllib.request.urlopen(req, timeout=10)
-    except Exception:
-        pass
-
-
-def notify(msg: str) -> None:
-    print(f"🔔 {msg}", flush=True)
-    if os.environ.get(
-        "LAB_NO_NOTIFY"
-    ):  # tests / CI: no external notification (incl. _gchat)
-        return
-    _gchat(msg)
-    try:
-        # msg passed as argv (item 1 of argv), NEVER interpolated into the
-        # AppleScript source: an agent-generated `reason` can no longer inject a
-        # `do shell script` via osascript (finding M2).
-        subprocess.run(
-            [
-                "osascript",
-                "-e",
-                "on run argv",
-                "-e",
-                'display notification (item 1 of argv) with title (item 2 of argv) sound name "Glass"',
-                "-e",
-                "end run",
-                msg,
-                "Lab IA-natif",
-            ],
-            capture_output=True,
-            timeout=10,
-        )
-    except Exception:
-        pass
 
 
 def run_log(feature: Path, node: Node, agent: str, result: str) -> None:
@@ -695,7 +258,7 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         ).stdout.splitlines()
         for f in staged:
             if f.startswith("evals/golden/") and not any(
-                _paths_overlap(f, d) for d in node.files
+                paths_overlap(f, d) for d in node.files
             ):
                 subprocess.run(
                     ["git", "reset", "-q", "HEAD", "--", f],
@@ -724,9 +287,8 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
         subprocess.run(["git", "commit", "-m", message], cwd=ROOT, capture_output=True)
 
 
-def run_task(node: Node, feature: Path, dry: bool) -> str:
-    """Returns done | failed | blocked."""
-    base_prompt = (
+def _build_base_prompt(node: Node, feature: Path) -> str:
+    return (
         f"You act as the implementer agent (.claude/agents/implementer.md). "
         f"Read {feature}/spec.md then {feature}/design.md then {feature}/tasks.md. "
         f"Execute ONLY task {node.id} — {node.title}. "
@@ -736,6 +298,78 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         f"You MUST end your reply with a single line: "
         f'"STATUS: done" or "STATUS: blocked — <reason, e.g. OQ-3>".\n{node.prompt}{node.rework}'
     )
+
+
+def _run_verify(node: Node) -> tuple[bool, str, str]:
+    """Run the task's `verify` (no shell). Returns (passed, agent_feedback, log_label)."""
+    if not node.verify:
+        return True, "", ""
+    try:
+        argv, venv = parse_verify(node.verify)
+    except ValueError as e:
+        # Should not happen (plan-lint already blocks), but defense in depth under
+        # --force: we never launch a shell.
+        return False, f"\n\n⛔ invalid verify (`{node.verify}`): {e}", "verify INVALID"
+    v = subprocess.run(
+        argv,
+        cwd=ROOT,
+        capture_output=True,
+        text=True,
+        env={**os.environ, **venv} if venv else None,
+    )
+    if v.returncode != 0:
+        return (
+            False,
+            f"\n\n⛔ verify failed (`{node.verify}`):\n{(v.stdout + v.stderr)[-2000:]}",
+            "verify FAIL",
+        )
+    return True, "", ""
+
+
+def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
+    """Run evals + anti-empty-gate (M6) + ID coverage (M7). Returns (ok, agent_feedback)."""
+    ok, out = run_evals()
+    # A task that touches source code MUST have evals even without a declared
+    # implements (finding M6) — otherwise `just evals` green by absence (masked
+    # exit-5) would let ungated code through.
+    touches_source = any(
+        f.endswith(".py") and not f.startswith(("tests/", "evals/")) for f in node.files
+    ) or any(
+        paths_overlap(f, p)
+        for f in node.files
+        for p in ("src", "app", "lib", "modules")
+    )
+    if ok and (real_ids or touches_source):
+        collected = evals_collected()
+        if "::" not in collected:
+            reason = (
+                f"implements {node.implements}"
+                if real_ids
+                else f"modifies source code {node.files}"
+            )
+            return False, (
+                "Empty gate: `just evals` is green but NO eval is collected "
+                f"while the task {reason}. Write the evals from spec.md §7 "
+                "(pytest -m eval) — no eval, no done."
+            )
+        if real_ids:
+            missing = [
+                i
+                for i in real_ids
+                if i.startswith("EVAL-") and not eval_covers(i, collected)
+            ]
+            if missing:
+                return False, (
+                    f"Incomplete eval coverage: no collected test carries {missing}. "
+                    f"Convention: node-id `test_{missing[0].lower().replace('-', '_')}_<case>` "
+                    "(lowercased ID, dashes→underscores)."
+                )
+    return ok, out
+
+
+def run_task(node: Node, feature: Path, dry: bool) -> str:
+    """Returns done | failed | blocked. Per attempt: run the agent → parse the
+    STATUS verdict → run verify → run the eval gate → scoped commit on green."""
     if dry:
         print(
             f"  [dry-run] {RUNNER.name} run: {node.id} "
@@ -747,9 +381,8 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         dict.fromkeys(s for t in node.implements for s in SPEC_ID.findall(t))
     )
     trace = f"[{', '.join(real_ids)}]" if real_ids else "[auto]"
-
     mid = resolve_model("implementer", node.model, REGISTRY)
-    base_prompt += REGISTRY.profile_text(mid)
+    base_prompt = _build_base_prompt(node, feature) + REGISTRY.profile_text(mid)
     session: str | None = None
     extra = ""
     for attempt in range(1, MAX_EVAL_RETRIES + 1):
@@ -797,67 +430,13 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                 flush=True,
             )
 
-        if node.verify:
-            try:
-                argv, venv = parse_verify(node.verify)
-            except ValueError as e:
-                # Should not happen (plan-lint already blocks), but defense in
-                # depth if run under --force: we never launch a shell.
-                extra = f"\n\n⛔ invalid verify (`{node.verify}`): {e}"
-                run_log(feature, node, "implementer", f"verify INVALID (t{attempt})")
-                continue
-            v = subprocess.run(
-                argv,
-                cwd=ROOT,
-                capture_output=True,
-                text=True,
-                env={**os.environ, **venv} if venv else None,
-            )
-            if v.returncode != 0:
-                extra = f"\n\n⛔ verify failed (`{node.verify}`):\n{(v.stdout + v.stderr)[-2000:]}"
-                run_log(feature, node, "implementer", f"verify FAIL (t{attempt})")
-                continue
+        passed, feedback, label = _run_verify(node)
+        if not passed:
+            extra = feedback
+            run_log(feature, node, "implementer", f"{label} (t{attempt})")
+            continue
 
-        ok, out = run_evals()
-        # Anti-empty-gate: a task that touches source code MUST have evals,
-        # even without a declared implements (finding M6) — otherwise `just evals`
-        # green by absence (masked exit-5) would let ungated code through.
-        touches_source = any(
-            f.endswith(".py") and not f.startswith(("tests/", "evals/"))
-            for f in node.files
-        ) or any(
-            _paths_overlap(f, p)
-            for f in node.files
-            for p in ("src", "app", "lib", "modules")
-        )
-        if ok and (real_ids or touches_source):
-            collected = evals_collected()
-            if "::" not in collected:
-                ok = False
-                reason = (
-                    f"implements {node.implements}"
-                    if real_ids
-                    else f"modifies source code {node.files}"
-                )
-                out = (
-                    "Empty gate: `just evals` is green but NO eval is collected "
-                    f"while the task {reason}. Write the evals from spec.md §7 "
-                    "(pytest -m eval) — no eval, no done."
-                )
-            elif real_ids:
-                # ID coverage: pytest node-id matching (finding M7).
-                missing = [
-                    i
-                    for i in real_ids
-                    if i.startswith("EVAL-") and not eval_covers(i, collected)
-                ]
-                if missing:
-                    ok = False
-                    out = (
-                        f"Incomplete eval coverage: no collected test carries {missing}. "
-                        f"Convention: node-id `test_{missing[0].lower().replace('-', '_')}_<case>` "
-                        "(lowercased ID, dashes→underscores)."
-                    )
+        ok, out = _eval_gate(node, real_ids)
         if ok:
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
             scoped_commit(
@@ -1057,20 +636,6 @@ def wait_checkpoint(
         time.sleep(20)
 
 
-def skip_dependents(failed: Node, nodes: list[Node]) -> None:
-    """Containment: only the (transitive) dependents of a failure are neutralized."""
-    by_id = {n.id: n for n in nodes}
-    queue = [failed.id]
-    while queue:
-        cur = queue.pop()
-        for n in nodes:
-            if n.status == "pending" and cur in n.depends_on:
-                n.status = "skipped"
-                print(f"⏭  {n.id} skipped (depends on {cur})", flush=True)
-                queue.append(n.id)
-    _ = by_id  # readability
-
-
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("feature", help="feature directory (contains tasks.md)")
@@ -1093,7 +658,7 @@ def main() -> int:
     feature = (ROOT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
-    errors, warnings = validate(feature, fm, nodes)
+    errors, warnings = validate(feature, fm, nodes, REGISTRY)
     if args.validate or errors or warnings:
         print(
             f"Plan-lint — {len(nodes)} nodes, frontmatter status: {fm.get('status', '∅')}"
