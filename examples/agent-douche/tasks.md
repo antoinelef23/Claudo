@@ -5,7 +5,7 @@ version: 0.1.0
 status: proposed
 generated_by: planner
 approved_by: <Owner — AWAITING VALIDATION>
-spec: ./spec.md          # version : 1.0.1
+spec: ./spec.md          # version : 1.0.2
 design: ./design.md      # version : 0.1.1
 ---
 
