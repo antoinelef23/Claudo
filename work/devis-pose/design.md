@@ -1,7 +1,7 @@
 ---
 artifact: design
 feature: devis-pose
-version: 1.0.1
+version: 1.0.2
 status: validated
 owner: Antoine (simulation)
 validated_by: simulated FDE — 2026-06-10
@@ -12,7 +12,7 @@ spec: ./spec.md          # version : 1.0.1
 
 > Simulation scope: pure functions + CLI, zero network I/O. The goal is to
 > validate the orchestrated pipeline (plan-lint → parallel waves → evals → checkpoints),
-> not to produce the target architecture of Agent Douche.
+> not to produce the target architecture of the production app.
 
 ## 1. Architecture overview
 
@@ -45,7 +45,7 @@ Three modules under `src/devis/`: `calc.py` (pure domain), `format.py` (pure pre
 
 ### ADR-1 — Computation in pure functions, amounts as floats rounded to 2 decimals
 - **Status:** accepted
-- **Context:** short simulation; the real Agent Douche will use Decimal on the prod side.
+- **Context:** short simulation; the real production app will use Decimal on the prod side.
 - **Decision:** `compute_quote(products_subtotal_eur: float, surface_m2: float) -> dict`,
   `round(x, 2)` at the boundaries.
 - **Anchored on:** cosmicpython — pure domain.
@@ -77,3 +77,4 @@ N/A in simulation.
 |---|---|---|---|
 | 1.0.0 | 2026-06-10 | simulation | Creation |
 | 1.0.1 | 2026-06-18 | translation | English translation (form only, no substance change) |
+| 1.0.2 | 2026-06-18 | cleanup | Neutralized client-specific narrative reference (ADR-1 context) |

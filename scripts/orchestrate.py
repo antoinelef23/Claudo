@@ -28,8 +28,8 @@ Autonomy guardrails:
     would suck in the files of other tasks and the goldens — findings H3/H5)
 
 Usage:
-    python3 scripts/orchestrate.py examples/agent-douche --validate
-    python3 scripts/orchestrate.py examples/agent-douche --dry-run
+    python3 scripts/orchestrate.py work/my-feature --validate
+    python3 scripts/orchestrate.py work/my-feature --dry-run
     caffeinate -i python3 scripts/orchestrate.py work/my-feature &   # runs in background
 
 Prerequisites: claude CLI installed and authenticated; tasks.md with status: approved

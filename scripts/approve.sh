@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Human validation of a checkpoint: scripts/approve.sh CP-1 examples/agent-douche
+# Human validation of a checkpoint: scripts/approve.sh CP-1 work/my-feature
 # Creates the SIGNED approval token (HMAC) the orchestrator waits for, via
 # scripts/approvals.py. Records the author and date. The token is forgeable by an
 # agent only if it knows LAB_APPROVAL_SECRET (removed from the sub-agents' env).

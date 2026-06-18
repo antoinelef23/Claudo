@@ -33,8 +33,7 @@ ai-native-lab/
 │   └── skills/                # e.g. the spec-workshop facilitation skill
 ├── models/                    # registry.toml, profiles/, EVOLUTION.md, scorecards/
 ├── evals/                     # golden/ (oracles) + behavioral/ (model governance)
-├── src/                       # Features built by the method
-└── examples/                  # Filled-in 3-artifact examples
+└── src/                       # Features built by the method
 ```
 
 ## The pipeline: who triggers what
