@@ -1,5 +1,5 @@
 ---
-artifact: tasks
+type: tasks
 feature: arrondi-comptable
 status: approved
 ---

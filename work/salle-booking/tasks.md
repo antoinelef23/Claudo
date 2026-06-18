@@ -1,5 +1,5 @@
 ---
-artifact: tasks
+type: tasks
 feature: salle-booking
 version: 0.1.0
 status: approved         # proposed | approved | in_progress | done

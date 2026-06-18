@@ -1,5 +1,5 @@
 ---
-artifact: spec
+type: spec
 feature: <feature-slug>
 version: 0.1.0
 status: draft            # draft | validated | superseded

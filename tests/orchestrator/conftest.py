@@ -48,7 +48,7 @@ JUSTFILE = """evals:
 """
 
 SPEC = """---
-artifact: spec
+type: spec
 feature: feat
 version: 1.0.0
 status: validated

@@ -1,5 +1,5 @@
 ---
-artifact: design
+type: design
 feature: devis-pose
 version: 1.0.2
 status: validated

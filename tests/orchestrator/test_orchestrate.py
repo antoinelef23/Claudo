@@ -12,7 +12,7 @@ from pathlib import Path
 from .conftest import REPO, approve, run_orch
 
 FM = """---
-artifact: tasks
+type: tasks
 feature: feat
 status: approved
 ---

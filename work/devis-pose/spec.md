@@ -1,5 +1,5 @@
 ---
-artifact: spec
+type: spec
 feature: devis-pose
 version: 1.0.1
 status: validated
