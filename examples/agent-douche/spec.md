@@ -1,16 +1,16 @@
 ---
 artifact: spec
 feature: agent-douche
-version: 1.0.1
-status: draft            # → validated after the Vibe Workshop with the client's business team
-owner: <Owner the client>
-validated_by: <the client's business team — to be signed off at the close of the Vibe Workshop>
+version: 1.0.2
+status: draft            # → validated after the spec workshop with the client's business team
+owner: <Owner>
+validated_by: <the client's business team — to be signed off at the close of the spec workshop>
 ---
 
 # Spec — Agent Douche (bathroom configurator)
 
 > ⚠️ **Illustrative example.** The numeric values and the examples are assumptions to be confirmed
-> in a Vibe Workshop with the client's business team. Deadline: projects fair mid-October 2026.
+> in a spec workshop with the client's business team. Deadline: projects fair mid-October 2026.
 
 ## 1. Intent
 
@@ -22,7 +22,7 @@ A customer uploads a photo of their bathroom; the agent proposes 3 moods (modern
 
 | Business term (EN) | Canonical name (code) | Definition |
 |---|---|---|
-| Mood | `ambiance` | Generated decorative theme: exactly one of `moderne`, `naturel`, `classique` |
+| Mood | `mood` | Generated decorative theme: exactly one of `modern`, `natural`, `classic` |
 | Customer photo | `room_photo` | Image of the existing bathroom uploaded by the customer (JPEG/PNG/HEIC, ≤ 15 MB) |
 | Matched product | `matched_product` | Active reference from the client catalog selected for a mood |
 | Render | `render` | Visualization of the customer's bathroom recomposed in a mood |
@@ -31,7 +31,7 @@ A customer uploads a photo of their bathroom; the agent proposes 3 moods (modern
 ## 3. Invariants
 
 - **INV-1** — Every displayed product MUST exist in the client catalog, be active and available (in stock or with a displayed lead time). Never a hallucinated product.
-- **INV-2** — Each render MUST propose exactly 3 moods: `moderne`, `naturel`, `classique`.
+- **INV-2** — Each render MUST propose exactly 3 moods: `modern`, `natural`, `classic`.
 - **INV-3** — The displayed price MUST be the real-time catalog price at the moment of display; any discrepancy at the cart is recomputed.
 - **INV-4** — The customer photo MUST NOT be kept beyond the session without explicit consent (GDPR) and MUST NOT be used for model training.
 - **INV-5** — The system MUST NOT produce a firm quote: the installation quote is an estimate, marked as such, forwarded to the installation network for validation.
@@ -74,12 +74,12 @@ input:
   action: "propose the moods"
 expected_output:
   renders: 3
-  ambiances: [moderne, naturel, classique]
-  naturel:
-    produits_exemple:
-      - { ref: "bamboo countertop washbasin", prix: "real-time catalog", dispo: true }
-      - { ref: "120x90 stone-effect shower tray", prix: "real-time catalog", dispo: true }
-    geometrie: "bathtub replaced by a shower at the same drainage location"
+  moods: [modern, natural, classic]
+  natural:
+    example_products:
+      - { ref: "bamboo countertop washbasin", price: "real-time catalog", available: true }
+      - { ref: "120x90 stone-effect shower tray", price: "real-time catalog", available: true }
+    geometry: "bathtub replaced by a shower at the same drainage location"
 covers: [BHV-2, BHV-3, INV-1, INV-2]
 ```
 
@@ -97,9 +97,9 @@ covers: [BHV-1b, INV-6]
 ```yaml
 input:
   action: "add to cart"
-  produit: { ref: "tile X", statut_stock: "national stockout" }
+  product: { ref: "tile X", stock_status: "national stockout" }
 expected_output:
-  panier: "created with an equivalent substitute (same price range ±10%), 'replaced' badge"
+  cart: "created with an equivalent substitute (same price range ±10%), 'replaced' badge"
 covers: [BHV-3a, INV-1, INV-3]
 ```
 
@@ -131,5 +131,6 @@ covers: [BHV-3a, INV-1, INV-3]
 
 | Version | Date | Author | Change |
 |---|---|---|---|
-| 1.0.0 | <Vibe Workshop date> | Vibe Workshop (PE + business) | Creation — SFEIR pre-filled example to validate |
+| 1.0.0 | <spec workshop date> | Spec workshop (PE + business) | Creation — pre-filled example to validate |
 | 1.0.1 | 2026-06-18 | translation | English translation (form only, no substance change) |
+| 1.0.2 | 2026-06-18 | translation | English identifier consistency in examples/glossary (form only) |

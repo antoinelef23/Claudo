@@ -3,9 +3,9 @@ artifact: design
 feature: agent-douche
 version: 0.1.1
 status: draft
-owner: <Owner the client>
+owner: <Owner>
 validated_by: <FDE>
-spec: ./spec.md          # version : 1.0.1
+spec: ./spec.md          # version : 1.0.2
 ---
 
 # Design — Agent Douche
@@ -33,8 +33,8 @@ Single FastAPI service in V1 (modular monolith), three business modules: `vision
 
 | Repo | Team / contact | Day-1 access? | What we reuse | What we leave aside |
 |---|---|---|---|---|
-| `<api-catalogue>` | Catalog team | ☐ | products API contract, availability/stock model | — |
-| `<api-panier>` | Checkout team | ☐ | cart creation + services contract | — |
+| `<api-catalog>` | Catalog team | ☐ | products API contract, availability/stock model | — |
+| `<api-cart>` | Checkout team | ☐ | cart creation + services contract | — |
 | `<design-system-web>` + a front using it | Design System team | ☐ | upload, gallery, product-page components | — |
 | `<pipeline-ci-reference>` | platform / Global Ready | ☐ | compliant CI, secrets, SAST | — |
 | `<a recent GCP service>` | CTO office / AI COE | ☐ | GCP conventions, IAM, observability | legacy patterns |

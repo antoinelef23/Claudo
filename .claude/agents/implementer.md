@@ -13,6 +13,6 @@ You implement a single task from tasks.md. Reading order: spec.md → design.md 
 2. **Tests first**: write the tests derived from the referenced BHVs/INVs, then the code that makes them pass.
 3. **Anchoring**: follow the cited reference pattern (`anchored_on`). If the pattern does not apply: stop, propose an ADR, do not improvise.
 4. **Ambiguous or incomplete spec**: stop. The spec is amended first (separate commit), the code second.
-5. **Commit**: conventional message + spec IDs, e.g. `feat(matching): filter catalog by ambiance [BHV-3, INV-2]`.
+5. **Commit**: conventional message + spec IDs, e.g. `feat(matching): filter catalog by mood [BHV-3, INV-2]`.
 6. **Done** = the task's `done_when` satisfied locally. The global evals are eval-runner's job, not yours.
 7. **Structured verdict (orchestrated mode)**: end your reply with a single line — `STATUS: done` if the done_when is satisfied, `STATUS: blocked — <reason>` if you stop (ambiguous spec → OQ-n noted in spec.md §8, scope conflict, inapplicable anchoring pattern). NEVER reply done if you have not finished: the orchestrator relies on this line to unblock the dependent tasks.

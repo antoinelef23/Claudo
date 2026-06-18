@@ -15,13 +15,13 @@ def main(argv: list[str] | None = None) -> None:
         "--products-eur",
         type=float,
         required=True,
-        help="Sous-total produits du panier, en euros",
+        help="Products subtotal of the cart, in euros",
     )
     parser.add_argument(
         "--surface-m2",
         type=float,
         required=True,
-        help="Surface de pose, en m²",
+        help="Installation surface, in m²",
     )
     args = parser.parse_args(argv)
 

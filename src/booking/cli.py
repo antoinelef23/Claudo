@@ -15,12 +15,12 @@ def main() -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p_book = sub.add_parser("book", help="Book a slot.")
-    p_book.add_argument("--room", required=True, help="Identifiant de la salle.")
+    p_book.add_argument("--room", required=True, help="Room identifier.")
     p_book.add_argument(
         "--start", type=int, required=True, help="Start (minutes since midnight)."
     )
     p_book.add_argument(
-        "--end", type=int, required=True, help="Fin (minutes depuis minuit)."
+        "--end", type=int, required=True, help="End (minutes since midnight)."
     )
     p_book.add_argument("--holder", required=True, help="Booking holder.")
 
@@ -30,7 +30,7 @@ def main() -> None:
     )
 
     p_avail = sub.add_parser("availability", help="Free slots of a room.")
-    p_avail.add_argument("--room", required=True, help="Identifiant de la salle.")
+    p_avail.add_argument("--room", required=True, help="Room identifier.")
     p_avail.add_argument(
         "--start",
         type=int,
