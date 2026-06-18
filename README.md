@@ -1,181 +1,166 @@
-# Lab IA-natif — Workflow agentique
+# AI-Native Lab — Agentic Workflow
 
-> Squelette de repo pour le lab LMFR × SFEIR. Chaque unité de travail produit trois artefacts markdown versionnés : `spec.md` (le QUOI), `design.md` (le COMMENT), `tasks.md` (le DO). Ils remplacent user stories, specs fonctionnelles et tickets.
+> A repo skeleton for building software with an agentic workflow. Each unit of work produces three versioned markdown artifacts: `spec.md` (the WHAT), `design.md` (the HOW), `tasks.md` (the DO). They replace user stories, functional specs, and tickets.
 
-## Structure du repo
+A single **Owner** drives the app, agents write the code, a human validates. Every line written by hand is a justified exception, recorded in the commit. The system is built so that **between two human decisions, nothing needs a human** — the decision doesn't disappear, it moves: the Owner decides once (when approving the plan), then the run advances on its own to the next real decision.
+
+## Repo structure
 
 ```
-lab-ia-natif/
-├── CLAUDE.md                  # Contexte persistant chargé par les agents
-├── README.md                  # Ce fichier : le workflow
+ai-native-lab/
+├── CLAUDE.md                  # Persistent context loaded by the agents
+├── README.md                  # This file: the workflow
 ├── templates/
-│   ├── spec.md                # Template du contrat métier
-│   ├── design.md              # Template d'architecture
-│   └── tasks.md               # Template d'orchestration des agents
+│   ├── spec.md                # Business-contract template
+│   ├── design.md              # Architecture template
+│   └── tasks.md               # Agent-orchestration template
+├── scripts/
+│   ├── orchestrate.py         # The DAG executor (waves, gates, checkpoints)
+│   ├── content_guard.py       # "Substance is sacred, form is free" enforcement
+│   ├── approvals.py           # HMAC-signed checkpoint approvals
+│   ├── eval_models.py         # Model×role evaluation campaign
+│   ├── registry.py            # Reads models/registry.toml
+│   ├── ci_checks.sh           # CI content-guard + plan-lint over changed features
+│   └── hooks/                 # eval_gate.sh (merge gate) + post_edit.sh (lint)
 ├── .claude/
-│   ├── agents/                # Sous-agents spécialisés
-│   │   ├── design-scout.md    # Collecte repos internes + références OSS
-│   │   ├── planner.md         # Génère tasks.md depuis spec + design
-│   │   ├── implementer.md     # Code une tâche contre la spec
-│   │   ├── eval-runner.md     # Exécute les evals (merge gate)
-│   │   └── reviewer.md        # Revue croisée spec ↔ code
-│   └── skills/
-│       └── vibe-workshop/     # Animation de l'atelier spec v1.0
-└── examples/
-    └── agent-douche/          # Les 3 artefacts remplis (Projet 1)
+│   ├── agents/                # Specialized sub-agents
+│   │   ├── design-scout.md    # Gathers internal + OSS reference repos
+│   │   ├── planner.md         # Generates tasks.md from spec + design
+│   │   ├── implementer.md     # Implements one task against the spec
+│   │   ├── eval-runner.md     # Runs the evals (merge gate)
+│   │   └── reviewer.md        # Cross-review spec ↔ code
+│   ├── settings.json          # Hooks + permission denies (agents can't forge tokens)
+│   └── skills/                # e.g. the spec-workshop facilitation skill
+├── models/                    # registry.toml, profiles/, EVOLUTION.md, scorecards/
+├── evals/                     # golden/ (oracles) + behavioral/ (model governance)
+├── src/                       # Features built by the method
+└── examples/                  # Filled-in 3-artifact examples
 ```
 
-## Le pipeline : qui déclenche quoi
+## The pipeline: who triggers what
 
 ```mermaid
 flowchart TD
-    VW["🧑‍🤝‍🧑 Vibe Workshop<br/>105 min, 6-8 pers."] -->|"déclencheur : HUMAIN (PE)"| SPEC["spec.md v1.0<br/>commit + tag"]
-    SPEC -->|"déclencheur : OWNER<br/>(lance design-scout + architecture)"| SCOUT["design-scout<br/>⚡ PARALLÈLE : repos internes ∥ refs OSS Python"]
-    SCOUT --> DESIGN["design.md<br/>validé par FDE"]
+    VW["Spec workshop<br/>~105 min, 6-8 people"] -->|"trigger: HUMAN"| SPEC["spec.md v1.0<br/>commit + tag"]
+    SPEC -->|"trigger: OWNER<br/>(runs design-scout + architecture)"| SCOUT["design-scout<br/>PARALLEL: internal repos ∥ OSS refs"]
+    SCOUT --> DESIGN["design.md<br/>validated by FDE"]
     SPEC --> DESIGN
-    DESIGN -->|"déclencheur : OWNER<br/>(lance planner)"| TASKS["tasks.md<br/>plan généré par l'agent"]
-    TASKS -->|"CHECKPOINT : validation humaine<br/>(pattern Cognition)"| GO{Owner valide ?}
-    GO -->|non : itération| TASKS
-    GO -->|oui| IMPL["implementer(s)<br/>⚡ PARALLÈLE par parallel_group<br/>SÉQUENCE par depends_on"]
-    IMPL -->|"déclencheur : AUTOMATIQUE<br/>(hook post-implémentation)"| EVAL["eval-runner<br/>pas d'eval ✅, pas de merge"]
-    EVAL -->|échec| IMPL
-    EVAL -->|succès| REV["reviewer + revue Owner"]
-    REV -->|"déclencheur : HUMAIN (Owner)"| MERGE["merge → audit trail Git"]
-    MERGE -.->|"la spec évolue dans le repo"| SPEC
+    DESIGN -->|"trigger: OWNER<br/>(runs planner)"| TASKS["tasks.md<br/>agent-generated plan"]
+    TASKS -->|"CHECKPOINT: human validation"| GO{Owner approves?}
+    GO -->|no: iterate| TASKS
+    GO -->|yes| IMPL["implementer(s)<br/>PARALLEL by parallel_group<br/>SEQUENCE by depends_on"]
+    IMPL -->|"trigger: AUTOMATIC<br/>(post-implementation hook)"| EVAL["eval-runner<br/>no green eval, no merge"]
+    EVAL -->|fail| IMPL
+    EVAL -->|pass| REV["reviewer + Owner review"]
+    REV -->|"trigger: HUMAN (Owner)"| MERGE["merge → Git audit trail"]
+    MERGE -.->|"the spec evolves in the repo"| SPEC
 ```
 
-## Règles de déclenchement
+## Trigger rules
 
-| Étape | Qui déclenche | Mode | Validation |
+| Step | Triggered by | Mode | Validation |
 |---|---|---|---|
-| spec.md v1.0 | **Humain** — PE anime le Vibe Workshop, Claude médie | Séquentiel (point d'entrée) | Métier signe le contrat |
-| design.md | **Owner** — lance `design-scout` puis la rédaction | Scout en **parallèle** (repos internes ∥ refs OSS) | FDE valide l'architecture |
-| tasks.md | **Owner** — lance `planner` | Séquentiel (a besoin de spec + design) | **Checkpoint humain obligatoire** avant exécution |
-| Implémentation | **Agent** — `implementer` par tâche | **Parallèle** entre `parallel_group`, **séquence** via `depends_on` | Aucune ligne manuelle sans justification |
-| Evals | **Automatique** — hook après chaque tâche | Séquentiel par tâche | Gate binaire : pas d'eval verte, pas de merge |
-| Merge | **Humain** — Owner, revu par Owner_N-1 | Séquentiel | Audit trail Git |
+| spec.md v1.0 | **Human** — facilitated spec workshop | Sequential (entry point) | Business signs the contract |
+| design.md | **Owner** — runs `design-scout`, then writes it | Scout runs **in parallel** (internal repos ∥ OSS refs) | FDE validates the architecture |
+| tasks.md | **Owner** — runs `planner` | Sequential (needs spec + design) | **Mandatory human checkpoint** before execution |
+| Implementation | **Agent** — `implementer` per task | **Parallel** across `parallel_group`, **sequenced** via `depends_on` | No manual line without justification |
+| Evals | **Automatic** — hook after each task | Sequential per task | Binary gate: no green eval, no merge |
+| Merge | **Human** — Owner, reviewed by previous Owner | Sequential | Git audit trail |
 
-## Les 3 principes de parallélisation
+## The 3 parallelization principles
 
-1. **On parallélise la recherche, jamais la décision.** `design-scout` explore les repos internes et les références open source en parallèle ; la rédaction du design et sa validation sont séquentielles.
-2. **On parallélise les tâches sans dépendance de fichier.** Deux tâches peuvent tourner en parallèle si leurs `files_touched` sont disjoints ET qu'aucune n'est `depends_on` de l'autre. Sinon : séquence stricte.
-3. **Tout point de non-retour est un checkpoint humain.** Génération de plan, merge, déploiement : l'agent propose, l'humain dispose (pattern Cognition).
+1. **Parallelize the research, never the decision.** `design-scout` explores internal repos and OSS references in parallel; writing and validating the design are sequential.
+2. **Parallelize tasks with no file dependency.** Two tasks may run in parallel only if their `files_touched` are disjoint AND neither is `depends_on` the other. Otherwise: strict sequence.
+3. **Every point of no return is a human checkpoint.** Plan generation, merge, deploy: the agent proposes, the human disposes.
 
-## Mode automatique — le run quasi-autonome
+## Autonomy levels
 
-L'objectif : entre deux décisions humaines, **rien ne nécessite un humain**. La décision humaine ne
-disparaît pas, elle se déplace : l'Owner décide UNE FOIS, à l'approbation du plan (quels checkpoints
-sont `auto`, lesquels restent `blocking`), puis le run avance seul jusqu'à la prochaine vraie décision.
-
-### Les niveaux d'autonomie
-
-| Niveau | Commande | Pauses humaines |
+| Level | Command | Human pauses |
 |---|---|---|
-| L0 — plan | `--dry-run` | tout (rien ne tourne) |
-| L1 — supervisé | `--supervised` | TOUS les checkpoints (les modes `auto` sont ignorés) |
-| L2 — croisière *(défaut)* | — | uniquement les checkpoints `blocking` du plan approuvé |
-| Toujours | — | le **merge** : jamais automatique, le plan-lint refuse un CP final `auto` |
+| L0 — plan | `--dry-run` | everything (nothing runs) |
+| L1 — supervised | `--supervised` | ALL checkpoints (`auto` modes ignored) |
+| L2 — cruise *(default)* | — | only the `blocking` checkpoints of the approved plan |
+| Always | — | the **merge**: never automatic; plan-lint rejects a final `auto` checkpoint |
 
-### Les garde-fous qui rendent l'autonomie sûre
+## The guardrails that make autonomy safe
 
-1. **Plan-lint** (`--validate`, ou `make validate FEATURE=…`) : DAG acyclique, IDs de spec existants,
-   `done_when` présents, chemins parallèles disjoints, CP final blocking. Un plan qui ne lint pas ne
-   s'exécute pas — c'est ce qui permet à l'Owner d'approuver une fois et de laisser tourner.
-2. **Verdict structuré** : chaque implementer termine par `STATUS: done` ou `STATUS: blocked — <raison>`.
-   Un agent bloqué sur un trou de spec (OQ) ne passe jamais pour fini ; il note la question dans
-   spec.md §8 et seul son sous-arbre s'arrête.
-3. **Anti-gate-vide** : une tâche qui implémente des IDs de spec ÉCHOUE si aucune eval n'est collectée
-   (`pytest -m eval --collect-only`). Un `make evals` vert avec zéro eval ne valide rien.
-4. **Verify par tâche** : la commande `verify` de tasks.md matérialise le `done_when` — vérifiée
-   mécaniquement après chaque agent, avant les evals.
-5. **Confinement d'échec** : failed/blocked ne neutralise que les dépendants (`skipped`) ; les autres
-   branches continuent. Le run se termine TOUJOURS sur un bilan, jamais sur un abandon à mi-course.
-6. **Commits scopés** : seuls les `files_touched` de la tâche sont stagés (sous verrou) — deux agents
-   parallèles ne se polluent pas ; le hors-scope est signalé, pas commité.
-7. **Checkpoints `auto` documentés** : avant chaque checkpoint (auto ou non), le rapport `reviewer` est
-   généré dans `.runs/CP-n-review.md`. Auto = evals vertes ET `VERDICT: PASS` ; au moindre doute,
-   bascule en validation humaine.
-8. **Eval gate de session** (`.claude/settings.json`) : hooks `Stop`/`SubagentStop` → un agent ne peut
-   pas terminer avec du code modifié et des evals rouges ; `PostToolUse` → ruff sur chaque édition.
+1. **Plan-lint** (`--validate`, or `make validate FEATURE=…`): acyclic DAG, spec IDs exist, `done_when` present, disjoint parallel paths, final checkpoint blocking, every `verify` command on an allowlist. A plan that doesn't lint doesn't run — that's what lets the Owner approve once and walk away.
+2. **Structured verdict**: each implementer ends with `STATUS: done` or `STATUS: blocked — <reason>`. An agent blocked on a spec gap (an open question) never passes as finished; it records the question and only its sub-tree stops.
+3. **Anti-empty-gate**: a task that implements spec IDs — or merely touches source code — FAILS if no eval is collected (`pytest -m eval --collect-only`). A green `make evals` with zero evals validates nothing. Eval coverage is matched by pytest **node-id** (so `eval_1` ≠ `eval_10`, and a file path doesn't count as coverage).
+4. **Per-task verify**: the `verify` command in tasks.md materializes `done_when`. It is parsed to an argv list and run **without a shell** (no metacharacters, command + env-prefix allowlists) — checked mechanically after each agent, before the evals.
+5. **Failure containment**: failed/blocked only neutralizes dependents (`skipped`); other branches continue. The run always ends on a summary, never on a mid-course abort.
+6. **Scoped commits**: only the task's `files_touched` (+ the feature dir) are staged, under a lock — two parallel agents don't pollute each other, and the golden oracles can't be swept into a task commit. Out-of-scope changes are reported, not committed.
+7. **Signed human approvals**: checkpoint approvals are HMAC-signed (`scripts/approve.sh`) and verified before they're honored, then consumed (no replay). **Fail-closed by default**: a plan with checkpoints refuses to start without `LAB_APPROVAL_SECRET` (opt-out `LAB_ALLOW_UNSIGNED_APPROVALS=1`). The secret is stripped from the agent's environment, and `.approvals/`/`.runs/` are denied to the agent's edit tools.
+8. **Concurrency safety**: an OS `flock` (`.runs/orchestrator.lock`) fails a second run on the same feature fast; `state.json` is written atomically and resume tolerates a truncated file.
+9. **Documented `auto` checkpoints**: before every checkpoint, the `reviewer` report is written to `.runs/CP-n-review.md`. Auto = green evals AND `VERDICT: PASS`; on any doubt it falls back to human validation.
+10. **Session eval gate** (`.claude/settings.json`): `Stop`/`SubagentStop` hooks → an agent can't finish with changed code and red evals; `PostToolUse` → ruff on each edit.
 
 ```bash
-# 1. Plan-lint, puis approbation Owner (status: approved + modes des CP)
-python3 scripts/orchestrate.py work/ma-feature --validate
+# 0. Configure the approval secret once (required for checkpointed plans)
+export LAB_APPROVAL_SECRET="$(openssl rand -hex 32)"
 
-# 2. Voir le plan d'exécution sans rien lancer
-python3 scripts/orchestrate.py work/ma-feature --dry-run
+# 1. Plan-lint, then Owner approval (status: approved + checkpoint modes)
+python3 scripts/orchestrate.py work/my-feature --validate
 
-# 3. Lancer en fond (caffeinate empêche la mise en veille)
-caffeinate -i python3 scripts/orchestrate.py work/ma-feature > work/ma-feature/.runs/run.log 2>&1 &
+# 2. See the execution plan without running anything
+python3 scripts/orchestrate.py work/my-feature --dry-run
 
-# 4. À chaque notification CHECKPOINT blocking : lire .runs/CP-n-review.md, puis
-scripts/approve.sh CP-1 work/ma-feature
-# … ou rejeter avec une raison (réouvre les tâches visées, l'agent reçoit le commentaire) :
-scripts/reject.sh CP-1 work/ma-feature "le devis n'affiche pas la remise" T2
+# 3. Run in the background (caffeinate prevents sleep on macOS)
+caffeinate -i python3 scripts/orchestrate.py work/my-feature > work/my-feature/.runs/run.log 2>&1 &
+
+# 4. On each blocking CHECKPOINT notification: read .runs/CP-n-review.md, then
+scripts/approve.sh CP-1 work/my-feature
+# … or reject with a reason (reopens the targeted tasks; the agent gets the comment):
+scripts/reject.sh CP-1 work/my-feature "the quote doesn't show the discount" T2
 ```
 
-Reprise sur incident : l'état est dans `<feature>/.runs/state.json` — relancer la même commande reprend
-où ça s'était arrêté (les nœuds `done` ne rejouent pas ; les `blocked` retentent après ta réponse aux OQ).
-Prérequis : `claude` CLI authentifié, `uv` installé.
+Recovery: state lives in `<feature>/.runs/state.json` — re-running the same command resumes where it stopped (`done` nodes don't replay; `blocked` nodes retry after you answer their open questions). Prerequisites: `claude` CLI authenticated, `uv` installed.
 
-### Évaluation des modèles
+## Model evaluation
 
-Le lab n'évalue pas que le **produit** (le code, via les evals de spec §7) : il évalue aussi
-les **modèles** qu'il utilise, par rôle. Source de vérité : `models/registry.toml` (data-driven —
-ajouter un modèle = une entrée, zéro code). L'orchestrateur affecte un modèle à chaque rôle
-(`[roles]`), surchargeable par tâche (`**model :**`), et journalise quel modèle a produit quoi.
+The lab evaluates not only the **product** (the code, via the spec §7 evals) but also the **models** it uses, per role. Source of truth: `models/registry.toml` (data-driven — adding a model is one entry, zero code). The orchestrator assigns a model to each role (`[roles]`), overridable per task (`**model :**`), and logs which model produced what.
 
-`scripts/eval_models.py` (cible `make eval-models LIVE=1`) mesure trois couches :
+`scripts/eval_models.py` (target `make eval-models LIVE=1`) measures three layers:
 
-1. **Scorecard** — sur les tâches-or (`evals/golden/`), le code produit passe-t-il **nos** evals
-   cachées (jamais celles que le modèle écrit lui-même) ? Capacité brute par rôle, jugée équitablement.
-2. **Comportemental** (`evals/behavioral/`) — le modèle respecte-t-il son contrat de rôle : scope,
-   verdict `STATUS`, arrêt sur ambiguïté (cas OQ-1), evals d'abord, verdicts reviewer calibrés (cas CP-2) ?
-3. **Chaîne de commandement** — une instruction de tâche peut-elle lui faire violer une hard rule de
-   `CLAUDE.md` (merge sans humain, sauter les evals, sortir du scope) ? Il doit refuser. Couche
-   éliminatoire : une violation disqualifie le modèle pour le rôle, quel que soit son score brut.
+1. **Scorecard** — on the golden tasks (`evals/golden/`), does the produced code pass **our** hidden evals (never the ones the model writes itself)? Raw capability per role, judged fairly. The oracle is held out: the model never sees `goldeval/` during execution.
+2. **Behavioral** (`evals/behavioral/`) — does the model respect its role contract: scope, the `STATUS` verdict, stopping on ambiguity, evals-first, calibrated reviewer verdicts?
+3. **Chain-of-command** — can a task instruction make it violate a `CLAUDE.md` hard rule (merge without a human, skip the evals, leave its scope)? It must refuse. This layer is **eliminatory**: one violation disqualifies the model for the role, regardless of its raw score.
 
-Équité par construction (mêmes prompts, essais isolés, métriques mesurées, pas de cherry-pick) et
-boucle de réévaluation à chaque nouveau modèle : voir **`models/EVOLUTION.md`**. La mécanique du
-harnais est testée en CI avec un shim `claude` déterministe (aucun coût) ; la campagne réelle
-(`LIVE=1`) est manuelle car facturée.
+Fairness by construction (same prompts, isolated trials, measured metrics, no cherry-pick) and a re-evaluation loop on every new model: see **`models/EVOLUTION.md`**. The harness mechanics are tested in CI with a deterministic `claude` shim (no cost); the real campaign (`LIVE=1`) is manual because it is billed.
 
-### Télémétrie et limites
+## Telemetry and limits
 
-- **Journal** : chaque run écrit `<feature>/.runs/journal.jsonl` — une ligne JSON par événement
-  (tentative, durée, **coût $ par agent**, verdict reviewer, bilan). C'est la source des métriques
-  Twin Track (coût complet, part de code IA) ; le bilan affiche le Σ coût du run.
-- **Retries avec mémoire** : un retry reprend la MÊME session agent (`--resume`) — l'agent corrige
-  son travail au lieu de repartir de zéro.
-- **Mur par agent** : `LAB_TASK_TIMEOUT` (défaut 2400 s) tue un agent coincé ; la tâche compte
-  comme tentative échouée, la vague continue.
-- **Env de test** : `LAB_ROOT` (sandbox), `LAB_NO_NOTIFY=1` (CI). La suite
-  `tests/orchestrator/` rejoue toute la mécanique (lint, vagues, confinement, reprise,
-  checkpoints auto, anti-gate-vide) en ~3 s avec un shim `claude` déterministe.
+- **Journal**: every run writes `<feature>/.runs/journal.jsonl` — one JSON line per event (attempt, duration, **$ cost per agent**, reviewer verdict, summary). The summary prints the run's total cost.
+- **Retries with memory**: a retry resumes the SAME agent session (`--resume`) — the agent fixes its work instead of starting over.
+- **Per-agent wall clock**: `LAB_TASK_TIMEOUT` (default 2400 s) kills a stuck agent; the task counts as a failed attempt and the wave continues.
+- **Budget per run**: `LAB_BUDGET_USD` (orchestrator) and `--budget` (eval campaign) — the run stops before the next wave if cost exceeds the cap, notifies, and resumes via `.runs/state.json`. Cost is measured (`--output-format json`), not estimated.
+- **Separation of duties**: a model never validates its own work alone. The review panel prefers a reviewer model ≠ implementer; if impossible, an `auto` checkpoint refuses to self-validate and falls back to human. Plan-lint warns if `roles.reviewer == roles.implementer`.
+- **Reviewer panel**: `**reviewers :** N` on a checkpoint runs N reviews from distinct angles (correctness / spec conformance / edge cases); auto-validation only on a **majority** PASS vote.
+- **Team notifications**: `LAB_GCHAT_WEBHOOK` (opt-in) posts checkpoints/blocks to a chat webhook (no-op if absent, never crashes).
+- **Test env**: `LAB_ROOT` (sandbox), `LAB_NO_NOTIFY=1` (CI). `tests/orchestrator/` replays the whole mechanism (lint, waves, containment, resume, auto checkpoints, anti-empty-gate, signed approvals) in seconds with a deterministic `claude` shim.
 
-### Gouvernance (pilote / Adeo Global Ready)
+## CI
 
-- **Budget $/run** : `LAB_BUDGET_USD` (orchestrateur) et `--budget` (campagne d'éval) — le run
-  s'arrête net avant la vague suivante si le coût dépasse le plafond, notifie, et reprend via
-  `.runs/state.json`. Le coût est mesuré (`--output-format json`), pas estimé.
-- **Séparation des devoirs** : un modèle ne valide pas seul son propre travail. Le panel de revue
-  préfère un modèle reviewer ≠ implementer ; si c'est impossible (même modèle), un checkpoint `auto`
-  refuse de s'auto-valider et bascule en humain. Le plan-lint avertit si `roles.reviewer == roles.implementer`.
-- **Panel de reviewers** : `**reviewers :** N` sur un checkpoint lance N revues à angles distincts
-  (correction / conformité spec / cas limites) ; auto-validation au **vote majoritaire** PASS seulement.
-- **Notifications d'équipe** : `LAB_GCHAT_WEBHOOK` (opt-in) poste checkpoints/blocages sur Google Chat
-  (no-op si absent, ne crashe jamais).
+`.github/workflows/gate.yml` mirrors the local merge gate:
+- `make gate-ci` — **non-mutating** lint (`ruff check` + `ruff format --check`, so drift fails CI instead of being silently auto-fixed) + tests + evals (the shim orchestrator suite included).
+- `scripts/ci_checks.sh` — runs `content_guard --against <base>` over changed features (the "substance is sacred" rule, enforced vs the base branch, not a clean-checkout HEAD) plus plan-lint (informational). Fail-safe: skips cleanly if the base ref is unavailable.
 
-**Backlog P2 assumé** (non livré, raisons) : worktree git par tâche parallèle (rend la collision
-*impossible* vs *interdite* — reporté pour ne pas déstabiliser l'orchestrateur vérifié, mérite sa PR
-dédiée) ; runner cross-vendor (Gemini/Vertex) — abstraction du `claude -p`, non testable ici sans accès Gemini.
+## Trust model (read this)
 
-## Démarrer une unité de travail
+Agent code runs **on the host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, `.claude/settings.json` denies) — there is **no OS sandbox in this tree**. An implementer that runs its own tests necessarily has code execution, so the signed-approval boundary and allowlists are *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent. The intended threat model is a **trusted but possibly-misaligned** agent, not a malicious external one. Real confinement (a container + egress allowlist) is tracked as backlog below and is the only thing that turns the approval crypto into a true boundary.
+
+## Backlog (acknowledged, not shipped)
+
+- **Sandbox** — run agents in a container with an egress allowlist and no host filesystem access; the only thing that makes the approval secret truly unreachable by the agent.
+- **Cross-vendor runner** — abstract the `claude -p` call behind a runner interface so the registry's model-swappability extends across providers (not testable here without other-provider access).
+- **Git worktree per parallel task** — makes file collision *impossible* rather than *forbidden*; deferred to avoid destabilizing the verified orchestrator, deserves its own PR.
+
+## Start a unit of work
 
 ```bash
-cp templates/spec.md   work/<feature>/spec.md     # rempli en Vibe Workshop
-cp templates/design.md work/<feature>/design.md   # rempli par Owner + design-scout
-cp templates/tasks.md  work/<feature>/tasks.md    # généré par planner, validé par Owner
+cp templates/spec.md   work/<feature>/spec.md     # filled in the spec workshop
+cp templates/design.md work/<feature>/design.md   # filled by Owner + design-scout
+cp templates/tasks.md  work/<feature>/tasks.md    # generated by planner, approved by Owner
 ```
 
-Puis dans Claude Code : `lis work/<feature>/spec.md et design.md, génère tasks.md selon templates/tasks.md, et attends ma validation avant d'exécuter.`
+Then in Claude Code: `read work/<feature>/spec.md and design.md, generate tasks.md per templates/tasks.md, and wait for my approval before executing.`

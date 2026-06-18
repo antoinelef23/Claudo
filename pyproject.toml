@@ -1,7 +1,7 @@
 [project]
 name = "devis-lab"
 version = "0.1.0"
-description = "Lab IA-natif LMFR — feature de simulation devis-pose"
+description = "AI-Native Lab — quote-simulation feature (devis-pose)"
 requires-python = ">=3.12"
 dependencies = []
 
@@ -18,5 +18,5 @@ dev = ["pytest", "ruff"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 markers = [
-    "eval: test eval dérivé de spec.md §7 — merge gate (make evals)",
+    "eval: eval test derived from spec.md §7 — merge gate (make evals)",
 ]

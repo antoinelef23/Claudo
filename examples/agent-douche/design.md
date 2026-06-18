@@ -3,25 +3,25 @@ artifact: design
 feature: agent-douche
 version: 0.1.0
 status: draft
-owner: <Owner LMFR>
+owner: <Owner the client>
 validated_by: <FDE>
 spec: ./spec.md          # version : 1.0.0
 ---
 
 # Design — Agent Douche
 
-> ⚠️ **Exemple illustratif** : les repos internes sont à collecter J1 auprès des équipes LMFR (c'est la première action du projet). Les références OSS sont réelles.
+> ⚠️ **Exemple illustratif** : les repos internes sont à collecter J1 auprès des équipes (c'est la première action du projet). Les références OSS sont réelles.
 
 ## 1. Architecture overview
 
 ```mermaid
 flowchart LR
-    UI[Front Mozaïc<br/>upload + galerie] --> API[FastAPI<br/>agent-douche-api]
+    UI[Front Design System<br/>upload + galerie] --> API[FastAPI<br/>agent-douche-api]
     API --> VISION[Vision service<br/>analyse photo - Vertex/Gemini]
     API --> RENDER[Render service<br/>génération 3 ambiances]
-    API --> MATCH[Matching service<br/>catalogue LMFR]
-    MATCH --> CAT[(API Catalogue<br/>LMFR temps réel)]
-    API --> CART[API Panier LMFR]
+    API --> MATCH[Matching service<br/>catalogue the client]
+    MATCH --> CAT[(API Catalogue<br/>the client temps réel)]
+    API --> CART[API Panier the client]
     RENDER -.->|async, ≤30s| API
 ```
 
@@ -29,14 +29,14 @@ Service FastAPI unique en V1 (monolithe modulaire), trois modules métier : `vis
 
 ## 2. Reference repositories
 
-### 2.1 Repos internes LMFR *(à demander aux équipes — checklist J1)*
+### 2.1 Repos internes de référence *(à demander aux équipes — checklist J1)*
 
 | Repo | Équipe / contact | Accès J1 ? | Ce qu'on reprend | Ce qu'on écarte |
 |---|---|---|---|---|
 | `<api-catalogue>` | équipe Catalogue | ☐ | contrat API produits, modèle dispo/stock | — |
 | `<api-panier>` | équipe Checkout | ☐ | contrat création panier + services | — |
-| `<mozaic-web>` + un front l'utilisant | équipe Design System | ☐ | composants upload, galerie, fiche produit | — |
-| `<pipeline-ci-reference>` | platform / Adeo Global Ready | ☐ | CI conforme, secrets, SAST | — |
+| `<design-system-web>` + un front l'utilisant | équipe Design System | ☐ | composants upload, galerie, fiche produit | — |
+| `<pipeline-ci-reference>` | platform / Global Ready | ☐ | CI conforme, secrets, SAST | — |
 | `<un service GCP récent>` | office CTO / COE IA | ☐ | conventions GCP, IAM, observabilité | patterns legacy |
 
 **Questions aux équipes :** contacts par repo, droits d'accès lecture J1, environnement de test catalogue/panier, quota API.
@@ -57,11 +57,11 @@ Service FastAPI unique en V1 (monolithe modulaire), trois modules métier : `vis
 | Couche | Choix | Justifié par |
 |---|---|---|
 | Runtime | Python 3.12, FastAPI, Pydantic v2, uv, ruff | §2.2 full-stack-template ; conventions CLAUDE.md |
-| Vision & rendus | Vertex AI (Gemini multimodal + génération d'images) | partenariat GCP, conformité Adeo ; ADR-2 |
+| Vision & rendus | Vertex AI (Gemini multimodal + génération d'images) | partenariat GCP, conformité the org ; ADR-2 |
 | Jobs async | Cloud Tasks + worker Cloud Run | simplicité V1 ; pattern Saleor adapté serverless |
 | Données | Firestore (sessions éphémères, TTL) — pas de SQL en V1 | INV-4 : rien à persister durablement |
-| Front | Mozaïc (repo interne) | conformité design system |
-| Infra | GCP Cloud Run, IAC du pipeline de référence | Adeo Global Ready |
+| Front | Design System (repo interne) | conformité design system |
+| Infra | GCP Cloud Run, IAC du pipeline de référence | Global Ready |
 
 ## 4. ADRs
 
@@ -93,10 +93,10 @@ Service FastAPI unique en V1 (monolithe modulaire), trois modules métier : `vis
 - Session : document Firestore TTL 24 h `{session_id, analysis, renders[], selections[]}` — photo en bucket éphémère TTL 24 h (INV-4)
 - Catalogue & panier : contrats des repos internes §2.1 (à snapshotter dès accès)
 
-## 6. Mozaïc & Adeo Global Ready
+## 6. Design System & Global Ready
 
-- **Mozaïc :** upload, galerie 3 ambiances, carte produit, CTA panier — composants standards, zéro fork.
-- **Adeo Global Ready :** ☐ CI référence ☐ SAST/DAST ☐ secrets manager ☐ RGPD : floutage visages (BHV-1c), TTL 24 h, consentement ☐ a11y AA ☐ mention « image générée » (OQ-3).
+- **Design System :** upload, galerie 3 ambiances, carte produit, CTA panier — composants standards, zéro fork.
+- **Global Ready :** ☐ CI référence ☐ SAST/DAST ☐ secrets manager ☐ RGPD : floutage visages (BHV-1c), TTL 24 h, consentement ☐ a11y AA ☐ mention « image générée » (OQ-3).
 
 ## 7. Observability & rollout
 

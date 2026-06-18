@@ -2,19 +2,19 @@
 artifact: spec
 feature: agent-douche
 version: 1.0.0
-status: draft            # → validated après Vibe Workshop avec le métier LMFR
-owner: <Owner LMFR>
-validated_by: <métier LMFR — à signer en clôture du Vibe Workshop>
+status: draft            # → validated après Vibe Workshop avec le métier the client
+owner: <Owner the client>
+validated_by: <métier the client — à signer en clôture du Vibe Workshop>
 ---
 
 # Spec — Agent Douche (configurateur salle de bain)
 
 > ⚠️ **Exemple illustratif.** Les valeurs chiffrées et les exemples sont des hypothèses à confirmer
-> en Vibe Workshop avec le métier LMFR. Échéance : fête des projets mi-octobre 2026.
+> en Vibe Workshop avec le métier the client. Échéance : fête des projets mi-octobre 2026.
 
 ## 1. Intent
 
-Un client dépose une photo de sa salle de bain ; l'agent lui propose 3 ambiances (moderne, naturel, classique) reconstituées avec des produits réels du catalogue LMFR, puis l'emmène jusqu'au panier avec les services associés (livraison, pose, devis). On supprime la friction entre l'inspiration et l'achat.
+Un client dépose une photo de sa salle de bain ; l'agent lui propose 3 ambiances (moderne, naturel, classique) reconstituées avec des produits réels du catalogue the client, puis l'emmène jusqu'au panier avec les services associés (livraison, pose, devis). On supprime la friction entre l'inspiration et l'achat.
 
 **KPI cible :** taux de conversion photo → panier ≥ 8 % ; panier moyen du tunnel ≥ 1,5× le panier moyen rayon salle de bain. Horizon : fête des projets mi-octobre.
 
@@ -24,13 +24,13 @@ Un client dépose une photo de sa salle de bain ; l'agent lui propose 3 ambiance
 |---|---|---|
 | Ambiance | `ambiance` | Univers décoratif généré : exactement un parmi `moderne`, `naturel`, `classique` |
 | Photo client | `room_photo` | Image de la salle de bain existante déposée par le client (JPEG/PNG/HEIC, ≤ 15 Mo) |
-| Produit matché | `matched_product` | Référence active du catalogue LMFR retenue pour une ambiance |
+| Produit matché | `matched_product` | Référence active du catalogue the client retenue pour une ambiance |
 | Rendu | `render` | Visualisation de la salle de bain du client recomposée dans une ambiance |
 | Tunnel | `checkout_flow` | Parcours panier + services (livraison, pose, devis) |
 
 ## 3. Invariants
 
-- **INV-1** — Tout produit affiché MUST exister au catalogue LMFR, être actif et disponible (stock ou délai affiché). Jamais de produit halluciné.
+- **INV-1** — Tout produit affiché MUST exister au catalogue the client, être actif et disponible (stock ou délai affiché). Jamais de produit halluciné.
 - **INV-2** — Chaque rendu MUST proposer exactement 3 ambiances : `moderne`, `naturel`, `classique`.
 - **INV-3** — Le prix affiché MUST être le prix catalogue temps réel au moment de l'affichage ; tout écart au panier est recalculé.
 - **INV-4** — La photo client MUST NOT être conservée au-delà de la session sans consentement explicite (RGPD) et MUST NOT servir à l'entraînement de modèles.
@@ -63,7 +63,7 @@ Un client dépose une photo de sa salle de bain ; l'agent lui propose 3 ambiance
 ### BHV-4 — Panier + services
 - **Given** une sélection de produits dans une ambiance
 - **When** le client valide
-- **Then** le panier LMFR est créé avec les produits, et les services proposés : livraison (créneaux réels), pose (estimation, INV-5), prise de RDV devis
+- **Then** le panier the client est créé avec les produits, et les services proposés : livraison (créneaux réels), pose (estimation, INV-5), prise de RDV devis
 
 ## 5. Examples
 
@@ -106,7 +106,7 @@ covers: [BHV-3a, INV-1, INV-3]
 ## 6. Non-goals
 
 - **NG-1** — Pas de plan technique / plomberie : on ne déplace pas les arrivées d'eau (réduit le risque, géré par le service pose).
-- **NG-2** — Pas de paiement dans le configurateur : on alimente le panier LMFR existant (critère « risque maîtrisé » du lab).
+- **NG-2** — Pas de paiement dans le configurateur : on alimente le panier the client existant (critère « risque maîtrisé » du lab).
 - **NG-3** — Pas d'autres pièces que la salle de bain en V1.
 - **NG-4** — Pas de compte requis avant le panier.
 
