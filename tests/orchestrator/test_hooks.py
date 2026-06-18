@@ -7,7 +7,7 @@ from pathlib import Path
 
 from .conftest import REPO
 
-HOOK = REPO / "scripts" / "hooks" / "eval_gate.sh"
+HOOK = REPO / ".claude" / "hooks" / "eval_gate.sh"
 
 
 def _git(repo: Path, *args: str) -> None:
@@ -21,7 +21,7 @@ def test_eval_gate_sees_new_untracked_package_dir(tmp_path: Path) -> None:
     repo = tmp_path / "r"
     repo.mkdir()
     (repo / "pyproject.toml").write_text("[project]\nname = 'x'\nversion = '0'\n")
-    (repo / "Makefile").write_text("evals:\n\t@echo 'EVALS RED'; exit 1\n")
+    (repo / "justfile").write_text("evals:\n    @echo 'EVALS RED'; exit 1\n")
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "t@lab")
     _git(repo, "config", "user.name", "t")
@@ -47,7 +47,7 @@ def test_eval_gate_skips_when_no_code_changed(tmp_path: Path) -> None:
     repo = tmp_path / "r"
     repo.mkdir()
     (repo / "pyproject.toml").write_text("[project]\nname = 'x'\nversion = '0'\n")
-    (repo / "Makefile").write_text("evals:\n\t@echo 'EVALS RED'; exit 1\n")
+    (repo / "justfile").write_text("evals:\n    @echo 'EVALS RED'; exit 1\n")
     _git(repo, "init", "-q")
     _git(repo, "config", "user.email", "t@lab")
     _git(repo, "config", "user.name", "t")

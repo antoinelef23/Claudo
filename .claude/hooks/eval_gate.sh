@@ -22,7 +22,7 @@ if git rev-parse --git-dir >/dev/null 2>&1; then
   git status --porcelain --untracked-files=all | grep -qE '\.(py|toml)$' || exit 0
 fi
 
-OUT=$(make -s evals 2>&1)
+OUT=$(just evals 2>&1)
 STATUS=$?
 if [ $STATUS -ne 0 ]; then
   echo "⛔ EVAL GATE RED — fix before finishing (spec.md §7: no green eval, no merge)." >&2
@@ -30,7 +30,7 @@ if [ $STATUS -ne 0 ]; then
   exit 2
 fi
 
-# `make evals` masks pytest rc=5 (nothing collected) as 0: "green" can mean
+# `just evals` masks pytest rc=5 (nothing collected) as 0: "green" can mean
 # "nothing ran" (findings H8/M5). We flag it — NON blocking here: the hard rule
 # "no eval = no done" belongs to the orchestrator (scoped per task to the IDs
 # actually implemented); blocking in this generic hook would break a legitimate
@@ -38,7 +38,7 @@ fi
 if command -v uv >/dev/null 2>&1; then
   COLLECTED=$(uv run pytest -m eval --collect-only -q 2>/dev/null | grep -c '::' || true)
   if [ "${COLLECTED:-0}" -eq 0 ]; then
-    echo "⚠️  eval-gate: code changed but NO eval is collected — \`make evals\` is green by ABSENCE, not by success (spec.md §7)." >&2
+    echo "⚠️  eval-gate: code changed but NO eval is collected — \`just evals\` is green by ABSENCE, not by success (spec.md §7)." >&2
   fi
 fi
 exit 0

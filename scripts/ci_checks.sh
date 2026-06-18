@@ -5,7 +5,7 @@
 #
 # BASE (env)   : comparison ref (default origin/main).
 # Blocking     : content_guard (substance changed without version bump) → exit 1.
-# Informative  : plan-lint (make validate) — non-blocking (the Owner already approved).
+# Informative  : plan-lint (just validate) — non-blocking (the Owner already approved).
 # Fail-safe    : base not found → skip (no spurious CI red).
 set -uo pipefail
 BASE="${BASE:-origin/main}"
@@ -33,7 +33,7 @@ for feat in $features; do
   fi
   if [ -f "$feat/tasks.md" ]; then
     echo "🔎 plan-lint (informative): $feat"
-    make validate "FEATURE=$feat" || echo "⚠️  plan-lint $feat: see above (non-blocking)"
+    just validate "$feat" || echo "⚠️  plan-lint $feat: see above (non-blocking)"
   fi
 done
 exit $rc

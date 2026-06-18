@@ -41,9 +41,10 @@ fi
 OUT="$OUT" python3 -c 'import json, os; print(json.dumps({"type": "result", "result": os.environ["OUT"], "session_id": "shim-session", "total_cost_usd": 0.001}))'
 """
 
-MAKEFILE = """evals:
-\t@if [ -f .evals_fail ]; then echo "EVALS RED (stub)"; exit 1; fi
-\t@echo "[stub] evals ok"
+JUSTFILE = """evals:
+    #!/usr/bin/env bash
+    if [ -f .evals_fail ]; then echo "EVALS RED (stub)"; exit 1; fi
+    echo "[stub] evals ok"
 """
 
 SPEC = """---
@@ -67,7 +68,7 @@ def sandbox(tmp_path: Path) -> Path:
     (sb / "work" / "feat").mkdir(parents=True)
     (sb / "bin").mkdir()
     (sb / ".shim").mkdir()
-    (sb / "Makefile").write_text(MAKEFILE)
+    (sb / "justfile").write_text(JUSTFILE)
     (sb / "work" / "feat" / "spec.md").write_text(SPEC)
     shim = sb / "bin" / "claude"
     shim.write_text(SHIM)

@@ -16,13 +16,13 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 
 ## Hard rules
 
-- **Eval gate**: no green eval, no merge. Evals are defined in spec.md (Evals section) and run via `make evals`.
+- **Eval gate**: no green eval, no merge. Evals are defined in spec.md (Evals section) and run via `just evals`.
 - **Human checkpoint**: never execute a plan (tasks.md) without explicit Owner approval. Never merge, deploy, or delete data without human agreement. A checkpoint may be `mode: auto` (auto-validated if evals green + reviewer PASS) — but that choice belongs to the Owner at approval time, and the final (merge) checkpoint is always human.
 - **Traceability**: every commit references the spec IDs it implements (e.g. `feat: product matching [BHV-3, INV-2]`).
 - **Anchored design**: never invent an architecture. Lean on the reference repos listed in design.md §2. If no reference pattern covers the need, flag it in an ADR rather than improvise.
 - **Spec immutable during a task**: if implementation reveals a gap in the spec, stop, amend the spec (separate commit), then resume.
 - **Amendment = coherence pass**: any spec amendment requires updating the `# version :` pointers in design.md/tasks.md and re-reading dependent docs (a note written before the amendment may now be false). Plan-lint flags version drift.
-- **Form adaptable, substance sacred**: the SUBSTANCE of spec.md (business contract) and design.md (technical picture) changes only by human amendment (separate commit + `version:` bump). The FORM may evolve freely, including so another model understands it better. `scripts/content_guard.py` (`make check-content`) makes the rule mechanical: a reformat that alters substance without a version bump is rejected. To help a model that understands poorly: adjust the scaffolding first (`models/profiles/`, agent `.md`), reformat spec/design only as a last resort.
+- **Form adaptable, substance sacred**: the SUBSTANCE of spec.md (business contract) and design.md (technical picture) changes only by human amendment (separate commit + `version:` bump). The FORM may evolve freely, including so another model understands it better. `scripts/content_guard.py` (`just check-content`) makes the rule mechanical: a reformat that alters substance without a version bump is rejected. To help a model that understands poorly: adjust the scaffolding first (`models/profiles/`, agent `.md`), reformat spec/design only as a last resort.
 - **Living agents**: the agent `.md` files are versioned and evolve at the speed of the models — but never silently. Any change goes through the loop "evals → patch scaffolding → verify (raises a score without regressing another) → version bump" (models/EVOLUTION.md). A chain-of-command failure is eliminatory: it is not fixed with a prompt.
 
 ## Conventions
@@ -30,7 +30,10 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 - Python 3.12+, `uv` for dependencies, `ruff` for lint/format, `pytest` for tests, `pytest -m eval` for evals.
 - FastAPI for services, Pydantic v2 for data contracts.
 - Markdown + Git for every artifact. No Confluence, no Jira: the repo is the memory.
-- Language: code, identifiers, and structural sections in English. (Business prose in artifacts may be authored in the team's working language; keep identifiers and code English.)
+- Language (issue #12): **the team's working language is allowed ONLY in the business prose of the artifacts** (`spec.md` / `design.md` / `tasks.md`), so the business team can read and amend them. Everything else MUST be English:
+  - **Code** — comments, docstrings, identifiers, and CLI/log/error strings;
+  - **Technical docs** — `README.md`, `CLAUDE.md`, `.claude/` (agents, skills, hooks), `justfile`, `pyproject.toml`, CI workflows, `docs/`, and `models/` docs.
+  Code and technical docs are the interface for any engineer or model regardless of language; keeping them English makes them portable and keeps the spec/implementation boundary clean.
 
 ## Vocabulary (ubiquitous language)
 

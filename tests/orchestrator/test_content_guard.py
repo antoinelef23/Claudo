@@ -250,7 +250,7 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
     wd = tmp_path / "r"
     wd.mkdir()
     shutil.copytree(REPO / "scripts", wd / "scripts")
-    shutil.copy(REPO / "Makefile", wd / "Makefile")
+    shutil.copy(REPO / "justfile", wd / "justfile")
     (wd / "work" / "feat").mkdir(parents=True)
     (wd / "work" / "feat" / "spec.md").write_text(SPEC_LIST)
     # -b base: deterministic initial branch (otherwise "main" locally but "master"

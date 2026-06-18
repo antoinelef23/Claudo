@@ -16,21 +16,21 @@
       {
         "matcher": "Edit|Write|MultiEdit",
         "hooks": [
-          { "type": "command", "command": "bash scripts/hooks/post_edit.sh" }
+          { "type": "command", "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/post_edit.sh" }
         ]
       }
     ],
     "SubagentStop": [
       {
         "hooks": [
-          { "type": "command", "command": "bash scripts/hooks/eval_gate.sh" }
+          { "type": "command", "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/eval_gate.sh" }
         ]
       }
     ],
     "Stop": [
       {
         "hooks": [
-          { "type": "command", "command": "bash scripts/hooks/eval_gate.sh" }
+          { "type": "command", "command": "bash $CLAUDE_PROJECT_DIR/.claude/hooks/eval_gate.sh" }
         ]
       }
     ]

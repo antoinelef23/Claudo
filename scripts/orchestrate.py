@@ -20,7 +20,7 @@ Autonomy guardrails:
   - structured verdict: the implementer ends with STATUS: done|blocked — an agent
     blocked on a spec gap (OQ) never passes for finished
   - anti-empty-gate: a task that implements spec IDs fails if NO eval is
-    collected (no eval written = no done, even if `make evals` exits 0)
+    collected (no eval written = no done, even if `just evals` exits 0)
   - failure containment: a failed/blocked task only blocks its own subtree of
     dependents (skipped); the other branches continue
   - scoped commits: we only stage the task's files_touched + the feature
@@ -94,6 +94,7 @@ VERIFY_ALLOWED = {
     "head",
     "tail",
     "make",
+    "just",
     "uv",
     "python",
     "python3",
@@ -643,9 +644,7 @@ def run_claude(
 
 
 def run_evals() -> tuple[bool, str]:
-    p = subprocess.run(
-        ["make", "-s", "evals"], cwd=ROOT, capture_output=True, text=True
-    )
+    p = subprocess.run(["just", "evals"], cwd=ROOT, capture_output=True, text=True)
     return p.returncode == 0, (p.stdout + p.stderr)[-3000:]
 
 
@@ -821,7 +820,7 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
 
         ok, out = run_evals()
         # Anti-empty-gate: a task that touches source code MUST have evals,
-        # even without a declared implements (finding M6) — otherwise `make evals`
+        # even without a declared implements (finding M6) — otherwise `just evals`
         # green by absence (masked exit-5) would let ungated code through.
         touches_source = any(
             f.endswith(".py") and not f.startswith(("tests/", "evals/"))
@@ -841,7 +840,7 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
                     else f"modifies source code {node.files}"
                 )
                 out = (
-                    "Empty gate: `make evals` is green but NO eval is collected "
+                    "Empty gate: `just evals` is green but NO eval is collected "
                     f"while the task {reason}. Write the evals from spec.md §7 "
                     "(pytest -m eval) — no eval, no done."
                 )

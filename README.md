@@ -10,6 +10,8 @@ A single **Owner** drives the app, agents write the code, a human validates. Eve
 ai-native-lab/
 ├── CLAUDE.md                  # Persistent context loaded by the agents
 ├── README.md                  # This file: the workflow
+├── justfile                   # Standard targets (just gate / validate / run …)
+├── .githooks/pre-commit       # Local content_guard + plan-lint gate (opt-in)
 ├── templates/
 │   ├── spec.md                # Business-contract template
 │   ├── design.md              # Architecture template
@@ -21,7 +23,8 @@ ai-native-lab/
 │   ├── eval_models.py         # Model×role evaluation campaign
 │   ├── registry.py            # Reads models/registry.toml
 │   ├── ci_checks.sh           # CI content-guard + plan-lint over changed features
-│   └── hooks/                 # eval_gate.sh (merge gate) + post_edit.sh (lint)
+│   ├── runner.py              # AgentRunner interface (claude-cli | sandbox)
+│   └── sandbox_runner.py      # Hardened-container runner (LAB_RUNNER=sandbox)
 ├── .claude/
 │   ├── agents/                # Specialized sub-agents
 │   │   ├── design-scout.md    # Gathers internal + OSS reference repos
@@ -29,6 +32,7 @@ ai-native-lab/
 │   │   ├── implementer.md     # Implements one task against the spec
 │   │   ├── eval-runner.md     # Runs the evals (merge gate)
 │   │   └── reviewer.md        # Cross-review spec ↔ code
+│   ├── hooks/                 # eval_gate.sh (merge gate) + post_edit.sh (lint)
 │   ├── settings.json          # Hooks + permission denies (agents can't forge tokens)
 │   └── skills/                # e.g. the spec-workshop facilitation skill
 ├── models/                    # registry.toml, profiles/, EVOLUTION.md, scorecards/
@@ -83,9 +87,9 @@ flowchart TD
 
 ## The guardrails that make autonomy safe
 
-1. **Plan-lint** (`--validate`, or `make validate FEATURE=…`): acyclic DAG, spec IDs exist, `done_when` present, disjoint parallel paths, final checkpoint blocking, every `verify` command on an allowlist. A plan that doesn't lint doesn't run — that's what lets the Owner approve once and walk away.
+1. **Plan-lint** (`--validate`, or `just validate work/<feature>`): acyclic DAG, spec IDs exist, `done_when` present, disjoint parallel paths, final checkpoint blocking, every `verify` command on an allowlist. A plan that doesn't lint doesn't run — that's what lets the Owner approve once and walk away.
 2. **Structured verdict**: each implementer ends with `STATUS: done` or `STATUS: blocked — <reason>`. An agent blocked on a spec gap (an open question) never passes as finished; it records the question and only its sub-tree stops.
-3. **Anti-empty-gate**: a task that implements spec IDs — or merely touches source code — FAILS if no eval is collected (`pytest -m eval --collect-only`). A green `make evals` with zero evals validates nothing. Eval coverage is matched by pytest **node-id** (so `eval_1` ≠ `eval_10`, and a file path doesn't count as coverage).
+3. **Anti-empty-gate**: a task that implements spec IDs — or merely touches source code — FAILS if no eval is collected (`pytest -m eval --collect-only`). A green `just evals` with zero evals validates nothing. Eval coverage is matched by pytest **node-id** (so `eval_1` ≠ `eval_10`, and a file path doesn't count as coverage).
 4. **Per-task verify**: the `verify` command in tasks.md materializes `done_when`. It is parsed to an argv list and run **without a shell** (no metacharacters, command + env-prefix allowlists) — checked mechanically after each agent, before the evals.
 5. **Failure containment**: failed/blocked only neutralizes dependents (`skipped`); other branches continue. The run always ends on a summary, never on a mid-course abort.
 6. **Scoped commits**: only the task's `files_touched` (+ the feature dir) are staged, under a lock — two parallel agents don't pollute each other, and the golden oracles can't be swept into a task commit. Out-of-scope changes are reported, not committed.
@@ -119,7 +123,7 @@ Recovery: state lives in `<feature>/.runs/state.json` — re-running the same co
 
 The lab evaluates not only the **product** (the code, via the spec §7 evals) but also the **models** it uses, per role. Source of truth: `models/registry.toml` (data-driven — adding a model is one entry, zero code). The orchestrator assigns a model to each role (`[roles]`), overridable per task (`**model :**`), and logs which model produced what.
 
-`scripts/eval_models.py` (target `make eval-models LIVE=1`) measures three layers:
+`scripts/eval_models.py` (target `just eval-models live=1`) measures three layers:
 
 1. **Scorecard** — on the golden tasks (`evals/golden/`), does the produced code pass **our** hidden evals (never the ones the model writes itself)? Raw capability per role, judged fairly. The oracle is held out: the model never sees `goldeval/` during execution.
 2. **Behavioral** (`evals/behavioral/`) — does the model respect its role contract: scope, the `STATUS` verdict, stopping on ambiguity, evals-first, calibrated reviewer verdicts?
@@ -141,7 +145,7 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 ## CI
 
 `.github/workflows/gate.yml` mirrors the local merge gate:
-- `make gate-ci` — **non-mutating** lint (`ruff check` + `ruff format --check`, so drift fails CI instead of being silently auto-fixed) + tests + evals (the shim orchestrator suite included).
+- `just gate-ci` — **non-mutating** lint (`ruff check` + `ruff format --check`, so drift fails CI instead of being silently auto-fixed) + tests + evals (the shim orchestrator suite included).
 - `scripts/ci_checks.sh` — runs `content_guard --against <base>` over changed features (the "substance is sacred" rule, enforced vs the base branch, not a clean-checkout HEAD) plus plan-lint (informational). Fail-safe: skips cleanly if the base ref is unavailable.
 
 ## Trust model (read this)

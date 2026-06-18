@@ -2,7 +2,7 @@
 #
 # Adding a model = one [[model]] entry. The orchestrator and the eval harness
 # take it into account WITHOUT code changes (designed for model evolution).
-# After each new model: `make eval-models LIVE=1` then arbitration — see models/EVOLUTION.md.
+# After each new model: `just eval-models live=1` then arbitration — see models/EVOLUTION.md.
 #
 # The metrics (cost, latency, pass rate) are NOT in this file:
 # they are MEASURED by the harness (fairness), not declared. Here: identity,

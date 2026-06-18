@@ -32,7 +32,7 @@ this one. `CLAUDE.md` (hard rules) > role `.md` > task prompt = our chain of com
 
 1. **Add to the registry** — a `[[model]]` entry in `models/registry.toml` (id, eligible roles).
    No code to touch.
-2. **Run the campaign** — `make eval-models LIVE=1` (the 3 layers, all the models in the registry).
+2. **Run the campaign** — `just eval-models live=1` (the 3 layers, all the models in the registry).
    Produces a dated scorecard in `models/scorecards/`.
 3. **Compare to the incumbent** — the registry's `[roles]` is the baseline. Does the new
    model beat the current one on its layer, at an acceptable cost?
@@ -60,7 +60,7 @@ Three levels of mutability, in order of sacredness:
 
 **The mechanical guardrail: `scripts/content_guard.py`.** It extracts a *substance fingerprint*
 (assertions by INV/BHV/EX/EVAL/NG/OQ/ADR ID + canonical glossary names + KPI), normalized to
-ignore the form. Rule applied (`make check-content FEATURE=…`):
+ignore the form. Rule applied (`just check-content <feature>`):
 
 - reformat (identical substance) → ✅, the form is free;
 - substance modified **with** a version bump → ✅, deliberate amendment;
@@ -82,7 +82,7 @@ The agents must evolve **at the speed of the models**. But "living" does not mea
 silence": an agent is versioned (`version:` + changelog in its frontmatter) and **only changes on
 proof**, exactly like code only merges on a green eval.
 
-The loop, on each campaign (`make eval-models`) or as production logs come in:
+The loop, on each campaign (`just eval-models`) or as production logs come in:
 
 1. **Observation** — a behavioral/chain eval fails for a specific `(model, rule)`
    (e.g. campaign 2026-06-15: Haiku fails COC-merge).

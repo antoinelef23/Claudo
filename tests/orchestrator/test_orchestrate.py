@@ -373,7 +373,7 @@ def test_anti_gate_vide(sandbox: Path) -> None:
 
 def test_anti_gate_vide_for_source_edit_without_implements(sandbox: Path) -> None:
     # finding M6: a task that touches source code (src/*.py) without implements must
-    # still require evals — otherwise `make evals` green by absence lets it through.
+    # still require evals — otherwise `just evals` green by absence lets it through.
     write_tasks(
         sandbox,
         """
