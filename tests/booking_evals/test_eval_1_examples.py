@@ -1,4 +1,4 @@
-"""EVAL-1 — Exemples EX-1 à EX-5 vérifiés exactement (spec.md §5, §7)."""
+"""EVAL-1 — Examples EX-1 to EX-5 checked exactly (spec.md §5, §7)."""
 
 import pytest
 
@@ -8,7 +8,7 @@ from booking.store import BookingStore
 
 @pytest.mark.eval
 def test_eval_1_ex1_nominal_confirmed():
-    """EX-1 — réservation nominale confirmée (BHV-1)."""
+    """EX-1 — nominal confirmed booking (BHV-1)."""
     store = BookingStore()
     result = store.book("A", 540, 600, "alice")
     assert result["status"] == "confirmed"
@@ -17,7 +17,7 @@ def test_eval_1_ex1_nominal_confirmed():
 
 @pytest.mark.eval
 def test_eval_1_ex2_overlap_rejected():
-    """EX-2 — chevauchement refusé overlap (BHV-2)."""
+    """EX-2 — overlap rejected (BHV-2)."""
     store = BookingStore()
     store.book("A", 540, 600, "alice")
     result = store.book("A", 570, 630, "bob")
@@ -26,7 +26,7 @@ def test_eval_1_ex2_overlap_rejected():
 
 @pytest.mark.eval
 def test_eval_1_ex3_adjacent_allowed():
-    """EX-3 — créneaux adjacents autorisés (BHV-1a)."""
+    """EX-3 — adjacent slots allowed (BHV-1a)."""
     store = BookingStore()
     store.book("A", 540, 600, "alice")
     result = store.book("A", 600, 660, "bob")
@@ -45,7 +45,7 @@ def test_eval_1_ex4_availability():
 
 @pytest.mark.eval
 def test_eval_1_ex5_too_long_rejected():
-    """EX-5 — durée 260 min refusée too_long (BHV-1c)."""
+    """EX-5 — duration 260 min rejected too_long (BHV-1c)."""
     store = BookingStore()
     result = store.book("B", 540, 800, "carol")
     assert result == {"rejected": "too_long"}

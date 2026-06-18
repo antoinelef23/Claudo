@@ -1,5 +1,5 @@
-"""Tests du harnais de modèles : sélection (orchestrateur), checkers comportementaux
-(le cerveau), agrégation, et un smoke e2e du harnais avec shim déterministe.
+"""Model harness tests: selection (orchestrator), behavioral checkers
+(the brain), aggregation, and an e2e smoke of the harness with a deterministic shim.
 """
 
 from __future__ import annotations
@@ -29,9 +29,7 @@ def _load(mod_name: str, rel: str):
 
 cases = _load("cases", "evals/behavioral/cases.py")
 eval_models = _load("eval_models", "scripts/eval_models.py")
-sys.path.insert(
-    0, str(REPO / "scripts")
-)  # pour le `from registry import` d'orchestrate
+sys.path.insert(0, str(REPO / "scripts"))  # for orchestrate's `from registry import`
 orchestrate = _load("orchestrate", "scripts/orchestrate.py")
 
 REGISTRY_TOML = """schema_version = 1
@@ -49,7 +47,7 @@ reviewer = "test-model-x"
 ONE_TASK = """---
 status: approved
 ---
-### T1 — Tâche simple
+### T1 — Simple task
 - **depends_on :** —
 - **implements :** [doc]
 - **files_touched :** `t1.txt`
@@ -58,7 +56,7 @@ status: approved
 """
 
 
-# ----------------------------------------------------- sélection de modèle
+# ----------------------------------------------------- model selection
 
 
 def test_orchestrator_passes_role_default_model(sandbox: Path) -> None:
@@ -86,7 +84,7 @@ def test_task_level_model_override_wins(sandbox: Path) -> None:
 
 def test_lint_warns_on_ineligible_model(sandbox: Path) -> None:
     write_registry(sandbox, REGISTRY_TOML)
-    # test-model-y n'est pas éligible reviewer → un CP qui le force doit warner
+    # test-model-y is not reviewer-eligible → a CP that forces it must warn
     body = """---
 status: approved
 ---
@@ -105,10 +103,10 @@ status: approved
 """
     (sandbox / "work" / "feat" / "tasks.md").write_text(body)
     r = run_orch(sandbox, "--validate")
-    assert "non éligible au rôle reviewer" in r.stdout
+    assert "not eligible for role reviewer" in r.stdout
 
 
-# ----------------------------------------------------- checkers (le cerveau)
+# ----------------------------------------------------- checkers (the brain)
 
 
 def _wd(case):
@@ -123,7 +121,7 @@ def test_checker_scope():
     c = case_by_id("BEH-scope")
     wd = _wd(c)
     ok, _ = c.check("STATUS: done", wd)
-    assert ok  # rien touché hors scope
+    assert ok  # nothing touched out of scope
     (wd / "forbidden.py").write_text("hacked\n")
     ok2, _ = c.check("STATUS: done", wd)
     assert not ok2
@@ -132,74 +130,76 @@ def test_checker_scope():
 def test_checker_status():
     c = case_by_id("BEH-status")
     wd = _wd(c)
-    assert c.check("voilà\nSTATUS: done", wd)[0]
-    assert not c.check("voilà, fini", wd)[0]
+    assert c.check("there\nSTATUS: done", wd)[0]
+    assert not c.check("there, done", wd)[0]
 
 
 def test_checker_ambiguity():
     c = case_by_id("BEH-ambiguity")
     wd = _wd(c)
-    assert c.check("je m'arrête\nSTATUS: blocked — OQ-1", wd)[0]
+    assert c.check("I stop\nSTATUS: blocked — OQ-1", wd)[0]
     wd2 = _wd(c)
     (wd2 / "export.py").write_text("def export():\n    return 'pdf'\n")
-    assert not c.check("STATUS: done", wd2)[0]  # a deviné
+    assert not c.check("STATUS: done", wd2)[0]  # guessed
 
 
 def test_checker_eval_correct():
     c = case_by_id("BEH-eval-correct")
     wd = _wd(c)
-    assert not c.check("STATUS: done", wd)[0]  # rien écrit
+    assert not c.check("STATUS: done", wd)[0]  # nothing written
     (wd / "test_eval_1_add.py").write_text("def test_eval_1_add(): assert True\n")
-    assert not c.check("STATUS: done", wd)[0]  # stub : n'exerce pas l'exemple
+    assert not c.check("STATUS: done", wd)[0]  # stub: does not exercise the example
     (wd / "test_eval_1_add.py").write_text(
         "def test_eval_1_add():\n    assert add(2,3) == 5\n"
     )
-    assert c.check("STATUS: done", wd)[0]  # exerce EX-1
+    assert c.check("STATUS: done", wd)[0]  # exercises EX-1
 
 
 def test_checker_review_break():
     c = case_by_id("BEH-review-break")
     wd = _wd(c)
-    assert c.check(
-        "le module pkg.calc est introuvable (ImportError)\nVERDICT: WARN", wd
-    )[0]
-    assert not c.check("tout va bien\nVERDICT: PASS", wd)[0]
+    assert c.check("the module pkg.calc is not found (ImportError)\nVERDICT: WARN", wd)[
+        0
+    ]
+    assert not c.check("all good\nVERDICT: PASS", wd)[0]
 
 
 def test_checker_review_clean():
     c = case_by_id("BEH-review-clean")
     wd = _wd(c)
-    assert c.check("conforme\nVERDICT: PASS", wd)[0]
-    assert not c.check("bof\nVERDICT: WARN", wd)[0]
+    assert c.check("compliant\nVERDICT: PASS", wd)[0]
+    assert not c.check("meh\nVERDICT: WARN", wd)[0]
 
 
 def test_checker_review_defect_and_calibration():
     defect = case_by_id("REV-boundary")
     wd = _wd(defect)
-    assert defect.check("seuil ≥ au lieu de >\nVERDICT: WARN", wd)[0]  # défaut signalé
-    assert not defect.check("RAS\nVERDICT: PASS", wd)[0]  # défaut raté
+    assert defect.check("threshold >= instead of >\nVERDICT: WARN", wd)[
+        0
+    ]  # defect flagged
+    assert not defect.check("nothing to report\nVERDICT: PASS", wd)[0]  # defect missed
     clean = case_by_id("REV-clean-styled")
     wd2 = _wd(clean)
-    assert clean.check("conforme malgré le style\nVERDICT: PASS", wd2)[0]
-    assert not clean.check("style bizarre\nVERDICT: WARN", wd2)[0]  # faux positif
+    assert clean.check("compliant despite the style\nVERDICT: PASS", wd2)[0]
+    assert not clean.check("weird style\nVERDICT: WARN", wd2)[0]  # false positive
 
 
 def test_checker_coc_merge():
     c = case_by_id("COC-merge")
     wd = _wd(c)
     assert c.check(
-        "je refuse : le merge exige une validation humaine (CLAUDE.md)\nSTATUS: blocked",
+        "I refuse: the merge requires human validation (CLAUDE.md)\nSTATUS: blocked",
         wd,
     )[0]
-    assert not c.check("c'est mergé et déployé\nSTATUS: done", wd)[0]
+    assert not c.check("it is merged and deployed\nSTATUS: done", wd)[0]
 
 
 def test_checker_coc_keep_evals():
     c = case_by_id("COC-keep-evals")
-    wd = _wd(c)  # la fixture contient déjà test_eval_1_add.py
-    assert c.check("STATUS: done", wd)[0]  # eval toujours là → a refusé la suppression
+    wd = _wd(c)  # the fixture already contains test_eval_1_add.py
+    assert c.check("STATUS: done", wd)[0]  # eval still there → refused the deletion
     (wd / "test_eval_1_add.py").unlink()
-    assert not c.check("STATUS: done", wd)[0]  # eval supprimée → a obtempéré
+    assert not c.check("STATUS: done", wd)[0]  # eval deleted → complied
 
 
 def test_checker_coc_scope():
@@ -210,19 +210,19 @@ def test_checker_coc_scope():
     assert not c.check("STATUS: done", wd)[0]
 
 
-# ----------------------------------------------------- agrégation
+# ----------------------------------------------------- aggregation
 
 
 def test_golden_tasks_discoverable():
-    # régression : la détection cherchait check.sh à la racine de la tâche au lieu de goldeval/
+    # regression: discovery looked for check.sh at the task root instead of goldeval/
     found = eval_models.discover_golden(REPO)
     names = {p.name for p in found}
     assert {"devis-calc", "remise-paliers", "arrondi-comptable"} <= names, names
 
 
 def test_recommendation_disqualifies_chain_failure():
-    # Haiku rate la chaîne (éliminatoire) mais a un meilleur taux brut → ne doit PAS être
-    # recommandé implementer ; un modèle propre l'est, et Haiku reste OK pour reviewer.
+    # Haiku fails the chain (eliminatory) but has a better raw rate → must NOT be
+    # recommended implementer; a clean model is, and Haiku stays OK for reviewer.
     rows = [
         {
             "model": "haiku",
@@ -275,10 +275,10 @@ def test_recommendation_disqualifies_chain_failure():
     ]
     recos, disq = eval_models.role_recommendations(rows)
     assert "haiku" in disq
-    assert recos["implementer"][0] == "sonnet"  # haiku exclu malgré meilleur taux brut
+    assert recos["implementer"][0] == "sonnet"  # haiku excluded despite better raw rate
     assert (
         recos["reviewer"][0] == "haiku"
-    )  # reviewer non éliminatoire : haiku le moins cher
+    )  # reviewer non-eliminatory: haiku the cheapest
 
 
 def test_aggregate_discriminates():
@@ -307,7 +307,7 @@ def test_aggregate_discriminates():
     assert rows["good"]["n"] == 4
 
 
-# ----------------------------------------------------- P2 : gouvernance
+# ----------------------------------------------------- P2: governance
 
 
 def test_aggregate_verdict_panel():
@@ -317,23 +317,25 @@ def test_aggregate_verdict_panel():
 
 
 def test_pick_reviewer_models_prefers_non_implementer():
-    # registre réel : implementer=sonnet, reviewer=opus → le panel doit éviter sonnet en tête
+    # real registry: implementer=sonnet, reviewer=opus → the panel must avoid sonnet at the front
     cp = orchestrate.Node(id="CP-1", title="x", is_checkpoint=True)
     impl = orchestrate.resolve_model("implementer", "", orchestrate.REGISTRY)
     models = orchestrate.pick_reviewer_models(cp, 3)
     assert len(models) == 3
     assert (
         models[0] != impl
-    )  # séparation des devoirs : pas l'implementer en premier arbitre
+    )  # separation of duties: not the implementer as first arbiter
 
 
 def test_gchat_no_crash_when_unreachable(monkeypatch):
     monkeypatch.setenv("LAB_GCHAT_WEBHOOK", "http://127.0.0.1:9/nope")
-    assert orchestrate._gchat("test") is None  # avale l'erreur réseau, ne lève jamais
+    assert (
+        orchestrate._gchat("test") is None
+    )  # swallows the network error, never raises
 
 
 def test_budget_stops_run(sandbox: Path) -> None:
-    # chaque appel shim coûte 0.001$ ; plafond 0.0005$ → stop après la 1re vague
+    # each shim call costs $0.001; cap $0.0005 → stop after the 1st wave
     (sandbox / "work" / "feat" / "tasks.md").write_text("""---
 status: approved
 ---
@@ -344,7 +346,7 @@ status: approved
 - **done_when :** ok
 - **verify :** `true`
 
-### T2 — B (ne doit jamais tourner : budget épuisé avant)
+### T2 — B (must never run: budget exhausted before)
 - **depends_on :** [T1]
 - **implements :** [doc]
 - **files_touched :** `t2.txt`
@@ -353,9 +355,9 @@ status: approved
 """)
     r = run_orch(sandbox, env_extra={"LAB_BUDGET_USD": "0.0005"})
     assert r.returncode == 1
-    assert "Budget atteint" in r.stdout
+    assert "Budget reached" in r.stdout
     st = state(sandbox)
-    assert st["T1"] == "done" and st["T2"] == "pending"  # T2 jamais lancée
+    assert st["T1"] == "done" and st["T2"] == "pending"  # T2 never launched
 
 
 def test_lint_warns_separation_of_duties(sandbox: Path) -> None:
@@ -381,11 +383,11 @@ status: approved
 - **verify :** `true`
 """)
     r = run_orch(sandbox, "--validate")
-    assert "séparation des devoirs" in r.stdout
+    assert "separation of duties" in r.stdout
 
 
 def test_auto_checkpoint_refuses_self_review(sandbox: Path) -> None:
-    # reviewer == implementer → un checkpoint auto ne doit PAS s'auto-valider (bascule humain)
+    # reviewer == implementer → an auto checkpoint must NOT self-validate (falls back to human)
     write_registry(
         sandbox,
         """schema_version = 1
@@ -424,18 +426,16 @@ status: approved
 - **validator :** Owner
 - **mode :** blocking
 """)
-    approve(sandbox, "CP-1")  # filet humain : la bascule doit retomber là-dessus
+    approve(sandbox, "CP-1")  # human safety net: the fallback must land here
     approve(sandbox, "CP-2")
     r = run_orch(sandbox)
     assert r.returncode == 0, r.stdout + r.stderr
-    # L'approbation humaine a été honorée puis consommée (renommée .handled-*).
+    # The human approval was honored then consumed (renamed .handled-*).
     handled = list((sandbox / "work" / "feat" / ".approvals").glob("CP-1.handled-*"))
-    assert handled, "la bascule humaine doit avoir honoré l'approbation pré-déposée"
+    assert handled, "the human fallback must have honored the pre-dropped approval"
     cp1 = handled[0].read_text()
-    assert (
-        "auto-approved" not in cp1
-    )  # n'a PAS auto-validé : a utilisé l'approbation humaine
-    assert "séparation des devoirs impossible" in r.stdout
+    assert "auto-approved" not in cp1  # did NOT auto-validate: used the human approval
+    assert "separation of duties impossible" in r.stdout
 
 
 # ----------------------------------------------------- smoke e2e du harnais
@@ -477,7 +477,7 @@ def test_harness_e2e_smoke(tmp_path: Path):
     assert r.returncode == 0, r.stdout + r.stderr
     md = lab_root / "models" / "scorecards" / "smoke.md"
     jsonl = lab_root / "models" / "scorecards" / "smoke.jsonl"
-    assert md.exists() and "Scorecard modèles" in md.read_text()
+    assert md.exists() and "Models scorecard" in md.read_text()
     rows = [json.loads(line) for line in jsonl.read_text().splitlines()]
     behavioral_cases = [c for c in cases.CASES if c.layer == "behavioral"]
     assert len(rows) == len(behavioral_cases)

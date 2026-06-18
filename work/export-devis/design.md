@@ -1,16 +1,16 @@
 ---
 artifact: design
 feature: export-devis
-version: 1.0.0
+version: 1.0.1
 status: validated
-owner: Antoine (simulation confinement)
-validated_by: FDE simulé — 2026-06-10
-spec: ./spec.md          # version : 1.0.0
+owner: Antoine (failure-containment simulation)
+validated_by: simulated FDE — 2026-06-10
+spec: ./spec.md          # version : 1.0.1
 ---
 
-# Design — Export du devis
+# Design — Quote export
 
-Réutilise le socle devis-pose (ADR-1 : fonctions pures). OQ-1 résolue (spec v1.0.0) :
-export **texte brut** — `src/devis/export.py::export_quote` encode la sortie de
-`format_quote` en UTF-8. Documentation : `docs/export-notes.md` (historique) et
+Reuses the devis-pose foundation (ADR-1: pure functions). OQ-1 resolved (spec v1.0.1):
+**plain-text** export — `src/devis/export.py::export_quote` encodes the output of
+`format_quote` as UTF-8. Documentation: `docs/export-notes.md` (history) and
 `docs/export-usage.md` (usage).

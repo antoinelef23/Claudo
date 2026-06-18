@@ -1,94 +1,94 @@
 ---
 artifact: spec
-feature: <slug-de-la-feature>
+feature: <feature-slug>
 version: 0.1.0
 status: draft            # draft | validated | superseded
-owner: <nom de l'Owner courant>
-validated_by: <métier — nom + date, vide tant que draft>
+owner: <name of the current Owner>
+validated_by: <business — name + date, empty while draft>
 ---
 
-# Spec — <Nom de la feature>
+# Spec — <Feature name>
 
-> **Le QUOI. Le contrat du métier.** Ce fichier est le prompt principal de tout agent qui code.
-> Règles d'or pour être parfaitement compris d'une IA :
-> 1. Chaque affirmation est **testable** et porte un **ID stable** (INV-n, BHV-n, EX-n, EVAL-n) — jamais réutilisé, jamais renuméroté.
-> 2. Zéro ambiguïté : « rapide », « simple », « pertinent » sont interdits sans chiffre.
-> 3. Les exemples concrets priment sur la prose : en cas de conflit prose/exemple, **l'exemple gagne** et la prose doit être corrigée.
-> 4. Ce qui n'est pas dans la spec n'existe pas. Ce qui est hors scope est dit explicitement (§6).
+> **The WHAT. The business contract.** This file is the primary prompt for any agent that codes.
+> Golden rules to be perfectly understood by an AI:
+> 1. Every statement is **testable** and carries a **stable ID** (INV-n, BHV-n, EX-n, EVAL-n) — never reused, never renumbered.
+> 2. Zero ambiguity: "fast", "simple", "relevant" are forbidden without a number.
+> 3. Concrete examples take precedence over prose: in case of conflict between prose and example, **the example wins** and the prose must be fixed.
+> 4. What is not in the spec does not exist. What is out of scope is stated explicitly (§6).
 
 ## 1. Intent
 
-*2 à 5 phrases. Pourquoi cette feature existe, pour qui, et quel KPI business elle bouge. C'est la section que l'agent relit quand il doit arbitrer.*
+*2 to 5 sentences. Why this feature exists, for whom, and which business KPI it moves. This is the section the agent re-reads when it has to make a call.*
 
-**KPI cible :** <métrique, valeur actuelle → valeur visée, horizon>
+**Target KPI:** <metric, current value → target value, horizon>
 
 ## 2. Glossary
 
-*Vocabulaire métier exact. L'agent DOIT utiliser ces termes dans le code (noms de classes, champs, events). Un terme = une définition = un nom canonique en anglais pour le code.*
+*Exact business vocabulary. The agent MUST use these terms in the code (class names, fields, events). One term = one definition = one canonical English name for the code.*
 
-| Terme métier (FR) | Nom canonique (code) | Définition |
+| Business term | Canonical name (code) | Definition |
 |---|---|---|
-| <terme> | `<snake_case>` | <définition sans ambiguïté> |
+| <term> | `<snake_case>` | <unambiguous definition> |
 
 ## 3. Invariants
 
-*Les règles toujours vraies, quoi qu'il arrive. Chaque invariant est vérifiable par un test. Format : MUST / MUST NOT.*
+*The rules that are always true, no matter what. Each invariant is verifiable by a test. Format: MUST / MUST NOT.*
 
-- **INV-1** — <Le système MUST ... / MUST NOT ...>
+- **INV-1** — <The system MUST ... / MUST NOT ...>
 - **INV-2** — ...
 
 ## 4. Behaviors
 
-*Comportements attendus, format Given/When/Then. Un BHV = un comportement observable, pas une étape technique.*
+*Expected behaviors, Given/When/Then format. A BHV = one observable behavior, not a technical step.*
 
-### BHV-1 — <titre court>
-- **Given** <état initial précis>
-- **When** <action de l'utilisateur ou événement>
-- **Then** <résultat observable, avec valeurs>
-- **Edge cases :** <liste numérotée BHV-1a, BHV-1b… avec le comportement attendu pour chacun>
+### BHV-1 — <short title>
+- **Given** <precise initial state>
+- **When** <user action or event>
+- **Then** <observable result, with values>
+- **Edge cases:** <numbered list BHV-1a, BHV-1b… with the expected behavior for each>
 
 ## 5. Examples
 
-*Galerie d'exemples concrets entrée → sortie, issus du Vibe Workshop. Données réalistes, pas de foo/bar. C'est la section la plus lue par les agents.*
+*Gallery of concrete input → output examples, drawn from the Spec Workshop. Realistic data, no foo/bar. This is the section most read by the agents.*
 
-### EX-1 — <cas nominal>
+### EX-1 — <nominal case>
 ```yaml
 input:
-  <champ>: <valeur réaliste>
+  <field>: <realistic value>
 expected_output:
-  <champ>: <valeur exacte attendue>
+  <field>: <exact expected value>
 covers: [BHV-1, INV-2]
 ```
 
-### EX-2 — <cas limite>
+### EX-2 — <edge case>
 ...
 
 ## 6. Non-goals
 
-*Ce que cette feature NE fait PAS, même si ça semble proche. Empêche l'agent d'halluciner du scope.*
+*What this feature does NOT do, even if it looks close. Prevents the agent from hallucinating scope.*
 
-- **NG-1** — <hors scope + pourquoi / où c'est traité>
+- **NG-1** — <out of scope + why / where it is handled>
 
 ## 7. Evals — merge gate
 
-*Chaque eval est exécutable (`pytest -m eval`). Pas d'eval verte, pas de merge. Une eval référence les BHV/INV qu'elle couvre. Tout BHV et tout INV doit être couvert par au moins une eval.*
+*Each eval is executable (`pytest -m eval`). No green eval, no merge. An eval references the BHVs/INVs it covers. Every BHV and every INV must be covered by at least one eval.*
 
-*Convention exécutable : une eval = un test pytest marqué `@pytest.mark.eval` dont le nom contient l'ID en minuscules (ex. `test_eval_1_matching_exact`). C'est ce qui permet à l'orchestrateur de vérifier mécaniquement qu'une eval existe (anti-gate-vide : un `make evals` vert avec zéro eval collectée ne valide RIEN) et, à terme, la couverture eval ↔ spec.*
+*Executable convention: an eval = a pytest test marked `@pytest.mark.eval` whose name contains the ID in lowercase (e.g. `test_eval_1_matching_exact`). This is what lets the orchestrator mechanically verify that an eval exists (anti-empty-gate: a green `make evals` with zero evals collected validates NOTHING) and, eventually, eval ↔ spec coverage.*
 
-| ID | Type | Description | Couvre | Seuil de succès |
+| ID | Type | Description | Covers | Success threshold |
 |---|---|---|---|---|
-| EVAL-1 | deterministic | <test exact entrée/sortie> | BHV-1, INV-1 | 100 % |
-| EVAL-2 | llm-judge | <critère de qualité jugé par LLM, rubrique en annexe> | BHV-2 | ≥ <n>/10 sur <m> cas |
-| EVAL-3 | property-based | <propriété vérifiée sur données générées> | INV-2 | 100 % |
+| EVAL-1 | deterministic | <exact input/output test> | BHV-1, INV-1 | 100% |
+| EVAL-2 | llm-judge | <quality criterion judged by an LLM, rubric in appendix> | BHV-2 | ≥ <n>/10 on <m> cases |
+| EVAL-3 | property-based | <property verified on generated data> | INV-2 | 100% |
 
 ## 8. Open questions
 
-*Questions sans réponse. Un agent qui rencontre une OQ s'arrête et demande — il ne devine pas.*
+*Unanswered questions. An agent that hits an OQ stops and asks — it does not guess.*
 
-- **OQ-1** — <question> → *(résolue le <date> : <réponse>, intégrée en BHV-n)*
+- **OQ-1** — <question> → *(resolved on <date>: <answer>, integrated as BHV-n)*
 
 ## 9. Changelog
 
-| Version | Date | Auteur | Changement |
+| Version | Date | Author | Change |
 |---|---|---|---|
-| 0.1.0 | <date> | Vibe Workshop | Création — spec v1 commitée |
+| 0.1.0 | <date> | Spec Workshop | Created — spec v1 committed |

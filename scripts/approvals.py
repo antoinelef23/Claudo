@@ -1,22 +1,22 @@
 #!/usr/bin/env python3
-"""Jetons d'approbation signés (HMAC) — empêche un agent de forger sa propre
-validation de checkpoint. Le merge est humain, toujours (CLAUDE.md, hard rules).
+"""Signed approval tokens (HMAC) — prevent an agent from forging its own
+checkpoint validation. The merge is human, always (CLAUDE.md, hard rules).
 
-Modèle de menace fermé ici (finding H1) : un agent (Write/Edit en acceptEdits, ou
-Bash) qui dépose lui-même `feature/.approvals/<CP>` pour s'auto-valider. Avant, le
-gate se réduisait à `approval.exists()` — falsifiable d'un seul `Write`.
+Threat model closed here (finding H1): an agent (Write/Edit in acceptEdits, or
+Bash) that writes `feature/.approvals/<CP>` itself to self-validate. Before, the
+gate reduced to `approval.exists()` — forgeable with a single `Write`.
 
-- Sans LAB_APPROVAL_SECRET : mode rétro-compatible. Un jeton non signé est accepté
-  AVEC avertissement (la forge n'est PAS bloquée — configure le secret).
-- Avec LAB_APPROVAL_SECRET : un jeton sans signature HMAC valide est REJETÉ. Un
-  agent ne peut donc pas se valider sans le secret, que l'orchestrateur retire de
-  l'environnement des sous-agents (cf. orchestrate.run_claude).
+- Without LAB_APPROVAL_SECRET: back-compatible mode. An unsigned token is accepted
+  WITH a warning (forgery is NOT blocked — configure the secret).
+- With LAB_APPROVAL_SECRET: a token without a valid HMAC signature is REJECTED. An
+  agent therefore cannot validate itself without the secret, which the orchestrator
+  removes from the sub-agents' environment (cf. orchestrate.run_claude).
 
-Résiduel connu (finding M4) : tant que les agents tournent sur le même hôte SANS
-sandbox, un agent disposant d'exécution de code arbitraire (inhérente à un agent
-qui lance ses tests) pourrait exfiltrer le secret depuis les dotfiles de l'Owner.
-Le confinement complet passe par le sandbox (branche ship/portable-sandbox). Ici
-on ferme la forge naïve / par-outil et on lie le jeton au checkpoint.
+Known residual (finding M4): as long as agents run on the same host WITHOUT a
+sandbox, an agent with arbitrary code execution (inherent to an agent that runs
+its tests) could exfiltrate the secret from the Owner's dotfiles. Full
+confinement comes with the sandbox (branch ship/portable-sandbox). Here we close
+the naive / per-tool forgery and bind the token to the checkpoint.
 """
 
 from __future__ import annotations
@@ -31,24 +31,24 @@ ENV_SECRET = "LAB_APPROVAL_SECRET"
 
 
 def _secret() -> bytes | None:
-    # Un secret vide OU uniquement blanc est traité comme absent (entropie nulle) :
-    # pas de fausse impression de sécurité avec LAB_APPROVAL_SECRET="   ".
+    # An empty OR whitespace-only secret is treated as absent (zero entropy):
+    # no false sense of security with LAB_APPROVAL_SECRET="   ".
     s = (os.environ.get(ENV_SECRET) or "").strip()
     return s.encode() if s else None
 
 
 def _feature_id(feature: Path) -> str:
-    # parent/name (ex. work/feat) plutôt que le seul basename — évite une collision
-    # de jeton entre work/x et examples/x. Stable entre approve.sh et l'orchestrateur
-    # (tous deux résolvent le chemin avant d'appeler).
+    # parent/name (e.g. work/feat) rather than the basename alone — avoids a token
+    # collision between work/x and examples/x. Stable between approve.sh and the
+    # orchestrator (both resolve the path before calling).
     return f"{feature.parent.name}/{feature.name}"
 
 
 def _payload(feature: Path, cp_id: str) -> str:
-    # Lié au checkpoint et à la feature — PAS au contenu de tasks.md (muté par
-    # run_log pendant le run, ce qui invaliderait un jeton légitime). La fraîcheur
-    # (anti-rejeu, finding H4) est assurée par la consommation du jeton après
-    # honoration côté orchestrateur (wait_checkpoint) + le gitignore de .approvals.
+    # Bound to the checkpoint and the feature — NOT to the tasks.md content (mutated
+    # by run_log during the run, which would invalidate a legitimate token).
+    # Freshness (anti-replay, finding H4) is ensured by consuming the token after
+    # honoring it in the orchestrator (wait_checkpoint) + the gitignore of .approvals.
     return f"{cp_id}|{_feature_id(feature)}"
 
 
@@ -77,21 +77,21 @@ def _fields(content: str) -> dict[str, str]:
 
 
 def verify(feature: Path, cp_id: str, content: str) -> tuple[bool, str]:
-    """(accepté, motif). Refuse un jeton signé invalide ; accepte (avec
-    avertissement) un jeton non signé seulement si aucun secret n'est configuré."""
+    """(accepted, reason). Refuses an invalid signed token; accepts (with a
+    warning) an unsigned token only if no secret is configured."""
     sec = _secret()
     if sec is None:
         return (
             True,
-            "non signé (LAB_APPROVAL_SECRET absent — forge non bloquée, "
-            "configure le secret pour durcir le checkpoint)",
+            "unsigned (LAB_APPROVAL_SECRET absent — forgery not blocked, "
+            "configure the secret to harden the checkpoint)",
         )
     sig = _fields(content).get("sig")
     if not sig:
         return (
             False,
-            "jeton sans signature alors que LAB_APPROVAL_SECRET est défini "
-            "(forge probable par un agent)",
+            "token without a signature while LAB_APPROVAL_SECRET is set "
+            "(likely forgery by an agent)",
         )
     expected = hmac.new(
         sec, _payload(feature, cp_id).encode(), hashlib.sha256
@@ -99,13 +99,13 @@ def verify(feature: Path, cp_id: str, content: str) -> tuple[bool, str]:
     if not hmac.compare_digest(sig, expected):
         return (
             False,
-            "signature invalide (jeton forgé ou checkpoint/feature incohérent)",
+            "invalid signature (forged token or inconsistent checkpoint/feature)",
         )
-    return True, "signature valide"
+    return True, "valid signature"
 
 
 def _cli(argv: list[str]) -> int:
-    """Usage interne pour approve.sh : approvals.py sign <CP> <feature_dir> <author>."""
+    """Internal usage for approve.sh: approvals.py sign <CP> <feature_dir> <author>."""
     if len(argv) >= 4 and argv[0] == "sign":
         from datetime import datetime
 
@@ -119,8 +119,8 @@ def _cli(argv: list[str]) -> int:
         )
         if _secret() is None:
             print(
-                "⚠️  LAB_APPROVAL_SECRET non défini : jeton NON signé (un agent "
-                "pourrait le forger). Exporte le secret pour durcir.",
+                "⚠️  LAB_APPROVAL_SECRET not set: UNSIGNED token (an agent "
+                "could forge it). Export the secret to harden.",
                 file=sys.stderr,
             )
         return 0

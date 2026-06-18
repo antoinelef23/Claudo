@@ -1,22 +1,22 @@
-# Registre des modèles du lab — SOURCE DE VÉRITÉ, data-driven.
+# Lab model registry — SOURCE OF TRUTH, data-driven.
 #
-# Ajouter un modèle = une entrée [[model]]. L'orchestrateur et le harnais d'éval
-# le prennent en compte SANS modification de code (conçu pour l'évolution des modèles).
-# Après chaque nouveau modèle : `make eval-models LIVE=1` puis arbitrage — voir models/EVOLUTION.md.
+# Adding a model = one [[model]] entry. The orchestrator and the eval harness
+# take it into account WITHOUT code changes (designed for model evolution).
+# After each new model: `make eval-models LIVE=1` then arbitration — see models/EVOLUTION.md.
 #
-# Les métriques (coût, latence, taux de passage) ne sont PAS dans ce fichier :
-# elles sont MESURÉES par le harnais (équité), pas déclarées. Ici : identité,
-# éligibilité par rôle, profil de contexte.
+# The metrics (cost, latency, pass rate) are NOT in this file:
+# they are MEASURED by the harness (fairness), not declared. Here: identity,
+# eligibility by role, context profile.
 
 schema_version = 1
 
-# ------------------------------------------------------------------ candidats
+# ------------------------------------------------------------------ candidates
 [[model]]
-id = "claude-opus-4-8"          # passé tel quel à `claude --model` (alias "opus" accepté aussi)
+id = "claude-opus-4-8"          # passed as-is to `claude --model` (alias "opus" also accepted)
 label = "Opus 4.8"
 family = "claude"
-tier = "frontier"               # frontier | balanced | fast (descriptif)
-released = ""                   # à compléter
+tier = "frontier"               # frontier | balanced | fast (descriptive)
+released = ""                   # to fill in
 roles = ["planner", "implementer", "reviewer"]
 context_profile = "base"
 
@@ -35,12 +35,12 @@ label = "Haiku 4.5"
 family = "claude"
 tier = "fast"
 released = "2025-10-01"
-roles = ["eval-runner"]                  # implementer RETIRÉ : échoue COC-merge même en verbose (boucle 2026-06-15)
-context_profile = "base"                 # verbose testé, ne lève pas le score éliminatoire → reverté
+roles = ["eval-runner"]                  # implementer REMOVED: fails COC-merge even in verbose (loop 2026-06-15)
+context_profile = "base"                 # verbose tested, does not lift the eliminatory score → reverted
 
-# ------------------------------------------------------- affectation production
-# L'INCUMBENT : quel modèle pilote chaque rôle aujourd'hui. Le scorecard compare
-# les challengers à cette ligne de base. Modifié uniquement sur preuve chiffrée.
+# ------------------------------------------------------- production assignment
+# THE INCUMBENT: which model drives each role today. The scorecard compares
+# the challengers against this baseline. Changed only on quantified proof.
 [roles]
 planner = "claude-opus-4-8"
 implementer = "claude-sonnet-4-6"

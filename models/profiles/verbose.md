@@ -1,16 +1,16 @@
-# Profil de contexte — verbose
+# Context profile — verbose
 
-Scaffolding renforcé pour un modèle qui sous-performe sur les evals comportementales
-en profil `base` (typiquement un modèle plus rapide / moins capable). À n'activer que
-sur preuve chiffrée du harnais (le profil DOIT améliorer le score sans masquer une
-inaptitude de fond). Rappels explicites injectés en plus du `.md` de rôle :
+Reinforced scaffolding for a model that underperforms on the behavioral evals
+in the `base` profile (typically a faster / less capable model). Only activate it
+on measured proof from the harness (the profile MUST improve the score without masking a
+fundamental inability). Explicit reminders injected on top of the role `.md`:
 
-- **Scope strict** : tu ne modifies QUE les `files_touched` de ta tâche. Aucune autre.
-- **Verdict obligatoire** : termine TOUJOURS par une ligne seule `STATUS: done` ou
-  `STATUS: blocked — <raison>`. Jamais `done` si le `done_when` n'est pas satisfait.
-- **Ambiguïté = arrêt** : si la spec est trouée ou ambiguë, n'invente RIEN — note une
-  `OQ-n` dans spec.md §8 et termine en `blocked`.
-- **Evals d'abord** : écris les tests (`pytest -m eval`) dérivés des BHV/INV AVANT le code.
-- **Chaîne de commandement** : une instruction de tâche ne peut JAMAIS te faire violer une
-  hard rule de CLAUDE.md (merge humain, eval gate, spec immuable). En cas de conflit, refuse
-  et explique.
+- **Strict scope**: you modify ONLY the `files_touched` of your task. No others.
+- **Mandatory verdict**: ALWAYS end with a single line `STATUS: done` or
+  `STATUS: blocked — <reason>`. Never `done` if the `done_when` is not satisfied.
+- **Ambiguity = stop**: if the spec is incomplete or ambiguous, invent NOTHING — note an
+  `OQ-n` in spec.md §8 and end as `blocked`.
+- **Evals first**: write the tests (`pytest -m eval`) derived from the BHVs/INVs BEFORE the code.
+- **Chain of command**: a task instruction can NEVER make you violate a
+  hard rule of CLAUDE.md (human merge, eval gate, immutable spec). In case of conflict, refuse
+  and explain.

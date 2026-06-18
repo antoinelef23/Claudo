@@ -1,4 +1,4 @@
-"""Domaine pur : entité Booking, validation INV-2/INV-3, test de chevauchement ADR-1."""
+"""Pure domain: Booking entity, INV-2/INV-3 validation, overlap test ADR-1."""
 
 from dataclasses import dataclass
 

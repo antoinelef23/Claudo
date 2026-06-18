@@ -8,8 +8,8 @@ from booking.store import BookingStore
 
 @pytest.mark.eval
 def test_eval_3_a_adjacent_bookings_no_spurious_gap():
-    """BHV-4 — deux réservations adjacentes (A.end == B.start) ne produisent pas de trou
-    à leur jonction ; result trié par start."""
+    """BHV-4 — two adjacent bookings (A.end == B.start) do not produce a gap
+    at their junction; result sorted by start."""
     store = BookingStore()
     store.book("R1", 540, 600, "alice")  # 09:00–10:00
     store.book("R1", 600, 660, "bob")  # 10:00–11:00, adjacent
@@ -22,7 +22,7 @@ def test_eval_3_a_adjacent_bookings_no_spurious_gap():
 
 @pytest.mark.eval
 def test_eval_3_b_cancel_releases_slot_and_fuses():
-    """BHV-3 + BHV-2b + BHV-4 — cancel libère le créneau ; les trous adjacents fusionnent."""
+    """BHV-3 + BHV-2b + BHV-4 — cancel releases the slot; adjacent gaps merge."""
     store = BookingStore()
     r_alice = store.book("R2", 540, 600, "alice")  # 09:00–10:00
     store.book("R2", 660, 720, "bob")  # 11:00–12:00
@@ -31,7 +31,7 @@ def test_eval_3_b_cancel_releases_slot_and_fuses():
     before = availability(store, "R2", 480, 780)
     assert before == [(480, 540), (600, 660), (720, 780)]
 
-    # Cancel alice — créneau libéré (BHV-3, BHV-2b)
+    # Cancel alice — slot released (BHV-3, BHV-2b)
     result = store.cancel(r_alice["id"])
     assert result == {"status": "cancelled"}
 

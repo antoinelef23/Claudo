@@ -3,10 +3,10 @@ artifact: design
 feature: remise-paliers
 version: 1.0.0
 status: validated
-spec: ./spec.md          # version : 1.0.0
+spec: ./spec.md          # version: 1.0.0
 ---
 
-# Design — remise-paliers (tâche-or)
+# Design — remise-paliers (golden task)
 
-Fonction pure, stdlib. Attention aux bornes : `≤` en haut de palier, `>` pour passer au suivant.
-Clamp des entrées négatives à 0 avant tout calcul (INV-1).
+Pure function, stdlib. Watch the boundaries: `≤` at the top of a tier, `>` to move to the next.
+Clamp negative inputs to 0 before any computation (INV-1).

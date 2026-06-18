@@ -1,9 +1,9 @@
-"""Harnais de test de l'orchestrateur : sandbox git + shim `claude` déterministe.
+"""Orchestrator test harness: git sandbox + deterministic `claude` shim.
 
-Le shim remplace le vrai CLI claude via PATH. Il extrait l'ID de tâche du prompt
-et exécute le scénario `$LAB_ROOT/.shim/<ID>.sh` s'il existe (sa sortie = réponse
-de l'agent), sinon répond `STATUS: done` (ou `VERDICT: PASS` pour le reviewer).
-La réponse est enveloppée dans le JSON `--output-format json` du vrai CLI.
+The shim replaces the real claude CLI via PATH. It extracts the task ID from the
+prompt and runs the scenario `$LAB_ROOT/.shim/<ID>.sh` if it exists (its output =
+the agent's reply), otherwise it replies `STATUS: done` (or `VERDICT: PASS` for
+the reviewer). The reply is wrapped in the real CLI's `--output-format json` JSON.
 """
 
 from __future__ import annotations
@@ -20,18 +20,18 @@ ORCH = REPO / "scripts" / "orchestrate.py"
 sys.path.insert(0, str(REPO / "scripts"))
 import approvals  # noqa: E402
 
-# Secret de test : les tests exercent le chemin SÉCURISÉ (jetons signés) par défaut.
+# Test secret: the tests exercise the SECURE path (signed tokens) by default.
 TEST_SECRET = "test-approval-secret"
 
 SHIM = """#!/usr/bin/env bash
-# Shim claude pour les tests orchestrateur — déterministe, instantané.
+# claude shim for the orchestrator tests — deterministic, instant.
 [ -n "${LAB_ROOT:-}" ] && echo "$@" >> "$LAB_ROOT/.shim/argv.log"
 PROMPT="$2"
 ID=""
-if echo "$PROMPT" | grep -q "agent reviewer"; then
+if echo "$PROMPT" | grep -q "reviewer agent"; then
   ID="REVIEW"
 else
-  ID=$(echo "$PROMPT" | grep -oE "la tâche (T[0-9]+|CP-[0-9]+)" | head -1 | awk '{print $3}')
+  ID=$(echo "$PROMPT" | grep -oE "task (T[0-9]+|CP-[0-9]+)" | head -1 | awk '{print $2}')
 fi
 OUT="STATUS: done"
 [ "$ID" = "REVIEW" ] && OUT="VERDICT: PASS"
@@ -42,7 +42,7 @@ OUT="$OUT" python3 -c 'import json, os; print(json.dumps({"type": "result", "res
 """
 
 MAKEFILE = """evals:
-\t@if [ -f .evals_fail ]; then echo "EVALS ROUGES (stub)"; exit 1; fi
+\t@if [ -f .evals_fail ]; then echo "EVALS RED (stub)"; exit 1; fi
 \t@echo "[stub] evals ok"
 """
 
@@ -55,9 +55,9 @@ status: validated
 
 # Spec — feat (sandbox)
 
-- **INV-1** — Le système MUST exister.
-- **BHV-1** — Given/When/Then de test.
-- EVAL-1 : eval de test.
+- **INV-1** — The system MUST exist.
+- **BHV-1** — Given/When/Then test.
+- EVAL-1: test eval.
 """
 
 
@@ -91,7 +91,7 @@ def run_orch(
         "LAB_ROOT": str(sandbox),
         "LAB_NO_NOTIFY": "1",
         "LAB_TASK_TIMEOUT": "60",
-        "LAB_APPROVAL_SECRET": TEST_SECRET,  # chemin sécurisé par défaut (jetons signés)
+        "LAB_APPROVAL_SECRET": TEST_SECRET,  # secure path by default (signed tokens)
         "PATH": f"{sandbox / 'bin'}:{os.environ['PATH']}",
         **(env_extra or {}),
     }
@@ -106,8 +106,8 @@ def run_orch(
 
 
 def approve(sandbox: Path, cp: str, feature: str = "work/feat") -> None:
-    """Dépose un jeton d'approbation SIGNÉ avec TEST_SECRET (comme le ferait
-    scripts/approve.sh avec LAB_APPROVAL_SECRET défini)."""
+    """Drop a SIGNED approval token with TEST_SECRET (as scripts/approve.sh would
+    with LAB_APPROVAL_SECRET set)."""
     fdir = (sandbox / feature).resolve()
     d = fdir / ".approvals"
     d.mkdir(parents=True, exist_ok=True)

@@ -72,7 +72,7 @@ class TestOverlaps:
         assert overlaps(_b(660, 720), _b(480, 540)) is False
 
     def test_adjacent_end_equals_start_not_overlap(self):
-        # BHV-1a: fin de A == début de B → autorisé (intervalle demi-ouvert)
+        # BHV-1a: end of A == start of B → allowed (half-open interval)
         assert overlaps(_b(540, 600), _b(600, 660)) is False
 
     def test_adjacent_reverse(self):

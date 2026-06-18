@@ -1,23 +1,23 @@
 #!/usr/bin/env bash
-# Hook Stop + SubagentStop — LE merge gate automatique.
-# Quand un agent (principal ou sous-agent) veut terminer alors que du code Python a changé,
-# on exécute les evals. Rouges → exit 2 : l'agent est renvoyé corriger (avec la sortie en contexte).
-# Boucle infinie évitée via stop_hook_active.
+# Stop + SubagentStop hook — THE automatic merge gate.
+# When an agent (main or sub-agent) wants to finish while Python code has changed,
+# we run the evals. Red → exit 2: the agent is sent back to fix (with the output in context).
+# Infinite loop avoided via stop_hook_active.
 set -uo pipefail
 
 INPUT=$(cat)
 
-# Si on est déjà dans une relance déclenchée par ce hook, ne pas reboucler.
+# If we are already in a re-run triggered by this hook, do not loop again.
 ACTIVE=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('stop_hook_active',False))" 2>/dev/null || echo False)
 [ "$ACTIVE" = "True" ] && exit 0
 
-# Rien à gater tant que le projet Python n'existe pas.
+# Nothing to gate as long as the Python project does not exist.
 [ -f pyproject.toml ] || exit 0
 
-# Ne gater que si du code a changé depuis le dernier commit (évite de payer les evals à chaque tour de parole).
-# --untracked-files=all : un NOUVEAU dossier de package non suivi s'affiche sinon en une
-# seule ligne « ?? newpkg/ » que le grep raterait — le gate sauterait alors une feature
-# livrée comme module neuf (finding H7).
+# Only gate if code changed since the last commit (avoids paying for the evals on every turn).
+# --untracked-files=all: a NEW untracked package directory otherwise shows as a
+# single line "?? newpkg/" that the grep would miss — the gate would then skip a feature
+# delivered as a new module (finding H7).
 if git rev-parse --git-dir >/dev/null 2>&1; then
   git status --porcelain --untracked-files=all | grep -qE '\.(py|toml)$' || exit 0
 fi
@@ -25,20 +25,20 @@ fi
 OUT=$(make -s evals 2>&1)
 STATUS=$?
 if [ $STATUS -ne 0 ]; then
-  echo "⛔ EVAL GATE ROUGE — corrige avant de terminer (spec.md §7 : pas d'eval verte, pas de merge)." >&2
+  echo "⛔ EVAL GATE RED — fix before finishing (spec.md §7: no green eval, no merge)." >&2
   echo "$OUT" | tail -40 >&2
   exit 2
 fi
 
-# `make evals` masque pytest rc=5 (rien collecté) en 0 : « vert » peut vouloir dire
-# « rien n'a tourné » (findings H8/M5). On le signale — NON bloquant ici : la règle dure
-# « pas d'eval = pas de done » appartient à l'orchestrateur (scopé par tâche aux IDs
-# réellement implémentés) ; bloquer dans ce hook générique casserait une tâche de
-# scaffolding légitime sans eval encore écrite.
+# `make evals` masks pytest rc=5 (nothing collected) as 0: "green" can mean
+# "nothing ran" (findings H8/M5). We flag it — NON blocking here: the hard rule
+# "no eval = no done" belongs to the orchestrator (scoped per task to the IDs
+# actually implemented); blocking in this generic hook would break a legitimate
+# scaffolding task with no eval written yet.
 if command -v uv >/dev/null 2>&1; then
   COLLECTED=$(uv run pytest -m eval --collect-only -q 2>/dev/null | grep -c '::' || true)
   if [ "${COLLECTED:-0}" -eq 0 ]; then
-    echo "⚠️  eval-gate : du code a changé mais AUCUNE eval n'est collectée — \`make evals\` est vert par ABSENCE, pas par succès (spec.md §7)." >&2
+    echo "⚠️  eval-gate: code changed but NO eval is collected — \`make evals\` is green by ABSENCE, not by success (spec.md §7)." >&2
   fi
 fi
 exit 0

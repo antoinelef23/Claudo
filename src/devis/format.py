@@ -1,4 +1,4 @@
-"""Présentation pure du devis (BHV-3) — aucune dépendance au module calc."""
+"""Pure quote presentation (BHV-3) — no dependency on the calc module."""
 
 
 def format_quote(quote: dict) -> str:
@@ -9,9 +9,9 @@ def format_quote(quote: dict) -> str:
     """
     return "\n".join(
         [
-            "Devis de pose — estimation non contractuelle",
-            f"Produits : {quote['products_eur']:.2f} EUR",
-            f"Pose : {quote['installation_eur']:.2f} EUR",
-            f"Total : {quote['total_eur']:.2f} EUR",
+            "Quote — non-binding estimate",
+            f"Products: {quote['products_eur']:.2f} EUR",
+            f"Installation: {quote['installation_eur']:.2f} EUR",
+            f"Total: {quote['total_eur']:.2f} EUR",
         ]
     )

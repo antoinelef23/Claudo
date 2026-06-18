@@ -1,33 +1,33 @@
-Revue terminée. Voici le rapport CP-1.
+Review complete. Here is the CP-1 report.
 
 ---
 
-# Rapport de revue — CP-1 « modules domaine validés » (T2, T3)
+# Review report — CP-1 "validated domain modules" (T2, T3)
 
-**Feature :** `work/devis-pose` · **Spec :** 1.0.0 · **Design :** 1.0.0 · **Evals :** 1062 passed (eval), 1 passed (non-eval), 0 failed
+**Feature:** `work/devis-pose` · **Spec:** 1.0.0 · **Design:** 1.0.0 · **Evals:** 1062 passed (eval), 1 passed (non-eval), 0 failed
 
-## ✅ Conforme
+## ✅ Conformant
 
-- **Traçabilité commits ↔ spec** : `8dea049` référence [INV-1..3, BHV-1, BHV-1a, BHV-2, BHV-2a, EVAL-1, EVAL-2], `94d4e4c` [BHV-3, EVAL-3], `fd23610` [EVAL-1, EVAL-2] — tous les IDs existent dans spec.md, et chaque ID des sections `implements` de T2/T3 se retrouve dans le diff. Les commits `[auto]` (`591ea3f`, `5f9c05a`) ne touchent que la comptabilité orchestrateur (`state.json`, run log), pas de code.
-- **ADR-1 respectée** : fonctions pures sans I/O, signature `compute_quote(float, float) -> dict` exacte, arrondis `round(x, 2)` aux frontières (`src/devis/calc.py:22-27`), contrat de clés strictement identique au design §5 (`src/devis/calc.py:24-29`, `src/devis/format.py:13-15`). `format.py` ne dépend pas de `calc` comme exigé par le prompt T3.
-- **Comportements** : BHV-1 pose à 45 €/m² (`src/devis/calc.py:3,23`) ; BHV-2a seuil strictement supérieur via `>` (`src/devis/calc.py:18`) ; INV-3 remise sur les seuls produits (`src/devis/calc.py:18-20`) ; INV-2 `is_estimate` toujours `True` (`src/devis/calc.py:28`).
-- **Evals conformes à la convention** : marqueur `@pytest.mark.eval` présent, noms contenant l'ID en minuscules (`test_eval_1_exemples_exacts`, `test_eval_2_proprietes`, `test_eval_3_format_ex2`), EX-1/2/3 vérifiés à l'euro près (`tests/devis_calc/test_evals.py:45`), EVAL-3 vérifie « estimation », « 3275.00 » et lignes distinctes (`tests/devis_format/test_evals.py:21-32`).
-- **Scope** : les diffs de code ne touchent que les `files_touched` déclarés de T2/T3. Le commit correctif `fd23610` (ajout `tests/devis_calc/__init__.py`) reste dans le périmètre T2 et sa justification figure dans le message (collision de modules pytest).
-- **Hygiène** : pas de secret, pas de TODO orphelin, docstrings traçant les IDs de spec.
+- **Commit ↔ spec traceability**: `8dea049` references [INV-1..3, BHV-1, BHV-1a, BHV-2, BHV-2a, EVAL-1, EVAL-2], `94d4e4c` [BHV-3, EVAL-3], `fd23610` [EVAL-1, EVAL-2] — all IDs exist in spec.md, and every ID of the `implements` sections of T2/T3 is found in the diff. The `[auto]` commits (`591ea3f`, `5f9c05a`) only touch orchestrator bookkeeping (`state.json`, run log), no code.
+- **ADR-1 respected**: pure functions without I/O, exact signature `compute_quote(float, float) -> dict`, `round(x, 2)` rounding at the boundaries (`src/devis/calc.py:22-27`), key contract strictly identical to design §5 (`src/devis/calc.py:24-29`, `src/devis/format.py:13-15`). `format.py` does not depend on `calc` as required by the T3 prompt.
+- **Behaviors**: BHV-1 installation at €45/m² (`src/devis/calc.py:3,23`); BHV-2a strictly-greater threshold via `>` (`src/devis/calc.py:18`); INV-3 discount on products only (`src/devis/calc.py:18-20`); INV-2 `is_estimate` always `True` (`src/devis/calc.py:28`).
+- **Evals conformant to the convention**: `@pytest.mark.eval` marker present, names containing the lowercase ID (`test_eval_1_exemples_exacts`, `test_eval_2_proprietes`, `test_eval_3_format_ex2`), EX-1/2/3 verified to the euro (`tests/devis_calc/test_evals.py:45`), EVAL-3 verifies "estimation", "3275.00" and distinct lines (`tests/devis_format/test_evals.py:21-32`).
+- **Scope**: the code diffs only touch the declared `files_touched` of T2/T3. The fix commit `fd23610` (adding `tests/devis_calc/__init__.py`) stays within the T2 scope and its justification appears in the message (pytest module collision).
+- **Hygiene**: no secret, no orphan TODO, docstrings tracing the spec IDs.
 
-## ⚠️ Écarts à arbitrer
+## ⚠️ Gaps to arbitrate
 
-1. **« ruff propre » invérifiable** : ruff n'est pas dans les dépendances dev (`pyproject.toml:9` — `dev = ["pytest"]`) et `make lint` échoue (`Failed to spawn: ruff`). La convention CLAUDE.md (ruff pour lint/format) n'est pas outillée — trou hérité de T1, mais il rend ce point de checklist non vérifiable mécaniquement.
-2. **E741 latent** : `tests/devis_format/test_evals.py:28-29` utilise la variable `l` (ambiguous-variable-name, règle ruff active par défaut) — `make lint` échouera dès que ruff sera installé.
-3. **EVAL-2 : type « property-based » non honoré au sens strict** : la spec §7 annonce du property-based sur entrées générées ; l'implémentation est une grille déterministe paramétrée (`tests/devis_calc/test_evals.py:48-55`, 1058 cas, bornes spec respectées). C'est conforme au prompt T2 approuvé (« grille d'entrées générées ») et cohérent avec la stack stdlib (pas de hypothesis), mais l'écart de vocabulaire spec ↔ tasks mérite soit un arbitrage, soit un amendement de spec.
-4. **Branche non testée** : le clamp des entrées négatives à 0 (`src/devis/calc.py:15-16`) implémente une interprétation d'INV-1 (« quelles que soient les entrées ») non explicitée par la spec, et la grille d'EVAL-2 (montants/surfaces ≥ 0, conformes aux bornes de la spec) ne l'exerce jamais. Comportement raisonnable mais ni spécifié ni couvert.
+1. **"ruff clean" unverifiable**: ruff is not in the dev dependencies (`pyproject.toml:9` — `dev = ["pytest"]`) and `make lint` fails (`Failed to spawn: ruff`). The CLAUDE.md convention (ruff for lint/format) is not tooled — a gap inherited from T1, but it makes this checklist point not mechanically verifiable.
+2. **Latent E741**: `tests/devis_format/test_evals.py:28-29` uses the variable `l` (ambiguous-variable-name, ruff rule active by default) — `make lint` will fail as soon as ruff is installed.
+3. **EVAL-2: "property-based" type not honored in the strict sense**: spec §7 announces property-based on generated inputs; the implementation is a deterministic parameterized grid (`tests/devis_calc/test_evals.py:48-55`, 1058 cases, spec bounds respected). This is conformant to the approved T2 prompt ("grid of generated inputs") and consistent with the stdlib stack (no hypothesis), but the spec ↔ tasks wording gap warrants either an arbitration or a spec amendment.
+4. **Untested branch**: clamping negative inputs to 0 (`src/devis/calc.py:15-16`) implements an interpretation of INV-1 ("whatever the inputs") not made explicit by the spec, and the EVAL-2 grid (amounts/surfaces ≥ 0, conformant to the spec bounds) never exercises it. Reasonable behavior but neither specified nor covered.
 
-## ❌ Bloquants
+## ❌ Blockers
 
-Aucun.
+None.
 
 ---
 
-Les evals EVAL-1..3 sont vertes et la traçabilité est complète, mais le checkpoint étant `mode: auto`, les quatre écarts ci-dessus (dont un point de checklist invérifiable) imposent une bascule en arbitrage Owner plutôt qu'une auto-validation.
+Evals EVAL-1..3 are green and traceability is complete, but since the checkpoint is `mode: auto`, the four gaps above (one of them an unverifiable checklist point) require a switch to Owner arbitration rather than auto-validation.
 
 VERDICT: WARN

@@ -1,34 +1,34 @@
-Toutes les vérifications exécutables sont passées. Voici le rapport de revue.
+All executable checks passed. Here is the review report.
 
 ---
 
-# Rapport de revue — export-devis · CP-1 (revue finale, tâches T1 & T3)
+# Review report — export-devis · CP-1 (final review, tasks T1 & T3)
 
-**Périmètre revu :** diff complet `main..test/simulation-devis-pose` pour la feature export-devis (commits `6518e36` → `5127412`), incluant le livrable T2 dont T3 dépend.
+**Scope reviewed:** full diff `main..test/simulation-devis-pose` for the export-devis feature (commits `6518e36` → `5127412`), including the T2 deliverable that T3 depends on.
 
-## ✅ Points conformes
+## ✅ Conformant points
 
-- **Traçabilité commits → spec** : `020b0b7` référence `[BHV-1, INV-1, EVAL-1]`, les commits doc référencent `[doc]`, l'amendement de spec est un commit séparé `e1d3099` conformément à la règle « spec immuable en cours de tâche ». Le confinement a fonctionné comme prévu : T2 s'est bloqué sur OQ-1 (run log `work/export-devis/tasks.md:65`), la spec a été amendée en v1.0.0, puis T2 a repris — c'est exactement le comportement attendu par la simulation.
-- **Couverture spec ↔ code** : BHV-1 (`src/devis/export.py:12` — exactement `format_quote` encodé UTF-8), INV-1 porté par `format_quote` et vérifié (`tests/devis_export/test_evals.py:25`), BHV-1a testé (`tests/devis_export/test_export.py:19`), EX-1 fidèlement repris comme fixture.
-- **Eval gate** : EVAL-1 verte — `uv run pytest -q tests/devis_export` : 3 passed ; `pytest -m eval` : 1 passed. Seuil 100 % atteint.
-- **Conformité design** : fonction pure sans effet de bord (ADR-1 du socle devis-pose), module à l'emplacement prévu `src/devis/export.py`, réutilisation de `format_quote` sans duplication.
-- **Verify des tâches** : T1 `grep -q "OQ-1" docs/export-notes.md` OK ; T3 `test -f docs/export-usage.md` OK. La doc d'usage (`docs/export-usage.md:33-37`) reproduit exactement la sortie réelle de `format_quote` — vérifié contre `src/devis/format.py:12-15`.
-- **Scope** : rien dans le diff hors spec ; NG-1 (e-mail) explicitement exclu dans la doc. Aucun scope creep.
-- **Qualité** : ruff check et format propres (4 fichiers), aucun TODO orphelin, aucun secret, aucune ligne écrite à la main non justifiée.
+- **Commit → spec traceability**: `020b0b7` references `[BHV-1, INV-1, EVAL-1]`, the doc commits reference `[doc]`, the spec amendment is a separate commit `e1d3099` in line with the rule "spec immutable during a task". Containment worked as intended: T2 blocked on OQ-1 (run log `work/export-devis/tasks.md:65`), the spec was amended to v1.0.0, then T2 resumed — this is exactly the behavior expected by the simulation.
+- **Spec ↔ code coverage**: BHV-1 (`src/devis/export.py:12` — exactly `format_quote` UTF-8 encoded), INV-1 carried by `format_quote` and verified (`tests/devis_export/test_evals.py:25`), BHV-1a tested (`tests/devis_export/test_export.py:19`), EX-1 faithfully reused as a fixture.
+- **Eval gate**: EVAL-1 green — `uv run pytest -q tests/devis_export`: 3 passed; `pytest -m eval`: 1 passed. 100% threshold reached.
+- **Design conformance**: pure function without side effects (ADR-1 of the devis-pose foundation), module at the planned location `src/devis/export.py`, reuse of `format_quote` without duplication.
+- **Task verify**: T1 `grep -q "OQ-1" docs/export-notes.md` OK; T3 `test -f docs/export-usage.md` OK. The usage doc (`docs/export-usage.md:33-37`) reproduces exactly the real output of `format_quote` — verified against `src/devis/format.py:12-15`.
+- **Scope**: nothing in the diff outside the spec; NG-1 (e-mail) explicitly excluded in the doc. No scope creep.
+- **Quality**: ruff check and format clean (4 files), no orphan TODO, no secret, no hand-written line left unjustified.
 
-## ⚠️ Écarts à arbitrer
+## ⚠️ Gaps to arbitrate
 
-1. **Pointeurs de version périmés** — `work/export-devis/design.md:8` et `work/export-devis/tasks.md:8` référencent encore `spec v0.9.0` alors que la spec est en v1.0.0 depuis l'amendement OQ-1. Le design (v0.9.0) dit aussi « une fois OQ-1 tranchée » (`design.md:14`) sans avoir été révisé après la résolution. Traçabilité inter-artefacts à remettre à jour.
-2. **`docs/export-notes.md` obsolète** — la note T1 affirme « OQ-1 reste ouverte » (`docs/export-notes.md:2`), ce qui contredit la spec v1.0.0. C'était vrai au moment de T1 (parallélisme voulu), mais le doc livré sur main sera faux. À archiver ou annoter avec la résolution.
-3. **État de run non commité** — `work/export-devis/.runs/state.json` modifié en working tree (T3 `pending` → `done`) alors que CP-1 est en cours. Hygiène d'orchestration : à commiter avec la validation du checkpoint.
-4. **Run log incomplet** — colonne `Commit` vide pour toutes les entrées du run log (`tasks.md:63-68`), alors que les commits existent. Mineur, mais c'est la mémoire du repo.
+1. **Stale version pointers** — `work/export-devis/design.md:8` and `work/export-devis/tasks.md:8` still reference `spec v0.9.0` whereas the spec has been at v1.0.0 since the OQ-1 amendment. The design (v0.9.0) also says "once OQ-1 is decided" (`design.md:14`) without having been revised after the resolution. Inter-artifact traceability to be updated.
+2. **`docs/export-notes.md` outdated** — the T1 note states "OQ-1 remains open" (`docs/export-notes.md:2`), which contradicts spec v1.0.0. It was true at the time of T1 (intended parallelism), but the doc delivered to main will be wrong. To be archived or annotated with the resolution.
+3. **Uncommitted run state** — `work/export-devis/.runs/state.json` modified in the working tree (T3 `pending` → `done`) while CP-1 is in progress. Orchestration hygiene: to be committed along with the checkpoint validation.
+4. **Incomplete run log** — `Commit` column empty for all run log entries (`tasks.md:63-68`), whereas the commits exist. Minor, but it's the repo's memory.
 
-## ❌ Bloquants
+## ❌ Blockers
 
-Aucun.
+None.
 
 ---
 
-Les quatre écarts sont documentaires/hygiène, sans impact sur le code livré ni sur l'eval gate (verte). L'Owner décide : ils peuvent être corrigés dans un commit de clôture du checkpoint.
+The four gaps are documentary/hygiene, with no impact on the delivered code or on the eval gate (green). The Owner decides: they can be fixed in a checkpoint-closing commit.
 
 VERDICT: WARN

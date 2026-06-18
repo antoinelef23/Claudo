@@ -18,9 +18,9 @@ build/
 *.egg-info/
 .coverage
 
-# Artefacts de run de l'orchestrateur — jamais versionnés (anti-rejeu de jetons
-# d'approbation + divergence state.json, findings H1/H4). Les rapports de revue
-# (.runs/*-review.md) restent suivis pour l'audit.
+# Orchestrator run artifacts — never versioned (anti-replay of approval
+# tokens + state.json divergence, findings H1/H4). The review reports
+# (.runs/*-review.md) stay tracked for the audit.
 **/.approvals/
 **/.runs/state.json
 **/.runs/journal.jsonl

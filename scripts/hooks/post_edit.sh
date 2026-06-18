@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Hook PostToolUse (Edit|Write) — lint rapide non bloquant sur les fichiers Python modifiés.
-# Reçoit le JSON de l'événement sur stdin. Sort toujours en 0 (informatif, jamais bloquant).
+# PostToolUse (Edit|Write) hook — quick non-blocking lint on the modified Python files.
+# Receives the event JSON on stdin. Always exits 0 (informative, never blocking).
 set -uo pipefail
 
 INPUT=$(cat)

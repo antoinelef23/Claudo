@@ -1,4 +1,4 @@
-"""Entrée CLI du devis de pose — enchaîne compute_quote puis format_quote (design.md §1)."""
+"""Installation-quote CLI entry point — chains compute_quote then format_quote (design.md §1)."""
 
 import argparse
 
@@ -9,7 +9,7 @@ from devis.format import format_quote
 def main(argv: list[str] | None = None) -> None:
     parser = argparse.ArgumentParser(
         prog="devis",
-        description="Devis de pose salle de bain — estimation non contractuelle.",
+        description="Bathroom installation quote — non-binding estimate.",
     )
     parser.add_argument(
         "--products-eur",
