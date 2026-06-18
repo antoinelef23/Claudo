@@ -12,7 +12,7 @@ spec: ./spec.md          # version : 1.0.0
 
 > **Le COMMENT.** Cœur métier pur en mémoire, sans I/O. On s'adosse au pattern « domaine pur +
 > store en mémoire » (cosmicpython, *Architecture Patterns with Python*, chap. 1-2) : entités et
-> règles testables sans infrastructure. *(Pour une vraie feature LMFR : design-scout sur les repos réels.)*
+> règles testables sans infrastructure. *(Pour une vraie feature : design-scout sur les repos réels.)*
 
 ## 1. Architecture overview
 
@@ -67,7 +67,7 @@ Quatre modules sous `src/booking/` :
 - `BookingStore.cancel(booking_id) -> dict` : `{"status":"cancelled"}` ou `{"rejected":"not_found"}`.
 - `availability(store, room_id, ws, we) -> list[tuple[int,int]]` : trous triés, fusionnés.
 
-## 6. Mozaïc & Adeo Global Ready
+## 6. Design System & Global Ready
 
 N/A en test E2E (pas de front).
 

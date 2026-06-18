@@ -24,7 +24,7 @@ flowchart TD
     T4 --> CP1{{CP-1 Vertical slice}}
     T5 --> CP1
     CP1 --> T6[T6 Intégration catalogue réel]
-    CP1 --> T7[T7 Front Mozaïc]
+    CP1 --> T7[T7 Front Design System]
     T6 --> CP2{{CP-2 Données réelles}}
     T7 --> CP2
     CP2 --> T8[T8 Panier + services]
@@ -80,13 +80,13 @@ flowchart TD
 ### T6 — Intégration catalogue/panier réels
 - **agent :** implementer · **depends_on :** [CP-1] · **parallel_group :** D
 - **implements :** [INV-1, INV-3] · **files_touched :** `src/app/clients/`, config env
-- **done_when :** EVAL-1 et EVAL-5 vertes sur API réelles (env de test LMFR)
+- **done_when :** EVAL-1 et EVAL-5 vertes sur API réelles (env de test the client)
 
-### T7 — Front Mozaïc
+### T7 — Front Design System
 - **agent :** implementer · **depends_on :** [CP-1] · **parallel_group :** D *(∥ T6)*
-- **implements :** [BHV-1, BHV-2, BHV-3 — UI] · **anchored_on :** repo Mozaïc §2.1
+- **implements :** [BHV-1, BHV-2, BHV-3 — UI] · **anchored_on :** repo Design System §2.1
 - **files_touched :** `front/`
-- **done_when :** parcours complet cliquable, a11y AA, composants Mozaïc standards
+- **done_when :** parcours complet cliquable, a11y AA, composants Design System standards
 
 ### CP-2 — CHECKPOINT : données réelles
 - **trigger :** auto quand [T6, T7] done · **validator :** Owner + métier
@@ -106,7 +106,7 @@ flowchart TD
 ### CP-3 — CHECKPOINT : merge & rollout
 - **trigger :** auto quand T9 done · **validator :** Owner (revu par Owner_N-1)
 - **mode :** blocking *(merge : le plan-lint refuse `auto` ici)*
-- **reviews :** evals complètes, audit trail, checklist Adeo Global Ready, plan rollout 5 %
+- **reviews :** evals complètes, audit trail, checklist Global Ready, plan rollout 5 %
 - **on_accept :** merge (humain) + flag interne — **jamais automatique**
 
 ## Trigger table

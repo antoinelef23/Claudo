@@ -57,7 +57,7 @@ Trois modules sous `src/devis/` : `calc.py` (domaine pur), `format.py` (présent
 Contrat de `compute_quote` = clés exactes des Examples : `products_eur`, `installation_eur`,
 `total_eur`, `is_estimate`. C'est le contrat d'entrée de `format_quote`.
 
-## 6. Mozaïc & Adeo Global Ready
+## 6. Design System & Global Ready
 
 N/A en simulation (pas de front).
 
