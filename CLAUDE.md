@@ -14,6 +14,8 @@ Each unit of work lives in `work/<feature>/` (or, for a multi-domain product, th
 
 Mandatory reading order before coding: spec.md → design.md → tasks.md.
 
+Raw client inputs (slides, transcripts, quotes…) that *feed* the triplet go in an optional `work/<feature>/assets/` bucket — gitignored by default (sensitive data; only the derived triplet is committed) and excluded from the brand guard. See [ingest-client-assets](docs/how-to/ingest-client-assets.md).
+
 ## Hard rules
 
 - **Eval gate**: no green eval, no merge. Evals are defined in spec.md (Evals section) and run via `just evals`.

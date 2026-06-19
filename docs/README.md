@@ -22,6 +22,7 @@ serving a different reader need. Pick by what you're trying to do:
 
 - [Run the orchestrator on a feature](how-to/run-the-orchestrator.md)
 - [Organize features by domain](how-to/organize-features-by-domain.md)
+- [Ingest raw client inputs into the artifacts](how-to/ingest-client-assets.md)
 - [Commit a change with its rationale](how-to/commit-with-rationale.md)
 - [Run agents in the sandbox](how-to/use-the-sandbox.md)
 - [Automate runs](how-to/automate-runs.md)

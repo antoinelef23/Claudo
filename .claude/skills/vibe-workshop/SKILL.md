@@ -7,6 +7,8 @@ description: Facilitates the Spec Workshop (105 min, 6-8 people) that produces s
 
 You mediate the workshop over screen share. The business talks, you structure live in the lab/templates/spec.md format. Output goal: spec.md v1.0 committed.
 
+Raw inputs the business brings (slides, transcripts, existing quotes) go in `work/<feature>/assets/` (gitignored — see [ingest-client-assets](../../../docs/how-to/ingest-client-assets.md)); read them to seed the sections below. The committed spec must stand on its own — a decision found only in an asset belongs in the spec.
+
 ## Agenda (105 min)
 1. **Business intent pitch (15 min)** → §1 Intent + target KPI. Rephrase until explicit agreement.
 2. **Digital Event Storming (30 min)** → business events, actors, commands. Feeds §2 Glossary (require a canonical name per term) and the raw list of BHVs.
