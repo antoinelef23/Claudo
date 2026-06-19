@@ -15,8 +15,16 @@ if ! git rev-parse --verify --quiet "$BASE" >/dev/null 2>&1; then
   exit 0
 fi
 
+# Feature dir = the nearest ancestor of a changed file that holds a spec.md. This is
+# depth-agnostic: it handles both work/<feature>/ and work/<domain>/<feature>/.
 features=$(git diff --name-only "$BASE"...HEAD -- work/ examples/ 2>/dev/null \
-  | sed -E 's@^(work|examples)/([^/]+)/.*@\1/\2@' | sort -u)
+  | while IFS= read -r f; do
+      d=$(dirname "$f")
+      while [ "$d" != "." ] && [ "$d" != "work" ] && [ "$d" != "examples" ]; do
+        [ -f "$d/spec.md" ] && { echo "$d"; break; }
+        d=$(dirname "$d")
+      done
+    done | sort -u)
 
 if [ -z "$features" ]; then
   echo "✅ no feature changed vs $BASE — nothing to check."

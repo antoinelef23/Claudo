@@ -6,7 +6,7 @@ An AI-native development lab. Applications are (re)built from scratch with an ag
 
 ## The 3 artifacts — source of truth
 
-Each unit of work lives in `work/<feature>/` with three files:
+Each unit of work lives in `work/<feature>/` (or, for a multi-domain product, the optional `work/<domain>/<feature>/` — see [organize-features-by-domain](docs/how-to/organize-features-by-domain.md); the triplet stays the unit, split by domain only when it earns it) with three files:
 
 1. **`spec.md`** — the WHAT. Business contract: invariants, behaviors, examples, evals. It is the primary prompt for any agent that codes. **Never implement anything absent from the spec.** If the spec is ambiguous: ask, don't guess.
 2. **`design.md`** — the HOW. Stack, ADRs, reference repos, design-system integration, compliance constraints. **Every technical choice must point to a pattern from a reference repo** (internal or open source).

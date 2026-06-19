@@ -17,9 +17,16 @@ rc=0
 # every commit, not only feature changes). Scope excludes work/ + **/assets/.
 python3 lab/engine/brand_guard.py --staged || rc=1
 
-# Feature dirs (work/* and examples/*) with staged changes.
+# Feature dirs with staged changes. Feature dir = nearest ancestor holding a spec.md,
+# so both work/<feature>/ and work/<domain>/<feature>/ are handled (depth-agnostic).
 features=$(git diff --cached --name-only -- work/ examples/ 2>/dev/null \
-  | sed -E 's@^(work|examples)/([^/]+)/.*@\1/\2@' | sort -u)
+  | while IFS= read -r f; do
+      d=$(dirname "$f")
+      while [ "$d" != "." ] && [ "$d" != "work" ] && [ "$d" != "examples" ]; do
+        [ -f "$d/spec.md" ] && { echo "$d"; break; }
+        d=$(dirname "$d")
+      done
+    done | sort -u)
 
 for feat in $features; do
   [ -d "$feat" ] || continue  # feature fully deleted in this commit

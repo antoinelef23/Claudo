@@ -21,6 +21,7 @@ serving a different reader need. Pick by what you're trying to do:
 *Task-oriented — you know what you want.*
 
 - [Run the orchestrator on a feature](how-to/run-the-orchestrator.md)
+- [Organize features by domain](how-to/organize-features-by-domain.md)
 - [Commit a change with its rationale](how-to/commit-with-rationale.md)
 - [Run agents in the sandbox](how-to/use-the-sandbox.md)
 - [Automate runs](how-to/automate-runs.md)

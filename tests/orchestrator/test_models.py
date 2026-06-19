@@ -71,6 +71,25 @@ def test_orchestrator_passes_role_default_model(sandbox: Path) -> None:
     assert "--model test-model-x" in argv_log(sandbox)
 
 
+def test_orchestrator_runs_a_domain_nested_feature(sandbox: Path) -> None:
+    # issue #25: a feature may live under an optional domain layer
+    # work/<domain>/<feature>/. The orchestrator takes the dir as-is, so it must run
+    # end-to-end and write its state.json under the nested path.
+    write_registry(sandbox, REGISTRY_TOML)
+    feat = sandbox / "work" / "agent" / "booking"
+    feat.mkdir(parents=True)
+    (feat / "spec.md").write_text(
+        "---\ntype: spec\nfeature: booking\nversion: 1.0.0\nstatus: validated\n---\n"
+        "# Spec — booking\n- **INV-1** — MUST exist.\n- **BHV-1** — GWT.\n- EVAL-1: t.\n"
+    )
+    (feat / "tasks.md").write_text(
+        "---\nstatus: approved\n---\n" + ONE_TASK.split("---\n", 2)[2]
+    )
+    r = run_orch(sandbox, feature="work/agent/booking")
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert (feat / ".runs" / "state.json").exists()
+
+
 def test_task_level_model_override_wins(sandbox: Path) -> None:
     write_registry(sandbox, REGISTRY_TOML)
     body = ONE_TASK.replace(
