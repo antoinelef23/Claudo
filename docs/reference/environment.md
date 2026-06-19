@@ -19,6 +19,7 @@ sandbox confinement.
 | `LAB_NO_NOTIFY` | unset | Any truthy value silences all external notifications (chat + macOS banner). Used by tests/CI. | `notify.py` |
 | `LAB_EVALS_COLLECTED_FILE` | unset | Test seam: path whose contents replace `pytest --collect-only` output for the anti-empty-gate / eval-ID coverage check. Read as-is. | `orchestrate.py` |
 | `LAB_MODEL_SHIM` | unset | `=1` allows `eval_models.py` to run without `--live` using a deterministic `claude` shim on `PATH` (tests). Without it and without `--live`, the campaign refuses to run. | `eval_models.py` |
+| `LAB_BRAND_DENYLIST` | `lab/engine/brand_denylist.txt` | Override the brand/proper-noun denylist path (tests). | `brand_guard.py` |
 | `LAB_SANDBOX_IMAGE` | `lab-agent:latest` | Container image used by the sandbox runner. | `sandbox_runner.py` |
 | `LAB_SANDBOX_NETWORK` **(sec)** | `lab-egress` | Docker network for the sandbox. Defaults to a named egress-restricted network the operator creates (model API + package registry only). `none` would break the model call. | `sandbox_runner.py` |
 | `LAB_SANDBOX_MEMORY` | `2g` | Memory limit for the sandbox container. | `sandbox_runner.py` |

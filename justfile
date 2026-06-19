@@ -60,10 +60,15 @@ evals:
       exit "$rc"
     else echo "[evals] no evals yet — skip"; fi
 
+# Brand guard: the lab stays generic — no client/brand proper nouns in committed
+# framework content. Scope excludes work/ and **/assets/ (usage a posteriori).
+check-brand:
+    python3 lab/engine/brand_guard.py --all
+
 # Local merge gate (mutating lint).
-gate: lint test evals
+gate: lint test evals check-brand
     @echo "✅ gate OK"
 
 # CI merge gate (non-mutating lint — drift fails CI instead of being auto-fixed).
-gate-ci: lint-check test evals
+gate-ci: lint-check test evals check-brand
     @echo "✅ gate-ci OK"
