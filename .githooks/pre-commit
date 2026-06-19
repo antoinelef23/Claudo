@@ -11,13 +11,16 @@ set -uo pipefail
 root="$(git rev-parse --show-toplevel)" || exit 1
 cd "$root" || exit 1
 
+rc=0
+
+# Brand guard: no client/brand proper nouns in staged framework content (runs on
+# every commit, not only feature changes). Scope excludes work/ + **/assets/.
+python3 lab/engine/brand_guard.py --staged || rc=1
+
 # Feature dirs (work/* and examples/*) with staged changes.
 features=$(git diff --cached --name-only -- work/ examples/ 2>/dev/null \
   | sed -E 's@^(work|examples)/([^/]+)/.*@\1/\2@' | sort -u)
 
-[ -z "$features" ] && exit 0
-
-rc=0
 for feat in $features; do
   [ -d "$feat" ] || continue  # feature fully deleted in this commit
   if [ -f "$feat/spec.md" ]; then
@@ -33,7 +36,8 @@ for feat in $features; do
 done
 
 if [ $rc -ne 0 ]; then
-  echo "⛔ pre-commit: content_guard / plan-lint failed (see above)." >&2
-  echo "   Bump 'version:' for a substance change, fix the plan errors, or override with 'git commit --no-verify'." >&2
+  echo "⛔ pre-commit: brand_guard / content_guard / plan-lint failed (see above)." >&2
+  echo "   Remove the brand reference, bump 'version:' for a substance change, fix the plan errors," >&2
+  echo "   or override with 'git commit --no-verify'." >&2
 fi
 exit $rc

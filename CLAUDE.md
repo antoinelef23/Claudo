@@ -32,6 +32,8 @@ Mandatory reading order before coding: spec.md → design.md → tasks.md.
 - Markdown + Git for every artifact. No Confluence, no Jira: the repo is the memory.
 - Language (**supersedes** the English-only rule that issue #12 originally set): **French and English are both allowed throughout the repo** — code, technical docs, and artifacts alike. Write in whichever language serves the reader best; bilingual is fine, and a French docstring next to English code is acceptable. Two *soft* preferences (never gates): keep public identifiers and user-facing error strings readable to a non-French engineer where that costs nothing, and keep a single artifact internally consistent. The one **hard** rule that stays enforced: **no client or brand proper nouns** anywhere committed — the lab is generic / org-neutral, so the de-branding (client names, internal product names) is permanent even though the language constraint is relaxed.
 
+  This rule is **mechanical**: `lab/engine/brand_guard.py` (`just check-brand`, wired into `gate`/`gate-ci` and the pre-commit hook) scans committed framework content against a denylist (`lab/engine/brand_denylist.txt` — the one sanctioned home for the names, excluded from its own scan). **Scope** — the rule binds the lab *itself*, not its *usage a posteriori*: `work/**` (real features built with the lab) and `**/assets/**` (raw client inputs) legitimately carry brand names and are **excluded**. Never add a lab spec-ID prefix (INV/BHV/EX/EVAL/NG/OQ/ADR) to the denylist — those are vocabulary, not brands.
+
 ## Vocabulary (ubiquitous language)
 
 | Term | Definition |

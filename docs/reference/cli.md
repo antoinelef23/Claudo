@@ -86,6 +86,7 @@ script; recipes no-op cleanly when `pyproject.toml` is absent.
 | `run feature supervised=""` | `caffeinate -i python3 lab/engine/orchestrate.py "{{feature}}" [--supervised]` | Orchestrated run in foreground; `--supervised` added when `supervised` is non-empty. |
 | `check-content feature` | `python3 lab/engine/content_guard.py --git "{{feature}}/spec.md"` (and `design.md` if present) | Substance/form guardrail vs `HEAD`; fails if substance changed without a version bump. |
 | `check-content-ci base="origin/main"` | `BASE="{{base}}" bash lab/engine/ci_checks.sh` | CI substance/form guardrail + plan-lint vs a base branch. |
+| `check-brand` | `python3 lab/engine/brand_guard.py --all` | Brand/proper-noun guard: fails if committed framework content contains a denied name. Scope excludes `work/` + `**/assets/`. |
 | `eval-models layer="all" live="" models=""` | `python3 lab/engine/eval_models.py --layer "{{layer}}" [--live] [--models {{models}}]` | Run the model-eval harness; `--live` calls real (billed) models. |
 | `install` | `uv sync` (if `pyproject.toml`) | Install dependencies. |
 | `lint` | `uv run ruff check --fix . && uv run ruff format .` | Mutating lint: auto-fix + format. Local/agent path. |
@@ -170,3 +171,20 @@ Exit 2 also if no model resolves. Invoked by `just eval-models`.
 
 How-to: [evaluate-models.md](../how-to/evaluate-models.md). Methodology:
 [okf-evaluation.md](../explanation/okf-evaluation.md).
+
+### brand_guard.py
+
+```
+brand_guard.py --all                 # all tracked in-scope files (CI gate)
+brand_guard.py --staged              # staged in-scope files (pre-commit)
+brand_guard.py <file> [<file> ...]   # explicit files
+```
+
+Enforces the "no client/brand proper nouns" rule mechanically: scans committed
+framework content against `lab/engine/brand_denylist.txt` (word-boundary,
+case-insensitive). **Scope** excludes usage a posteriori — `work/**` and
+`**/assets/**` — plus the denylist itself and data/binary files. Exit 1 on any
+hit (prints `file:line` + term), 0 if clean. Override the denylist path with
+`LAB_BRAND_DENYLIST`. Invoked by `just check-brand` (wired into `gate`/`gate-ci`)
+and the pre-commit hook. Never list a lab spec-ID prefix (INV/BHV/EX/EVAL/NG/OQ/ADR)
+in the denylist — they are vocabulary, not brands.
