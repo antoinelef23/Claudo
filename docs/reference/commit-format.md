@@ -23,8 +23,11 @@ Checkpoint: CP-1
 Run: auto
 ```
 
-- **Subject** — `<type>(<feature>): <node> <title> [IDs]`. `type` ∈ feat/fix/refactor/
-  docs/chore/test. Keep the `[IDs]` (or `[auto]`) tag: the reviewer greps subjects for
+- **Subject** — `<type>(<feature>): <node> <title> [IDs]`. `type` follows
+  [Conventional Commits](https://www.conventionalcommits.org/): feat/fix/docs/style/
+  refactor/perf/test/build/ci/chore/revert, picked by the change's *primary intent* (a
+  feature shipped with tests is `feat`, not `test`). The orchestrator's `[auto]` commits
+  always emit `feat`. Keep the `[IDs]` (or `[auto]`) tag: the reviewer greps subjects for
   spec-ID ↔ diff traceability. ≤ ~72 chars where reasonable.
 - **Why** — the prose **body paragraph** (NOT a trailer). Mandatory; this is the whole
   point of the format. Recover it with `git log --format='%b'` (or `%h %s%n%b`), never
