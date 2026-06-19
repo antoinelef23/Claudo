@@ -7,7 +7,7 @@ logic:
   - ClaudeCliRunner   — runs the agent via the local `claude` CLI on the host (default)
   - SandboxedClaudeRunner — runs the same call inside a hardened container with no
                             host filesystem access and an egress allowlist (see
-                            scripts/sandbox_runner.py); the only configuration that
+                            lab/engine/sandbox_runner.py); the only configuration that
                             makes the signed-approval boundary a HARD boundary.
 
 Select via LAB_RUNNER (claude-cli | sandbox). A future provider runner (Vertex /

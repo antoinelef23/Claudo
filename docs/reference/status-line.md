@@ -8,7 +8,7 @@ autonomous run is without tailing `run.log`.
 
 Claude Code pipes session JSON on stdin; the script reads it and scans
 `work/*/.runs/state.json` (the flat `{node_id: status}` map written by
-`scripts/orchestrate.py`), picking the most-recently-modified feature.
+`lab/engine/orchestrate.py`), picking the most-recently-modified feature.
 
 ```
 Opus 4.8  🔬 devis-pose · ▶ T3 running · 4/9

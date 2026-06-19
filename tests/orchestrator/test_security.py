@@ -13,7 +13,7 @@ from pathlib import Path
 
 from .conftest import REPO, run_orch
 
-sys.path.insert(0, str(REPO / "scripts"))
+sys.path.insert(0, str(REPO / "lab" / "engine"))
 import approvals  # noqa: E402
 
 

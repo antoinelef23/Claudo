@@ -27,9 +27,9 @@ rc=0
 for feat in $features; do
   [ -f "$feat/spec.md" ] || { echo "⏭  $feat: no spec.md, skip"; continue; }
   echo "🔎 content-guard: $feat"
-  python3 scripts/content_guard.py --against "$BASE" "$feat/spec.md" || rc=1
+  python3 lab/engine/content_guard.py --against "$BASE" "$feat/spec.md" || rc=1
   if [ -f "$feat/design.md" ]; then
-    python3 scripts/content_guard.py --against "$BASE" "$feat/design.md" || rc=1
+    python3 lab/engine/content_guard.py --against "$BASE" "$feat/design.md" || rc=1
   fi
   if [ -f "$feat/tasks.md" ]; then
     echo "🔎 plan-lint (informative): $feat"

@@ -28,9 +28,11 @@ def _load(mod_name: str, rel: str):
 
 
 cases = _load("cases", "evals/behavioral/cases.py")
-eval_models = _load("eval_models", "scripts/eval_models.py")
-sys.path.insert(0, str(REPO / "scripts"))  # for orchestrate's `from registry import`
-orchestrate = _load("orchestrate", "scripts/orchestrate.py")
+eval_models = _load("eval_models", "lab/engine/eval_models.py")
+sys.path.insert(
+    0, str(REPO / "lab" / "engine")
+)  # for orchestrate's `from registry import`
+orchestrate = _load("orchestrate", "lab/engine/orchestrate.py")
 
 REGISTRY_TOML = """schema_version = 1
 [[model]]
@@ -460,7 +462,7 @@ def test_harness_e2e_smoke(tmp_path: Path):
     r = subprocess.run(
         [
             sys.executable,
-            str(REPO / "scripts" / "eval_models.py"),
+            str(REPO / "lab" / "engine" / "eval_models.py"),
             "--layer",
             "behavioral",
             "--models",
@@ -475,8 +477,8 @@ def test_harness_e2e_smoke(tmp_path: Path):
         timeout=180,
     )
     assert r.returncode == 0, r.stdout + r.stderr
-    md = lab_root / "models" / "scorecards" / "smoke.md"
-    jsonl = lab_root / "models" / "scorecards" / "smoke.jsonl"
+    md = lab_root / "lab" / "models" / "scorecards" / "smoke.md"
+    jsonl = lab_root / "lab" / "models" / "scorecards" / "smoke.jsonl"
     assert md.exists() and "Models scorecard" in md.read_text()
     rows = [json.loads(line) for line in jsonl.read_text().splitlines()]
     behavioral_cases = [c for c in cases.CASES if c.layer == "behavioral"]

@@ -5,7 +5,7 @@ Reads a feature's tasks.md, builds the DAG (depends_on), runs the ready tasks
 IN PARALLEL via `claude -p` (headless), passes the eval gate after each task
 (max 3 iterations), and handles checkpoints according to their mode:
   - `mode: blocking` (default) — pause + notification, human validation via
-        scripts/approve.sh CP-1 <feature_dir>
+        lab/engine/approve.sh CP-1 <feature_dir>
   - `mode: auto` — auto-validated if and only if evals green AND reviewer PASS;
         otherwise falls back to blocking. The final (merge) checkpoint is ALWAYS blocking.
 
@@ -28,9 +28,9 @@ Autonomy guardrails:
     would suck in the files of other tasks and the goldens — findings H3/H5)
 
 Usage:
-    python3 scripts/orchestrate.py work/my-feature --validate
-    python3 scripts/orchestrate.py work/my-feature --dry-run
-    caffeinate -i python3 scripts/orchestrate.py work/my-feature &   # runs in background
+    python3 lab/engine/orchestrate.py work/my-feature --validate
+    python3 lab/engine/orchestrate.py work/my-feature --dry-run
+    caffeinate -i python3 lab/engine/orchestrate.py work/my-feature &   # runs in background
 
 Prerequisites: claude CLI installed and authenticated; tasks.md with status: approved
 (frontmatter) — the orchestrator refuses an unvalidated plan (Cognition pattern).
@@ -66,11 +66,22 @@ from registry import load_registry, resolve_model
 from runner import DEFAULT_ALLOWED_TOOLS, get_runner
 from verify import parse_verify
 
-# LAB_ROOT: override for tests (sandbox) — default: the repo root
-ROOT = Path(os.environ.get("LAB_ROOT") or Path(__file__).resolve().parent.parent)
+
+# LAB_ROOT: override for tests (sandbox). Default: the repo root, found by walking up
+# from this file to the dir holding pyproject.toml — so the engine can live at any depth
+# (e.g. lab/engine/) without hard-coding parent levels.
+def _repo_root() -> Path:
+    here = Path(__file__).resolve()
+    for p in (here, *here.parents):
+        if (p / "pyproject.toml").exists():
+            return p
+    return here.parent.parent.parent  # fallback: lab/engine/<file> -> repo root
+
+
+ROOT = Path(os.environ["LAB_ROOT"]) if os.environ.get("LAB_ROOT") else _repo_root()
 REGISTRY = load_registry(
     ROOT
-)  # model×role assignment (empty if no models/registry.toml)
+)  # model×role assignment (empty if no lab/models/registry.toml)
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
 MAX_CP_REJECTS = 2  # beyond this: the checkpoint goes failed, manual resume
@@ -579,7 +590,7 @@ def wait_checkpoint(
         if self_only:
             notify(
                 f"{node.id} (auto): separation of duties impossible (reviewer = implementer's model) "
-                "→ human validation required. Configure a distinct reviewer model in models/registry.toml."
+                "→ human validation required. Configure a distinct reviewer model in lab/models/registry.toml."
             )
         elif verdict == "PASS" and evals_ok:
             approval.parent.mkdir(exist_ok=True)
@@ -608,8 +619,8 @@ def wait_checkpoint(
             )
 
     notify(
-        f"CHECKPOINT {node.id}: Owner decision → scripts/approve.sh {node.id} {feature.relative_to(ROOT)} "
-        f'or scripts/reject.sh {node.id} {feature.relative_to(ROOT)} "reason" [Tn …] '
+        f"CHECKPOINT {node.id}: Owner decision → lab/engine/approve.sh {node.id} {feature.relative_to(ROOT)} "
+        f'or lab/engine/reject.sh {node.id} {feature.relative_to(ROOT)} "reason" [Tn …] '
         f"(reviewer report: {report.relative_to(ROOT)}, verdict {verdict})"
     )
     print(f"⏸  {node.id} — waiting for {approval} (or .rejected)", flush=True)

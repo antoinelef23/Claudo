@@ -1,8 +1,8 @@
-"""Lab model registry — loader for models/registry.toml.
+"""Lab model registry — loader for lab/models/registry.toml.
 
 Data-driven source of truth: adding a model = one [[model]] entry, no code.
-Imported by scripts/orchestrate.py (production assignment) and scripts/eval_models.py
-(evaluation campaign). See models/EVOLUTION.md for the re-evaluation loop.
+Imported by lab/engine/orchestrate.py (production assignment) and lab/engine/eval_models.py
+(evaluation campaign). See lab/models/EVOLUTION.md for the re-evaluation loop.
 """
 
 from __future__ import annotations
@@ -43,15 +43,15 @@ class Registry:
         m = self.by_id(model_id) if model_id else None
         if not m or m.context_profile in ("", "base") or not self.root:
             return ""
-        p = self.root / "models" / "profiles" / f"{m.context_profile}.md"
+        p = self.root / "lab" / "models" / "profiles" / f"{m.context_profile}.md"
         return ("\n\n" + p.read_text(encoding="utf-8")) if p.exists() else ""
 
 
 def load_registry(root: Path | str) -> Registry:
     """Load the registry; returns an empty registry if the file is missing
-    (test sandbox, repo without models/ → the orchestrator falls back to the CLI default)."""
+    (test sandbox, repo without lab/models/ → the orchestrator falls back to the CLI default)."""
     root = Path(root)
-    path = root / "models" / "registry.toml"
+    path = root / "lab" / "models" / "registry.toml"
     if not path.exists():
         return Registry(root=root)
     data = tomllib.loads(path.read_text(encoding="utf-8"))

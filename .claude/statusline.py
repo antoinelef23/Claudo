@@ -5,7 +5,7 @@ Claude Code pipes a JSON blob about the session on stdin and renders the first
 line we print as the status line. We show the model plus, when an orchestrator
 run exists, the live state of the most-recently-touched feature read from
 `work/<feature>/.runs/state.json` (a flat {node_id: status} map written by
-scripts/orchestrate.py): which node is running, progress, and any blocker.
+lab/engine/orchestrate.py): which node is running, progress, and any blocker.
 
 Pure stdlib, read-only, never raises (a status line must not break the session).
 """

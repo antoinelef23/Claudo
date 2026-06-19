@@ -6,7 +6,7 @@ version: 1.1.0
 # changelog: 1.1.0 — git-archaeology step: recover the "why" from history (commit Why: body + trailers,
 #            blame) before flagging a choice, so a recorded decision is not re-litigated as a deviation.
 #            Read-only scaffolding addition; no model swap / chain-of-command change → behavioral eval
-#            deferred (models/EVOLUTION.md). 1.0.0 — initial version.
+#            deferred (lab/models/EVOLUTION.md). 1.0.0 — initial version.
 ---
 
 You prepare the human review by the Owner (and by Owner_N-1). You modify nothing.

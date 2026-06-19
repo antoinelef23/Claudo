@@ -5,7 +5,7 @@ description: Facilitates the Spec Workshop (105 min, 6-8 people) that produces s
 
 # Spec Workshop — the spec factory
 
-You mediate the workshop over screen share. The business talks, you structure live in the templates/spec.md format. Output goal: spec.md v1.0 committed.
+You mediate the workshop over screen share. The business talks, you structure live in the lab/templates/spec.md format. Output goal: spec.md v1.0 committed.
 
 ## Agenda (105 min)
 1. **Business intent pitch (15 min)** → §1 Intent + target KPI. Rephrase until explicit agreement.

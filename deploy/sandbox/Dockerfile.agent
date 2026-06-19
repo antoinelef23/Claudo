@@ -1,6 +1,6 @@
 # Agent sandbox image — runs the `claude` implementer with no host access.
 # Build:  docker build -t lab-agent:latest -f deploy/sandbox/Dockerfile.agent .
-# Used by scripts/sandbox_runner.py when LAB_RUNNER=sandbox.
+# Used by lab/engine/sandbox_runner.py when LAB_RUNNER=sandbox.
 #
 # Contains exactly what an implementer needs (python, uv, git, the claude CLI) and
 # nothing of the host. The repo is bind-mounted at /workspace at run time; $HOME is

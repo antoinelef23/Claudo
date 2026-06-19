@@ -179,7 +179,7 @@ def validate(
             warnings.append(
                 f"separation of duties: reviewer and implementer point to the same model ({impl}) — "
                 "an auto checkpoint will not be able to self-validate (will fall back to human). "
-                "Assign a distinct reviewer model in models/registry.toml."
+                "Assign a distinct reviewer model in lab/models/registry.toml."
             )
 
     # Models: a task override must name a model eligible for its role
@@ -191,7 +191,7 @@ def validate(
             m = registry.by_id(n.model)
             if m is None:
                 warnings.append(
-                    f'{n.id}: model "{n.model}" absent from the registry (models/registry.toml)'
+                    f'{n.id}: model "{n.model}" absent from the registry (lab/models/registry.toml)'
                 )
             elif role not in m.roles:
                 warnings.append(

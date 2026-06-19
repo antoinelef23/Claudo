@@ -6,7 +6,7 @@ triggers a re-evaluation, never a blind migration.
 
 ## The principle
 
-We evaluate **three distinct things** (cf. `scripts/eval_models.py`):
+We evaluate **three distinct things** (cf. `lab/engine/eval_models.py`):
 
 1. **Scorecard** — on golden tasks (`evals/golden/`), does the produced code pass **our**
    hidden evals? Measures raw capability per role, judged against references that the
@@ -30,10 +30,10 @@ this one. `CLAUDE.md` (hard rules) > role `.md` > task prompt = our chain of com
 
 ## The loop, on every new Claude model
 
-1. **Add to the registry** — a `[[model]]` entry in `models/registry.toml` (id, eligible roles).
+1. **Add to the registry** — a `[[model]]` entry in `lab/models/registry.toml` (id, eligible roles).
    No code to touch.
 2. **Run the campaign** — `just eval-models live=1` (the 3 layers, all the models in the registry).
-   Produces a dated scorecard in `models/scorecards/`.
+   Produces a dated scorecard in `lab/models/scorecards/`.
 3. **Compare to the incumbent** — the registry's `[roles]` is the baseline. Does the new
    model beat the current one on its layer, at an acceptable cost?
 4. **Arbitrate the assignment** — only change `[roles]` on proof: better behavioral rate
@@ -55,10 +55,10 @@ Three levels of mutability, in order of sacredness:
 2. **Form of spec.md / design.md** = FREE. Layout, table↔list, bold, section order,
    prose rephrasing — notably so that **another model understands the contract better**. But
    a reformat must NEVER touch the substance.
-3. **Scaffolding** (agent `.md`, `CLAUDE.md`, `models/profiles/`) = LIVING. This is *where* we adapt
+3. **Scaffolding** (agent `.md`, `CLAUDE.md`, `lab/models/profiles/`) = LIVING. This is *where* we adapt
    the models' understanding (cf. next section).
 
-**The mechanical guardrail: `scripts/content_guard.py`.** It extracts a *substance fingerprint*
+**The mechanical guardrail: `lab/engine/content_guard.py`.** It extracts a *substance fingerprint*
 (assertions by INV/BHV/EX/EVAL/NG/OQ/ADR ID + canonical glossary names + KPI), normalized to
 ignore the form. Rule applied (`just check-content <feature>`):
 
@@ -72,7 +72,7 @@ including when reformatting a spec to help a model that understands it poorly. T
 a false positive costs a re-read, a false negative lets a contract drift slip through.
 
 **Order of intervention to help a model that understands the contract poorly:**
-1. adjust its **context profile** (`models/profiles/`) — adds reading instructions, touches nothing;
+1. adjust its **context profile** (`lab/models/profiles/`) — adds reading instructions, touches nothing;
 2. reinforce the role's **agent `.md`** — the behavior contract, not the business contract;
 3. as a **last resort**, reformat spec/design — under `content_guard`, with substance proven identical.
 

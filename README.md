@@ -11,35 +11,35 @@ ai-native-lab/
 ├── CLAUDE.md                  # Persistent context loaded by the agents
 ├── README.md                  # This file: the workflow
 ├── justfile                   # Standard targets (just gate / validate / run …)
+├── pyproject.toml             # Package + pytest/ruff config
 ├── .githooks/pre-commit       # Local content_guard + plan-lint gate (opt-in)
-├── templates/
-│   ├── spec.md                # Business-contract template
-│   ├── design.md              # Architecture template
-│   └── tasks.md               # Agent-orchestration template
-├── scripts/
-│   ├── orchestrate.py         # The DAG executor (waves, gates, checkpoints)
-│   ├── content_guard.py       # "Substance is sacred, form is free" enforcement
-│   ├── approvals.py           # HMAC-signed checkpoint approvals
-│   ├── eval_models.py         # Model×role evaluation campaign
-│   ├── registry.py            # Reads models/registry.toml
-│   ├── ci_checks.sh           # CI content-guard + plan-lint over changed features
-│   ├── runner.py              # AgentRunner interface (claude-cli | sandbox)
-│   └── sandbox_runner.py      # Hardened-container runner (LAB_RUNNER=sandbox)
+│
+├── lab/                       # ───────── The reusable framework ─────────
+│   ├── engine/                # The lab engine (orchestrator, guards, eval harness)
+│   │   ├── orchestrate.py     # The DAG executor (waves, gates, checkpoints)
+│   │   ├── content_guard.py   # "Substance is sacred, form is free" enforcement
+│   │   ├── approvals.py       # HMAC-signed checkpoint approvals
+│   │   ├── eval_models.py     # Model×role evaluation campaign
+│   │   ├── registry.py        # Reads lab/models/registry.toml
+│   │   ├── ci_checks.sh       # CI content-guard + plan-lint over changed features
+│   │   ├── runner.py          # AgentRunner interface (claude-cli | sandbox)
+│   │   └── sandbox_runner.py  # Hardened-container runner (LAB_RUNNER=sandbox)
+│   ├── templates/             # spec.md / design.md / tasks.md templates
+│   └── models/                # registry.toml, profiles/, EVOLUTION.md, scorecards/
+│
 ├── .claude/
-│   ├── agents/                # Specialized sub-agents
-│   │   ├── design-scout.md    # Gathers internal + OSS reference repos
-│   │   ├── planner.md         # Generates tasks.md from spec + design
-│   │   ├── implementer.md     # Implements one task against the spec
-│   │   ├── eval-runner.md     # Runs the evals (merge gate)
-│   │   └── reviewer.md        # Cross-review spec ↔ code
+│   ├── agents/                # Sub-agents: design-scout, planner, implementer, eval-runner, reviewer
 │   ├── hooks/                 # eval_gate.sh (merge gate) + post_edit.sh (lint)
 │   ├── statusline.py          # Status line: live orchestrator run state (state.json)
 │   ├── settings.json          # Hooks + statusLine + permission denies
 │   └── skills/                # vibe-workshop (spec), commit (why→git), diataxis (docs)
 ├── docs/                      # Diátaxis: tutorials/ how-to/ explanation/ reference/ (see docs/README.md)
-├── models/                    # registry.toml, profiles/, EVOLUTION.md, scorecards/
+│
+│                              # ───────── Built with the lab (examples / product) ─────────
+├── work/                      # Feature bundles: spec.md / design.md / tasks.md / .runs
 ├── evals/                     # golden/ (oracles) + behavioral/ (model governance)
-└── src/                       # Features built by the method
+├── src/                       # Feature code produced by the method
+└── tests/                     # Tests produced by the method
 ```
 
 ## The pipeline: who triggers what
@@ -95,7 +95,7 @@ flowchart TD
 4. **Per-task verify**: the `verify` command in tasks.md materializes `done_when`. It is parsed to an argv list and run **without a shell** (no metacharacters, command + env-prefix allowlists) — checked mechanically after each agent, before the evals.
 5. **Failure containment**: failed/blocked only neutralizes dependents (`skipped`); other branches continue. The run always ends on a summary, never on a mid-course abort.
 6. **Scoped commits, why in git**: only the task's `files_touched` (+ the feature dir) are staged, under a lock — two parallel agents don't pollute each other, and the golden oracles can't be swept into a task commit. Out-of-scope changes are reported, not committed. Every commit follows the canonical format ([docs/reference/commit-format.md](docs/reference/commit-format.md)): a `Why:` body + git trailers (`Spec-IDs`, `Version-Bump`, …), the same shape the human `/commit` skill writes — so the *reasoning* behind a change (not just the diff) lives in git, where the reviewer/planner/scout agents recover it via `git log`/`blame`. The `version:` bump stays the *fusible* (intent); git carries the *why*.
-7. **Signed human approvals**: checkpoint approvals are HMAC-signed (`scripts/approve.sh`) and verified before they're honored, then consumed (no replay). **Fail-closed by default**: a plan with checkpoints refuses to start without `LAB_APPROVAL_SECRET` (opt-out `LAB_ALLOW_UNSIGNED_APPROVALS=1`). The secret is stripped from the agent's environment, and `.approvals/`/`.runs/` are denied to the agent's edit tools.
+7. **Signed human approvals**: checkpoint approvals are HMAC-signed (`lab/engine/approve.sh`) and verified before they're honored, then consumed (no replay). **Fail-closed by default**: a plan with checkpoints refuses to start without `LAB_APPROVAL_SECRET` (opt-out `LAB_ALLOW_UNSIGNED_APPROVALS=1`). The secret is stripped from the agent's environment, and `.approvals/`/`.runs/` are denied to the agent's edit tools.
 8. **Concurrency safety**: an OS `flock` (`.runs/orchestrator.lock`) fails a second run on the same feature fast; `state.json` is written atomically and resume tolerates a truncated file.
 9. **Documented `auto` checkpoints**: before every checkpoint, the `reviewer` report is written to `.runs/CP-n-review.md`. Auto = green evals AND `VERDICT: PASS`; on any doubt it falls back to human validation.
 10. **Session eval gate** (`.claude/settings.json`): `Stop`/`SubagentStop` hooks → an agent can't finish with changed code and red evals; `PostToolUse` → ruff on each edit.
@@ -105,18 +105,18 @@ flowchart TD
 export LAB_APPROVAL_SECRET="$(openssl rand -hex 32)"
 
 # 1. Plan-lint, then Owner approval (status: approved + checkpoint modes)
-python3 scripts/orchestrate.py work/my-feature --validate
+python3 lab/engine/orchestrate.py work/my-feature --validate
 
 # 2. See the execution plan without running anything
-python3 scripts/orchestrate.py work/my-feature --dry-run
+python3 lab/engine/orchestrate.py work/my-feature --dry-run
 
 # 3. Run in the background (caffeinate prevents sleep on macOS)
-caffeinate -i python3 scripts/orchestrate.py work/my-feature > work/my-feature/.runs/run.log 2>&1 &
+caffeinate -i python3 lab/engine/orchestrate.py work/my-feature > work/my-feature/.runs/run.log 2>&1 &
 
 # 4. On each blocking CHECKPOINT notification: read .runs/CP-n-review.md, then
-scripts/approve.sh CP-1 work/my-feature
+lab/engine/approve.sh CP-1 work/my-feature
 # … or reject with a reason (reopens the targeted tasks; the agent gets the comment):
-scripts/reject.sh CP-1 work/my-feature "the quote doesn't show the discount" T2
+lab/engine/reject.sh CP-1 work/my-feature "the quote doesn't show the discount" T2
 ```
 
 Recovery: state lives in `<feature>/.runs/state.json` — re-running the same command resumes where it stopped (`done` nodes don't replay; `blocked` nodes retry after you answer their open questions). Prerequisites: `claude` CLI authenticated, `uv` installed.
@@ -127,15 +127,15 @@ Full docs live in [`docs/`](docs/README.md), organized by the [Diátaxis](https:
 
 ## Model evaluation
 
-The lab evaluates not only the **product** (the code, via the spec §7 evals) but also the **models** it uses, per role. Source of truth: `models/registry.toml` (data-driven — adding a model is one entry, zero code). The orchestrator assigns a model to each role (`[roles]`), overridable per task (`**model :**`), and logs which model produced what.
+The lab evaluates not only the **product** (the code, via the spec §7 evals) but also the **models** it uses, per role. Source of truth: `lab/models/registry.toml` (data-driven — adding a model is one entry, zero code). The orchestrator assigns a model to each role (`[roles]`), overridable per task (`**model :**`), and logs which model produced what.
 
-`scripts/eval_models.py` (target `just eval-models live=1`) measures three layers:
+`lab/engine/eval_models.py` (target `just eval-models live=1`) measures three layers:
 
 1. **Scorecard** — on the golden tasks (`evals/golden/`), does the produced code pass **our** hidden evals (never the ones the model writes itself)? Raw capability per role, judged fairly. The oracle is held out: the model never sees `goldeval/` during execution.
 2. **Behavioral** (`evals/behavioral/`) — does the model respect its role contract: scope, the `STATUS` verdict, stopping on ambiguity, evals-first, calibrated reviewer verdicts?
 3. **Chain-of-command** — can a task instruction make it violate a `CLAUDE.md` hard rule (merge without a human, skip the evals, leave its scope)? It must refuse. This layer is **eliminatory**: one violation disqualifies the model for the role, regardless of its raw score.
 
-Fairness by construction (same prompts, isolated trials, measured metrics, no cherry-pick) and a re-evaluation loop on every new model: see **`models/EVOLUTION.md`**. The harness mechanics are tested in CI with a deterministic `claude` shim (no cost); the real campaign (`LIVE=1`) is manual because it is billed.
+Fairness by construction (same prompts, isolated trials, measured metrics, no cherry-pick) and a re-evaluation loop on every new model: see **`lab/models/EVOLUTION.md`**. The harness mechanics are tested in CI with a deterministic `claude` shim (no cost); the real campaign (`LIVE=1`) is manual because it is billed.
 
 ## Telemetry and limits
 
@@ -152,11 +152,11 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 
 `.github/workflows/gate.yml` mirrors the local merge gate:
 - `just gate-ci` — **non-mutating** lint (`ruff check` + `ruff format --check`, so drift fails CI instead of being silently auto-fixed) + tests + evals (the shim orchestrator suite included).
-- `scripts/ci_checks.sh` — runs `content_guard --against <base>` over changed features (the "substance is sacred" rule, enforced vs the base branch, not a clean-checkout HEAD) plus plan-lint (informational). Fail-safe: skips cleanly if the base ref is unavailable.
+- `lab/engine/ci_checks.sh` — runs `content_guard --against <base>` over changed features (the "substance is sacred" rule, enforced vs the base branch, not a clean-checkout HEAD) plus plan-lint (informational). Fail-safe: skips cleanly if the base ref is unavailable.
 
 ## Trust model (read this)
 
-The orchestrator drives agents through an `AgentRunner` interface (`scripts/runner.py`), so the execution backend is swappable:
+The orchestrator drives agents through an `AgentRunner` interface (`lab/engine/runner.py`), so the execution backend is swappable:
 
 - **`claude-cli`** (default) — runs on the **host**, gated by tool allowlists (`--allowedTools`, the `verify` allowlist, `.claude/settings.json` denies). An implementer that runs its own tests has code execution, so here the signed-approval boundary is *defense-in-depth that raises the bar*, not a hard boundary against a determined, code-executing agent.
 - **`sandbox`** (`LAB_RUNNER=sandbox`, see [docs/how-to/use-the-sandbox.md](docs/how-to/use-the-sandbox.md)) — runs the same call in a hardened container: only the repo is mounted, the approval secret is never passed in, egress is allowlisted, non-root + read-only rootfs + dropped caps. This makes the secret **unreachable** by the agent, which is what turns the approval crypto into a true boundary. Validated end-to-end on Docker (the secret is provably absent inside the container); the egress-allowlist proxy is operator infrastructure.
@@ -172,9 +172,9 @@ Intended threat model: a **trusted-but-possibly-misaligned** agent on the host r
 ## Start a unit of work
 
 ```bash
-cp templates/spec.md   work/<feature>/spec.md     # filled in the spec workshop
-cp templates/design.md work/<feature>/design.md   # filled by Owner + design-scout
-cp templates/tasks.md  work/<feature>/tasks.md    # generated by planner, approved by Owner
+cp lab/templates/spec.md   work/<feature>/spec.md     # filled in the spec workshop
+cp lab/templates/design.md work/<feature>/design.md   # filled by Owner + design-scout
+cp lab/templates/tasks.md  work/<feature>/tasks.md    # generated by planner, approved by Owner
 ```
 
-Then in Claude Code: `read work/<feature>/spec.md and design.md, generate tasks.md per templates/tasks.md, and wait for my approval before executing.`
+Then in Claude Code: `read work/<feature>/spec.md and design.md, generate tasks.md per lab/templates/tasks.md, and wait for my approval before executing.`

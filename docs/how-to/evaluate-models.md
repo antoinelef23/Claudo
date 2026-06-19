@@ -3,7 +3,7 @@
 This guide shows you how to run the model evaluation campaign and decide, on
 measured proof, which model drives a role (`planner`, `implementer`, `reviewer`,
 `eval-runner`). It is the operational counterpart of the re-evaluation loop in
-[`models/EVOLUTION.md`](../../models/EVOLUTION.md). For *why* the lab evaluates
+[`lab/models/EVOLUTION.md`](../../lab/models/EVOLUTION.md). For *why* the lab evaluates
 three separate things and treats chain-of-command as eliminatory, read
 [architecture.md](../explanation/architecture.md).
 
@@ -23,7 +23,7 @@ Run the campaign when:
 - A `claude` CLI on the `PATH`, authenticated (the harness calls `claude -p …
   --output-format json` per trial).
 - The model id known to `claude --model` (e.g. `claude-opus-4-8`).
-- `just` available (the recipe wraps `scripts/eval_models.py`).
+- `just` available (the recipe wraps `lab/engine/eval_models.py`).
 - Awareness that `--live` calls the real models and **bills**. Without `--live`
   the harness refuses to run unless `LAB_MODEL_SHIM=1` is set (test path with a
   deterministic shim on the `PATH`).
@@ -33,7 +33,7 @@ Run the campaign when:
 ### 1. Add the candidate to the registry
 
 A model the harness knows = one `[[model]]` entry in
-[`models/registry.toml`](../../models/registry.toml). No code to touch — the
+[`lab/models/registry.toml`](../../lab/models/registry.toml). No code to touch — the
 harness reads the registry.
 
 ```toml
@@ -61,7 +61,7 @@ just eval-models live=1
 ```
 
 This runs all three layers against every model in the registry and writes a
-dated scorecard under [`models/scorecards/`](../../models/scorecards/).
+dated scorecard under [`lab/models/scorecards/`](../../lab/models/scorecards/).
 
 Narrow the run while iterating:
 
@@ -71,13 +71,13 @@ just eval-models layer=chain live=1 models=claude-opus-4-8,claude-haiku-4-5-2025
 ```
 
 `layer` accepts `behavioral`, `chain`, `scorecard`, or `all` (default). Under the
-hood the recipe calls `python3 scripts/eval_models.py`; flags not exposed by the
+hood the recipe calls `python3 lab/engine/eval_models.py`; flags not exposed by the
 recipe — `--runs` (trials per golden task, default 3), `--budget` (campaign $ cap,
 `0` = none), `--stamp` (scorecard name, arbitrary; default `latest`) — go through the
 script directly:
 
 ```bash
-python3 scripts/eval_models.py --layer all --live --budget 5.0 --stamp my-campaign
+python3 lab/engine/eval_models.py --layer all --live --budget 5.0 --stamp my-campaign
 ```
 
 Every trial runs in its **own isolated directory** with a fresh git baseline, so
@@ -126,13 +126,13 @@ must raise the targeted score without masking a fundamental inability. A
 chain-of-command failure is **never** patched with prompting: the lesson of the
 Haiku × `COC-merge` loop (2026-06-15) is that `verbose` did not move the
 eliminatory score, so Haiku was dropped from `implementer` and kept only for
-`eval-runner`. See [`models/EVOLUTION.md`](../../models/EVOLUTION.md) for that
+`eval-runner`. See [`lab/models/EVOLUTION.md`](../../lab/models/EVOLUTION.md) for that
 worked example.
 
 ### 5. Locate the scorecard
 
 The run writes two files under
-[`models/scorecards/`](../../models/scorecards/), named after `--stamp` (default
+[`lab/models/scorecards/`](../../lab/models/scorecards/), named after `--stamp` (default
 `latest`):
 
 - `<stamp>.md` — the readable table (model × role × layer → pass rate, mean cost,
@@ -146,7 +146,7 @@ makes capability drift visible.
 ### 6. Justify a `[roles]` change with measured proof
 
 Only change the `[roles]` assignment in
-[`models/registry.toml`](../../models/registry.toml) when the scorecard shows the
+[`lab/models/registry.toml`](../../lab/models/registry.toml) when the scorecard shows the
 challenger beats the incumbent — **better behavioral rate AND scorecard, at a
 justified cost** — and is **not** chain-of-command disqualified for the role.
 
@@ -180,7 +180,7 @@ a candidate refuses every chain instruction.
 
 - [architecture.md](../explanation/architecture.md) — why three layers and why
   chain-of-command is eliminatory.
-- [`models/EVOLUTION.md`](../../models/EVOLUTION.md) — the full re-evaluation
+- [`lab/models/EVOLUTION.md`](../../lab/models/EVOLUTION.md) — the full re-evaluation
   loop, form-vs-substance rules, and the Haiku worked example.
 - [run-the-orchestrator.md](run-the-orchestrator.md) — how the assigned models
   are actually used in a run.

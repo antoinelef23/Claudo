@@ -11,7 +11,7 @@ from pathlib import Path
 
 REPO = Path(__file__).resolve().parents[2]
 spec = importlib.util.spec_from_file_location(
-    "content_guard", REPO / "scripts" / "content_guard.py"
+    "content_guard", REPO / "lab" / "engine" / "content_guard.py"
 )
 cg = importlib.util.module_from_spec(spec)
 sys.modules["content_guard"] = cg
@@ -99,7 +99,12 @@ def _git(wd, *a):
 
 def _run_guard(wd, path):
     return subprocess.run(
-        [sys.executable, str(REPO / "scripts" / "content_guard.py"), "--git", path],
+        [
+            sys.executable,
+            str(REPO / "lab" / "engine" / "content_guard.py"),
+            "--git",
+            path,
+        ],
         cwd=wd,
         capture_output=True,
         text=True,
@@ -212,7 +217,7 @@ def test_against_ref_detects_change_vs_base(tmp_path):
     r = subprocess.run(
         [
             sys.executable,
-            str(REPO / "scripts" / "content_guard.py"),
+            str(REPO / "lab" / "engine" / "content_guard.py"),
             "--against",
             "base",
             "work/spec.md",
@@ -228,7 +233,7 @@ def test_against_ref_detects_change_vs_base(tmp_path):
     r = subprocess.run(
         [
             sys.executable,
-            str(REPO / "scripts" / "content_guard.py"),
+            str(REPO / "lab" / "engine" / "content_guard.py"),
             "--against",
             "base",
             "work/spec.md",
@@ -249,8 +254,10 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
 
     wd = tmp_path / "r"
     wd.mkdir()
-    shutil.copytree(REPO / "scripts", wd / "scripts")
+    shutil.copytree(REPO / "lab" / "engine", wd / "lab" / "engine")
     shutil.copy(REPO / "justfile", wd / "justfile")
+    # pyproject.toml so the engine's repo-root walk-up resolves to wd (it lives at any depth).
+    (wd / "pyproject.toml").write_text("[project]\nname = 't'\nversion = '0'\n")
     (wd / "work" / "feat").mkdir(parents=True)
     (wd / "work" / "feat" / "spec.md").write_text(SPEC_LIST)
     # -b base: deterministic initial branch (otherwise "main" locally but "master"
@@ -265,7 +272,7 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
 
     env = {**os.environ, "BASE": "base"}
     r = subprocess.run(
-        ["bash", "scripts/ci_checks.sh"],
+        ["bash", "lab/engine/ci_checks.sh"],
         cwd=wd,
         env=env,
         capture_output=True,
@@ -282,7 +289,7 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
     )
     _git(wd, "commit", "-qam", "bump")
     r2 = subprocess.run(
-        ["bash", "scripts/ci_checks.sh"],
+        ["bash", "lab/engine/ci_checks.sh"],
         cwd=wd,
         env=env,
         capture_output=True,

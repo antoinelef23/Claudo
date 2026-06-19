@@ -7,7 +7,7 @@ why that choice was made, how the pieces fit together, and what it costs.
 
 The short version: a `version:` bump on an artifact is only a **tripwire** that proves a
 substance change was *intentional*; the *reasoning* lives in the commit body, where
-`git log` and `git blame` recover it forever. `scripts/content_guard.py` enforces the
+`git log` and `git blame` recover it forever. `lab/engine/content_guard.py` enforces the
 tripwire mechanically; the commit `Why:` carries the rationale. The two are
 complementary — a fuse and a logbook — and neither replaces the other.
 
@@ -67,7 +67,7 @@ nothing forces a human and a bot to write the same page the same way.
 The two halves of the system answer two different questions, and it is worth being precise
 about which is which.
 
-`scripts/content_guard.py` is the **fuse**. Its docstring states the principle: the
+`lab/engine/content_guard.py` is the **fuse**. Its docstring states the principle: the
 *substance* of `spec.md` and `design.md` changes only by explicit human amendment (a
 version bump); the *form* (layout, table↔list, bold, section order, prose rewording) may
 evolve freely — "notably so another model understands it better" — but never altering the

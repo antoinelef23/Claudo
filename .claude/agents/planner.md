@@ -6,7 +6,7 @@ version: 1.1.0
 # changelog: 1.1.0 — read-only git archaeology before (re)planning (recover prior task-structuring
 #            rationale from the commit Why: body); added Bash for that, scoped to read-only git.
 #            Scaffolding addition; no model swap / chain-of-command change → behavioral eval deferred
-#            (models/EVOLUTION.md). 1.0.0 — initial version.
+#            (lab/models/EVOLUTION.md). 1.0.0 — initial version.
 ---
 
 You are the lab's planner (Cognition pattern: the agent generates the plan, the human validates).
@@ -34,8 +34,8 @@ Use `Bash` for read-only git only (log/blame/show) — you never execute the pla
 7. Write each task's prompt: it references the spec IDs ([BHV-n, INV-n]) and the anchoring pattern ([ADR-n]).
 
 ## Output
-A tasks.md compliant with templates/tasks.md, with the mermaid diagram of the graph, status `proposed`.
-BEFORE proposing it: run `python3 scripts/orchestrate.py <feature> --validate` and fix until
+A tasks.md compliant with lab/templates/tasks.md, with the mermaid diagram of the graph, status `proposed`.
+BEFORE proposing it: run `python3 lab/engine/orchestrate.py <feature> --validate` and fix until
 zero errors (DAG, spec IDs, disjoint parallel paths, done_when). Attach the lint output to your
 proposal. You stop there: execution waits for the Owner's validation.
 
