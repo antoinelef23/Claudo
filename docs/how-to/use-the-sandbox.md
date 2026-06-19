@@ -1,8 +1,8 @@
 # Sandbox runner — hard confinement for agents
 
-The orchestrator runs agents through an `AgentRunner` interface (`scripts/runner.py`).
+The orchestrator runs agents through an `AgentRunner` interface (`lab/engine/runner.py`).
 The default `claude-cli` runner executes on the host; the **sandbox** runner
-(`scripts/sandbox_runner.py`, `LAB_RUNNER=sandbox`) runs the same `claude -p` call
+(`lab/engine/sandbox_runner.py`, `LAB_RUNNER=sandbox`) runs the same `claude -p` call
 inside a hardened container.
 
 ## Why it exists
@@ -36,7 +36,7 @@ docker build -t lab-agent:latest -f deploy/sandbox/Dockerfile.agent .
 docker network create lab-egress   # + allowlist proxy, or an internal network
 
 # 3. Run the orchestrator with the sandbox runner
-LAB_RUNNER=sandbox LAB_APPROVAL_SECRET=… python3 scripts/orchestrate.py work/my-feature
+LAB_RUNNER=sandbox LAB_APPROVAL_SECRET=… python3 lab/engine/orchestrate.py work/my-feature
 ```
 
 Tuning env: `LAB_SANDBOX_IMAGE` (default `lab-agent:latest`), `LAB_SANDBOX_NETWORK`

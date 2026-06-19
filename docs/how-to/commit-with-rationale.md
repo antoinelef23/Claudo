@@ -11,7 +11,7 @@ For the exact message shape and the trailer grammar, this guide defers to the
 ## Prerequisites
 
 - A working tree with the change you intend to commit (code, artifact, or both).
-- `just` and `python3` available (the fusible runs through `scripts/content_guard.py`).
+- `just` and `python3` available (the fusible runs through `lab/engine/content_guard.py`).
 - You know which `work/<feature>/` the change belongs to.
 
 ## Steps
@@ -62,7 +62,7 @@ Verify mechanically before committing. The recipe takes the feature directory:
 
 ```bash
 just check-content work/<feature>
-# under the hood: python3 scripts/content_guard.py --git work/<feature>/spec.md
+# under the hood: python3 lab/engine/content_guard.py --git work/<feature>/spec.md
 #                 (and design.md if present), comparing the working tree to HEAD
 ```
 

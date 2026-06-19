@@ -81,9 +81,9 @@ existing, validated `devis-pose`:
 
 ```bash
 # (for later — not now)
-# cp templates/spec.md   work/<feature>/spec.md
-# cp templates/design.md work/<feature>/design.md
-# cp templates/tasks.md  work/<feature>/tasks.md
+# cp lab/templates/spec.md   work/<feature>/spec.md
+# cp lab/templates/design.md work/<feature>/design.md
+# cp lab/templates/tasks.md  work/<feature>/tasks.md
 ```
 
 ## Step 3: Plan-lint the feature
@@ -119,7 +119,7 @@ once and walk away from. If it doesn't lint, it doesn't run.
 Now we ask the orchestrator to show us the execution plan without touching anything:
 
 ```bash
-python3 scripts/orchestrate.py work/devis-pose --dry-run
+python3 lab/engine/orchestrate.py work/devis-pose --dry-run
 ```
 
 The output should look something like:
@@ -168,7 +168,7 @@ Plan: 6 nodes — T1, T2, T3, CP-1, T4, CP-2
 When the agents finish `T2` and `T3`, the run reaches the first checkpoint and pauses:
 
 ```
-🔔 CHECKPOINT CP-1 — Owner validation required → scripts/approve.sh CP-1 work/devis-pose (reviewer report: work/devis-pose/.runs/CP-1-review.md)
+🔔 CHECKPOINT CP-1 — Owner validation required → lab/engine/approve.sh CP-1 work/devis-pose (reviewer report: work/devis-pose/.runs/CP-1-review.md)
 ⏸  CP-1 — waiting for .../work/devis-pose/.approvals/CP-1
 ```
 
@@ -190,7 +190,7 @@ This report is written before every checkpoint so the Owner decides on evidence,
 Satisfied, we sign the approval:
 
 ```bash
-scripts/approve.sh CP-1 work/devis-pose
+lab/engine/approve.sh CP-1 work/devis-pose
 ```
 
 The output should be:
@@ -214,7 +214,7 @@ instead, we would have rejected it with a reason that gets passed straight to th
 
 ```bash
 # (alternative — not now)
-# scripts/reject.sh CP-1 work/devis-pose "the quote doesn't show the discount" T2
+# lab/engine/reject.sh CP-1 work/devis-pose "the quote doesn't show the discount" T2
 ```
 
 ## Step 7: Approve the merge and see it land
@@ -223,14 +223,14 @@ instead, we would have rejected it with a reason that gets passed straight to th
 `mode: blocking` — the merge is **never** automatic:
 
 ```
-🔔 CHECKPOINT CP-2 — Owner validation required → scripts/approve.sh CP-2 work/devis-pose (reviewer report: work/devis-pose/.runs/CP-2-review.md)
+🔔 CHECKPOINT CP-2 — Owner validation required → lab/engine/approve.sh CP-2 work/devis-pose (reviewer report: work/devis-pose/.runs/CP-2-review.md)
 ⏸  CP-2 — waiting for .../work/devis-pose/.approvals/CP-2
 ```
 
 We read `work/devis-pose/.runs/CP-2-review.md`, then approve:
 
 ```bash
-scripts/approve.sh CP-2 work/devis-pose
+lab/engine/approve.sh CP-2 work/devis-pose
 ```
 
 The run resumes and ends on a summary — never on a mid-course abort:

@@ -4,32 +4,32 @@
 
 # Plan-lint of a feature:  just validate work/my-feature
 validate feature:
-    python3 scripts/orchestrate.py "{{feature}}" --validate
+    python3 lab/engine/orchestrate.py "{{feature}}" --validate
 
 # Orchestrated run in foreground:  just run work/my-feature [supervised=1]
 run feature supervised="":
     #!/usr/bin/env bash
     args=""; [ -n "{{supervised}}" ] && args="--supervised"
-    caffeinate -i python3 scripts/orchestrate.py "{{feature}}" $args
+    caffeinate -i python3 lab/engine/orchestrate.py "{{feature}}" $args
 
 # Substance/form guardrail:  just check-content work/my-feature
 # Fails if the SUBSTANCE of spec/design changed without a version bump.
 check-content feature:
     #!/usr/bin/env bash
     set -euo pipefail
-    python3 scripts/content_guard.py --git "{{feature}}/spec.md"
-    if [ -f "{{feature}}/design.md" ]; then python3 scripts/content_guard.py --git "{{feature}}/design.md"; fi
+    python3 lab/engine/content_guard.py --git "{{feature}}/spec.md"
+    if [ -f "{{feature}}/design.md" ]; then python3 lab/engine/content_guard.py --git "{{feature}}/design.md"; fi
 
 # Substance/form guardrail in CI: compares changed features to a base branch.
 check-content-ci base="origin/main":
-    BASE="{{base}}" bash scripts/ci_checks.sh
+    BASE="{{base}}" bash lab/engine/ci_checks.sh
 
 # Model eval:  just eval-models [layer=all] [live=1] [models=a,b]
 # Without live: refuses (billed campaign). live=1 calls the real models.
 eval-models layer="all" live="" models="":
     #!/usr/bin/env bash
     extra=""; [ -n "{{live}}" ] && extra="$extra --live"; [ -n "{{models}}" ] && extra="$extra --models {{models}}"
-    python3 scripts/eval_models.py --layer "{{layer}}" $extra
+    python3 lab/engine/eval_models.py --layer "{{layer}}" $extra
 
 install:
     #!/usr/bin/env bash

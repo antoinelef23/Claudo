@@ -16,8 +16,8 @@ from pathlib import Path
 import pytest
 
 REPO = Path(__file__).resolve().parents[2]
-ORCH = REPO / "scripts" / "orchestrate.py"
-sys.path.insert(0, str(REPO / "scripts"))
+ORCH = REPO / "lab" / "engine" / "orchestrate.py"
+sys.path.insert(0, str(REPO / "lab" / "engine"))
 import approvals  # noqa: E402
 
 # Test secret: the tests exercise the SECURE path (signed tokens) by default.
@@ -107,7 +107,7 @@ def run_orch(
 
 
 def approve(sandbox: Path, cp: str, feature: str = "work/feat") -> None:
-    """Drop a SIGNED approval token with TEST_SECRET (as scripts/approve.sh would
+    """Drop a SIGNED approval token with TEST_SECRET (as lab/engine/approve.sh would
     with LAB_APPROVAL_SECRET set)."""
     fdir = (sandbox / feature).resolve()
     d = fdir / ".approvals"
@@ -124,8 +124,8 @@ def approve(sandbox: Path, cp: str, feature: str = "work/feat") -> None:
 
 
 def write_registry(sandbox: Path, toml: str) -> None:
-    (sandbox / "models").mkdir(exist_ok=True)
-    (sandbox / "models" / "registry.toml").write_text(toml)
+    (sandbox / "lab" / "models").mkdir(parents=True, exist_ok=True)
+    (sandbox / "lab" / "models" / "registry.toml").write_text(toml)
 
 
 def argv_log(sandbox: Path) -> str:

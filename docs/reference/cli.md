@@ -1,7 +1,7 @@
 # CLI reference
 
 Technical description of the command-line surface: the orchestrator
-(`scripts/orchestrate.py`), the `just` recipes, and the helper scripts.
+(`lab/engine/orchestrate.py`), the `just` recipes, and the helper scripts.
 Facts only. For workflows, see the how-to guides linked at each section.
 
 Related reference pages: [environment.md](environment.md) (environment
@@ -20,7 +20,7 @@ applies the eval gate after each task, and handles checkpoints.
 ### Usage
 
 ```
-python3 scripts/orchestrate.py <feature> [--dry-run] [--validate] [--supervised] [--force]
+python3 lab/engine/orchestrate.py <feature> [--dry-run] [--validate] [--supervised] [--force]
 ```
 
 `<feature>` is a feature directory (relative to the repo root) containing
@@ -40,7 +40,7 @@ How-to: [run-the-orchestrator.md](../how-to/run-the-orchestrator.md).
 
 ### Behavior constants
 
-These are fixed in `scripts/orchestrate.py` (not CLI flags); some are
+These are fixed in `lab/engine/orchestrate.py` (not CLI flags); some are
 overridable by environment variable (see [environment.md](environment.md)).
 
 | Constant | Value | Meaning |
@@ -82,11 +82,11 @@ script; recipes no-op cleanly when `pyproject.toml` is absent.
 
 | Recipe | Command | Purpose |
 |---|---|---|
-| `validate feature` | `python3 scripts/orchestrate.py "{{feature}}" --validate` | Plan-lint a feature's `tasks.md`. |
-| `run feature supervised=""` | `caffeinate -i python3 scripts/orchestrate.py "{{feature}}" [--supervised]` | Orchestrated run in foreground; `--supervised` added when `supervised` is non-empty. |
-| `check-content feature` | `python3 scripts/content_guard.py --git "{{feature}}/spec.md"` (and `design.md` if present) | Substance/form guardrail vs `HEAD`; fails if substance changed without a version bump. |
-| `check-content-ci base="origin/main"` | `BASE="{{base}}" bash scripts/ci_checks.sh` | CI substance/form guardrail + plan-lint vs a base branch. |
-| `eval-models layer="all" live="" models=""` | `python3 scripts/eval_models.py --layer "{{layer}}" [--live] [--models {{models}}]` | Run the model-eval harness; `--live` calls real (billed) models. |
+| `validate feature` | `python3 lab/engine/orchestrate.py "{{feature}}" --validate` | Plan-lint a feature's `tasks.md`. |
+| `run feature supervised=""` | `caffeinate -i python3 lab/engine/orchestrate.py "{{feature}}" [--supervised]` | Orchestrated run in foreground; `--supervised` added when `supervised` is non-empty. |
+| `check-content feature` | `python3 lab/engine/content_guard.py --git "{{feature}}/spec.md"` (and `design.md` if present) | Substance/form guardrail vs `HEAD`; fails if substance changed without a version bump. |
+| `check-content-ci base="origin/main"` | `BASE="{{base}}" bash lab/engine/ci_checks.sh` | CI substance/form guardrail + plan-lint vs a base branch. |
+| `eval-models layer="all" live="" models=""` | `python3 lab/engine/eval_models.py --layer "{{layer}}" [--live] [--models {{models}}]` | Run the model-eval harness; `--live` calls real (billed) models. |
 | `install` | `uv sync` (if `pyproject.toml`) | Install dependencies. |
 | `lint` | `uv run ruff check --fix . && uv run ruff format .` | Mutating lint: auto-fix + format. Local/agent path. |
 | `lint-check` | `uv run ruff check . && uv run ruff format --check .` | Non-mutating lint: fails on drift instead of fixing. |
@@ -105,18 +105,18 @@ How-to: [evaluate-models.md](../how-to/evaluate-models.md),
 ### approve.sh
 
 ```
-scripts/approve.sh <CP-n> <feature_dir>
+lab/engine/approve.sh <CP-n> <feature_dir>
 ```
 
 Creates the signed (HMAC) approval token the orchestrator waits for, by
-calling `scripts/approvals.py sign`. Author is `git config user.name` or
+calling `lab/engine/approvals.py sign`. Author is `git config user.name` or
 `whoami`. Requires `LAB_APPROVAL_SECRET` to produce a forgery-resistant
 token. Both arguments are required.
 
 ### reject.sh
 
 ```
-scripts/reject.sh <CP-n> <feature_dir> "reason" [Tn ...]
+lab/engine/reject.sh <CP-n> <feature_dir> "reason" [Tn ...]
 ```
 
 Writes `<feature_dir>/.approvals/<CP-n>.rejected` with `reason=`, optional
@@ -136,12 +136,12 @@ content_guard.py --against <ref> <path.md>      # working tree vs <ref> (CI)
 Extracts a substance fingerprint (per-ID assertions INV/BHV/EX/EVAL/NG/OQ/ADR
 with continuation lines, glossary names, KPI lines), normalized to ignore
 form. Exit 1 if substance changed without a `version:` bump. Invoked by
-`just check-content` and `scripts/ci_checks.sh`.
+`just check-content` and `lab/engine/ci_checks.sh`.
 
 ### ci_checks.sh
 
 ```
-[BASE=origin/main] bash scripts/ci_checks.sh
+[BASE=origin/main] bash lab/engine/ci_checks.sh
 ```
 
 For each feature changed under `work/` or `examples/` vs `BASE` (default
@@ -153,7 +153,7 @@ feature changed. Invoked by `just check-content-ci`.
 ### eval_models.py
 
 ```
-python3 scripts/eval_models.py [--layer L] [--models a,b] [--runs N] [--live] [--stamp S] [--budget USD]
+python3 lab/engine/eval_models.py [--layer L] [--models a,b] [--runs N] [--live] [--stamp S] [--budget USD]
 ```
 
 | Flag | Effect | Default |

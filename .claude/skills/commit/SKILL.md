@@ -99,7 +99,7 @@ proceed as one commit. One coherent change — one `Why:` — per commit.
 - **Version bump?** — did a *substance* line (an ID assertion, glossary name, KPI) of
   `spec.md`/`design.md` change? If yes the artifact's `version:` MUST be bumped in this
   same commit, recorded in `Version-Bump:`. Verify mechanically: `just check-content` (or
-  `python3 scripts/content_guard.py --git work/<feature>/spec.md`) must pass. If it fails,
+  `python3 lab/engine/content_guard.py --git work/<feature>/spec.md`) must pass. If it fails,
   substance changed without a bump — fix that **before** committing; never weaken the fusible.
 
 ## Step 4 — Write the WHY (the actual point)

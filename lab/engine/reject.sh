@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Rejecting a checkpoint: scripts/reject.sh CP-1 <feature_dir> "reason" [T2 T3 ...]
+# Rejecting a checkpoint: lab/engine/reject.sh CP-1 <feature_dir> "reason" [T2 T3 ...]
 # The orchestrator reopens the targeted tasks (default: all those of the checkpoint)
 # passing the reason to the agent, then re-presents the checkpoint.
 # Beyond 2 rejections of the same checkpoint: stop, manual resume (MAX_CP_REJECTS).

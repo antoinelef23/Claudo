@@ -1,7 +1,7 @@
 # How to run the orchestrator on a feature
 
 This guide shows you how to take a feature whose plan (`tasks.md`) is ready and
-drive it to completion with `scripts/orchestrate.py`: launch the run in the
+drive it to completion with `lab/engine/orchestrate.py`: launch the run in the
 background, pick an autonomy level, respond to a blocking checkpoint, and resume
 after a stop.
 
@@ -34,7 +34,7 @@ before each agent call, so do not echo it into `tasks.md` or any artifact.
 
 Validate the DAG before anything runs. A plan that does not lint does not run.
 
-    python3 scripts/orchestrate.py work/<feature> --validate
+    python3 lab/engine/orchestrate.py work/<feature> --validate
     # or: just validate work/<feature>
 
 This checks the acyclic graph, that spec IDs exist, `done_when` is present,
@@ -48,7 +48,7 @@ and re-run before proceeding.
 
 See the waves and checkpoints without executing or spending anything:
 
-    python3 scripts/orchestrate.py work/<feature> --dry-run
+    python3 lab/engine/orchestrate.py work/<feature> --dry-run
 
 This is autonomy level **L0 — plan**: nothing runs, no agent is called.
 
@@ -57,7 +57,7 @@ This is autonomy level **L0 — plan**: nothing runs, no agent is called.
 On macOS, wrap the run in `caffeinate -i` so the machine does not sleep mid-run,
 and redirect output to a log file:
 
-    caffeinate -i python3 scripts/orchestrate.py work/<feature> \
+    caffeinate -i python3 lab/engine/orchestrate.py work/<feature> \
       > work/<feature>/.runs/run.log 2>&1 &
 
 This is the default autonomy level **L2 — cruise**: the run pauses only at the
@@ -99,14 +99,14 @@ panelist's findings with `file:line`. Then either approve or reject.
 
 **Approve** — write the signed token the orchestrator is waiting for:
 
-    scripts/approve.sh CP-1 work/<feature>
+    lab/engine/approve.sh CP-1 work/<feature>
 
 The token is HMAC-signed with `LAB_APPROVAL_SECRET`, verified, then consumed
 (it cannot be replayed). The run resumes on the next poll.
 
 **Reject** — reopen the targeted tasks with a reason passed verbatim to the agent:
 
-    scripts/reject.sh CP-1 work/<feature> "the quote doesn't show the discount" T2
+    lab/engine/reject.sh CP-1 work/<feature> "the quote doesn't show the discount" T2
 
 Omit the task IDs to reopen all tasks the checkpoint covers. The reopened tasks
 re-run with your feedback attached, then the checkpoint is presented again. After
@@ -128,7 +128,7 @@ If the run stops — budget cap reached, a node blocked or failed, too many
 checkpoint rejections, or you killed it — fix the cause, then **re-run the exact
 same command**:
 
-    caffeinate -i python3 scripts/orchestrate.py work/<feature> \
+    caffeinate -i python3 lab/engine/orchestrate.py work/<feature> \
       > work/<feature>/.runs/run.log 2>&1 &
 
 Resume reads `work/<feature>/.runs/state.json`: `done` nodes are not replayed.
@@ -178,7 +178,7 @@ fails closed. Export the secret (recommended):
 
 Only if you knowingly accept unsigned, forgeable approvals, opt out:
 
-    LAB_ALLOW_UNSIGNED_APPROVALS=1 python3 scripts/orchestrate.py work/<feature>
+    LAB_ALLOW_UNSIGNED_APPROVALS=1 python3 lab/engine/orchestrate.py work/<feature>
 
 ### The run refuses to start: status is not "approved"
 
@@ -189,7 +189,7 @@ The orchestrator runs only an approved plan. Set `status: approved` in the
 
 The token in `.approvals/CP-n` failed signature verification (wrong or missing
 secret, or a hand-edited token). The orchestrator discards it (renamed
-`.invalid-…`) and keeps waiting. Re-create a valid token with `scripts/approve.sh`
+`.invalid-…`) and keeps waiting. Re-create a valid token with `lab/engine/approve.sh`
 in a shell that has the same `LAB_APPROVAL_SECRET` that started the run.
 
 ### The run stopped on budget

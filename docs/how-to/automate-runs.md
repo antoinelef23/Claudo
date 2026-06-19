@@ -12,7 +12,7 @@ and follow the convention below.
 | **git pre-commit** | Every commit, on the author's machine (opt-in) | Cheap, deterministic local gate; blocks bad commits early | `.githooks/`, enabled via `git config core.hooksPath .githooks` |
 | **CI** | Every PR + push to `main` | Authoritative, non-bypassable merge gate; the superset | `.github/workflows/gate.yml` |
 | **human-invoked** (`just`) | On demand by a person (or reused by CI) | Control surface + dev entry points; never auto-triggered | `justfile` |
-| **library** | Imported by other code, never executed directly | Pure logic | `scripts/registry.py`, `scripts/runner.py`, `scripts/approvals.py`, `scripts/content_guard.py` |
+| **library** | Imported by other code, never executed directly | Pure logic | `lab/engine/registry.py`, `lab/engine/runner.py`, `lab/engine/approvals.py`, `lab/engine/content_guard.py` |
 
 Rule of thumb: **CI is the superset** (it must catch everything). Pre-commit is the
 fast local subset. Claude hooks are in-session nudges. `just` is how humans (and CI)
@@ -34,7 +34,7 @@ invoke the underlying logic.
   with `git config core.hooksPath .githooks`; override a commit with `--no-verify`.
 
 ### CI — `.github/workflows/gate.yml`
-- `just check-content-ci` → `scripts/ci_checks.sh`: `content_guard --against <base>` on
+- `just check-content-ci` → `lab/engine/ci_checks.sh`: `content_guard --against <base>` on
   changed features (blocking) + plan-lint (informative).
 - `just gate-ci`: `lint-check` (non-mutating ruff) + `test` + `evals`.
   *Why here:* authoritative, non-bypassable; the superset of the local gates. Triggers
@@ -46,10 +46,10 @@ invoke the underlying logic.
   `check-content <feature>`, `check-content-ci [base]`, `eval-models [layer] [live] [models]`.
   *Why here:* the control surface; never auto-triggered (CI and the orchestrator reuse
   these recipes rather than reimplementing them).
-- **`scripts/approve.sh` / `reject.sh`** — human checkpoint decisions (signed approval /
+- **`lab/engine/approve.sh` / `reject.sh`** — human checkpoint decisions (signed approval /
   rejection). Owner-invoked only.
 
-### orchestrator — `scripts/orchestrate.py`
+### orchestrator — `lab/engine/orchestrate.py`
 - The DAG executor. Not a "gate" surface; it *drives* agents and internally calls
   `just evals` (the gate recipe) + the runner. Runs via `just run` or in the background.
 

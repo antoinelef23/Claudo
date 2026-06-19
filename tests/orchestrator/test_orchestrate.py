@@ -450,7 +450,7 @@ def test_corrupt_state_json_does_not_crash_resume(sandbox: Path) -> None:
 
 def test_concurrent_orchestrate_fails_fast(sandbox: Path) -> None:
     # finding H6: two concurrent runs on the same feature → the 2nd fails fast.
-    sys.path.insert(0, str(REPO / "scripts"))
+    sys.path.insert(0, str(REPO / "lab" / "engine"))
     import orchestrate
 
     write_tasks(

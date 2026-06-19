@@ -33,7 +33,7 @@ Frontmatter schema:
 **Conformance check — `work/salle-booking/` bundle:** the three files would conform to
 OKF v0.1 with one change (add `type:`) and would *gain* nothing required beyond that.
 Our `version:` + pointer + `depends_on` machinery is **orchestration semantics OKF does
-not model** (OKF links are undirected references, not a build DAG). `models/` docs have
+not model** (OKF links are undirected references, not a build DAG). `lab/models/` docs have
 no frontmatter today and would need `type:` to participate.
 
 ## Assessment
@@ -66,7 +66,7 @@ weaken `content_guard`/plan-lint.
 ## Status — `type:` adopted
 
 The mandatory OKF field is in place: the frontmatter key `artifact:` was renamed to
-**`type:`** across all 3-artifact bundles (`work/*`, `templates/`), the golden eval
+**`type:`** across all 3-artifact bundles (`work/*`, `lab/templates/`), the golden eval
 fixtures, and the behavioral inline fixtures. Safe because no code reads the key and
 content_guard does not fingerprint frontmatter — **no version bumps needed** (verified).
 
@@ -75,5 +75,5 @@ Still deferred (low ROI / by design):
   serve as title/description; add later only if a consumer needs the structured fields.
 - The markdown-link knowledge graph and reserved `index.md` / `log.md` — our `version:`
   pointers + `depends_on` already encode contract + orchestration semantics OKF doesn't model.
-- `models/` docs frontmatter — note `models/profiles/*.md` are injected verbatim into agent
+- `lab/models/` docs frontmatter — note `lab/models/profiles/*.md` are injected verbatim into agent
   prompts, so they intentionally carry no frontmatter.

@@ -5,7 +5,7 @@ tools: Read, Grep, Glob, Bash, WebFetch, WebSearch
 version: 1.1.0
 # changelog: 1.1.0 — consult git history (commit Why: body) for prior ADR rationale before proposing
 #            a pattern, so a superseded approach is not re-proposed. Read-only scaffolding addition;
-#            no model swap / chain-of-command change → behavioral eval deferred (models/EVOLUTION.md).
+#            no model swap / chain-of-command change → behavioral eval deferred (lab/models/EVOLUTION.md).
 #            1.0.0 — initial version.
 ---
 

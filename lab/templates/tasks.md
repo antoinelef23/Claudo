@@ -21,7 +21,7 @@ design: ./design.md      # version: <x.y.z>
 > 4. Each task references the spec IDs it implements → commit ↔ contract traceability.
 > 5. **Failure containment**: a failed/blocked task only neutralizes its own sub-tree of dependents;
 >    the other branches of the DAG continue. The run always ends with a summary.
-> 6. **Mandatory plan-lint**: `python3 scripts/orchestrate.py <feature> --validate` must be green
+> 6. **Mandatory plan-lint**: `python3 lab/engine/orchestrate.py <feature> --validate` must be green
 >    before proposing the plan to the Owner (acyclic DAG, existing spec IDs, disjoint parallel paths,
 >    done_when present). A plan that does not parse does not execute.
 
@@ -65,7 +65,7 @@ flowchart TD
   are enough to decide. Any decision, external integration, real data, or merge = blocking.)*
 - **reviews:** local demo, full diff, evals [EVAL-1..3], any spec deviations — the
   `reviewer` report is generated automatically in `.runs/CP-n-review.md` before each checkpoint
-- **on_reject:** `scripts/reject.sh CP-n <feature> "reason" [Tn …]` — the targeted tasks (default: all
+- **on_reject:** `lab/engine/reject.sh CP-n <feature> "reason" [Tn …]` — the targeted tasks (default: all
   of those in the checkpoint) are reopened with the reason passed to the agent, the checkpoint re-presents
   itself (max 2 rejects, then stop). If there is a spec gap → amend spec.md first (separate commit).
 

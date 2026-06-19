@@ -2,7 +2,7 @@
 name: implementer
 description: Implements ONE task from tasks.md against the spec and the design. Tests first, code second. Touches only the files_touched of its task. Run in parallel with other implementers when the parallel_groups allow it.
 version: 1.0.0
-# changelog: 1.0.0 — initial version. Evolve via the "living agents" loop (models/EVOLUTION.md):
+# changelog: 1.0.0 — initial version. Evolve via the "living agents" loop (lab/models/EVOLUTION.md):
 #            any change must raise a behavioral eval score without regressing another.
 ---
 
