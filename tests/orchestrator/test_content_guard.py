@@ -296,3 +296,36 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
         text=True,
     )
     assert r2.returncode == 0, r2.stdout + r2.stderr
+
+
+def test_ci_checks_detects_domain_nested_feature(tmp_path):
+    # issue #25: a feature can live under an optional domain layer
+    # work/<domain>/<feature>/. ci_checks must still find it (nearest ancestor with
+    # spec.md), not collapse it to work/<domain>.
+    import os
+    import shutil
+
+    wd = tmp_path / "r"
+    wd.mkdir()
+    shutil.copytree(REPO / "lab" / "engine", wd / "lab" / "engine")
+    shutil.copy(REPO / "justfile", wd / "justfile")
+    (wd / "pyproject.toml").write_text("[project]\nname = 't'\nversion = '0'\n")
+    feat = wd / "work" / "agent" / "booking"
+    feat.mkdir(parents=True)
+    (feat / "spec.md").write_text(SPEC_LIST)
+    _git(wd, "init", "-q", "-b", "base")
+    _git(wd, "add", "-A")
+    _git(wd, "commit", "-qm", "base")
+    _git(wd, "checkout", "-q", "-b", "feature")
+    (feat / "spec.md").write_text(SPEC_LIST.replace("× 45.0", "× 99.0"))
+    _git(wd, "commit", "-qam", "sneaky")
+
+    r = subprocess.run(
+        ["bash", "lab/engine/ci_checks.sh"],
+        cwd=wd,
+        env={**os.environ, "BASE": "base"},
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "work/agent/booking" in r.stdout  # the leaf, not work/agent

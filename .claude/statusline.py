@@ -45,7 +45,8 @@ def _project_dir(data: dict) -> Path:
 
 
 def _latest_run(proj: Path) -> tuple[str, dict] | None:
-    states = list(proj.glob("work/*/.runs/state.json"))
+    # Recursive: handles work/<feature>/ and work/<domain>/<feature>/ alike.
+    states = list(proj.glob("work/**/.runs/state.json"))
     if not states:
         return None
     newest = max(states, key=lambda p: p.stat().st_mtime)
@@ -55,8 +56,13 @@ def _latest_run(proj: Path) -> tuple[str, dict] | None:
         return None
     if not isinstance(obj, dict) or not obj:
         return None
-    # work/<feature>/.runs/state.json -> <feature>
-    return newest.parent.parent.name, obj
+    # work/<…>/<feature>/.runs/state.json -> the path under work/ (e.g. "agent/booking")
+    feat_dir = newest.parent.parent
+    try:
+        feature = str(feat_dir.relative_to(proj / "work"))
+    except ValueError:
+        feature = feat_dir.name
+    return feature, obj
 
 
 def _run_segment(feature: str, st: dict) -> str:
