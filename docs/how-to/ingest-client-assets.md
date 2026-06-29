@@ -26,6 +26,10 @@ you read `assets/` and turn it into the structured triplet — `spec.md`, `desig
 A deployment that wants its assets versioned (for full reproducibility) opts in by
 editing that `.gitignore` rule — that is a per-deployment choice, not a template default.
 
+> **`assets` is a reserved directory name.** Because `work/**/assets/` is gitignored,
+> do not name a feature or a domain `assets` — a `work/assets/` or `work/<domain>/assets/`
+> feature directory would be silently ignored. Pick any other name.
+
 ## Brand names in assets are fine
 
 The [brand guard](../reference/cli.md#brand_guardpy) deliberately **excludes** `assets/`

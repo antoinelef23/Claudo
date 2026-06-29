@@ -70,8 +70,8 @@ from verify import parse_verify
 # LAB_ROOT: override for tests (sandbox). Default: the repo root, found by walking up
 # from this file to the dir holding pyproject.toml — so the engine can live at any depth
 # (e.g. lab/engine/) without hard-coding parent levels.
-def _repo_root() -> Path:
-    here = Path(__file__).resolve()
+def _repo_root(start: Path | None = None) -> Path:
+    here = (start or Path(__file__)).resolve()
     for p in (here, *here.parents):
         if (p / "pyproject.toml").exists():
             return p

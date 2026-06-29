@@ -71,6 +71,36 @@ def test_orchestrator_passes_role_default_model(sandbox: Path) -> None:
     assert "--model test-model-x" in argv_log(sandbox)
 
 
+def test_repo_root_walks_up_to_nearest_pyproject(tmp_path: Path) -> None:
+    # core mechanism of the lab/ layout (#23): find the repo root by the pyproject.toml,
+    # so the engine can sit at any depth (lab/engine/) without hard-coded parent levels.
+    root = tmp_path / "proj"
+    (root / "lab" / "engine").mkdir(parents=True)
+    (root / "pyproject.toml").write_text("")
+    assert orchestrate._repo_root(root / "lab" / "engine" / "x.py") == root.resolve()
+
+    # two nested pyproject.toml → stops at the NEAREST
+    inner = root / "sub" / "pkg"
+    inner.mkdir(parents=True)
+    (inner / "pyproject.toml").write_text("")
+    assert orchestrate._repo_root(inner / "a" / "y.py") == inner.resolve()
+
+    # none found → 3-up fallback (lab/engine/<file> -> repo root)
+    bare = tmp_path / "bare" / "a" / "b" / "c"
+    bare.mkdir(parents=True)
+    assert orchestrate._repo_root(bare / "z.py") == (tmp_path / "bare" / "a").resolve()
+
+    # eval_models shares the same logic
+    assert eval_models._repo_root(root / "lab" / "engine" / "x.py") == root.resolve()
+
+
+def test_live_modules_resolve_root_to_the_repo() -> None:
+    # the real modules must resolve ROOT to the actual repo (the pyproject dir), not
+    # lab/ or lab/engine/ — proves the walk-up fired correctly at import.
+    assert orchestrate.ROOT == REPO
+    assert eval_models.ROOT == REPO
+
+
 def test_orchestrator_runs_a_domain_nested_feature(sandbox: Path) -> None:
     # issue #25: a feature may live under an optional domain layer
     # work/<domain>/<feature>/. The orchestrator takes the dir as-is, so it must run

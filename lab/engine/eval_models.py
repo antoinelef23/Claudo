@@ -46,8 +46,8 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 # Repo root = the dir holding pyproject.toml, found by walking up (the engine lives at
 # lab/engine/, the data — evals/, lab/models/ — hangs off the repo root).
-def _repo_root() -> Path:
-    here = Path(__file__).resolve()
+def _repo_root(start: Path | None = None) -> Path:
+    here = (start or Path(__file__)).resolve()
     for p in (here, *here.parents):
         if (p / "pyproject.toml").exists():
             return p

@@ -256,7 +256,9 @@ def test_ci_checks_blocks_fond_change_without_bump(tmp_path):
     wd.mkdir()
     shutil.copytree(REPO / "lab" / "engine", wd / "lab" / "engine")
     shutil.copy(REPO / "justfile", wd / "justfile")
-    # pyproject.toml so the engine's repo-root walk-up resolves to wd (it lives at any depth).
+    # pyproject.toml is for the `just validate` sub-step (plan-lint → orchestrate.py,
+    # which resolves its repo root by walking up to it); content_guard/ci_checks.sh
+    # themselves are cwd-relative and don't need it.
     (wd / "pyproject.toml").write_text("[project]\nname = 't'\nversion = '0'\n")
     (wd / "work" / "feat").mkdir(parents=True)
     (wd / "work" / "feat" / "spec.md").write_text(SPEC_LIST)
@@ -329,3 +331,37 @@ def test_ci_checks_detects_domain_nested_feature(tmp_path):
     )
     assert r.returncode == 1, r.stdout + r.stderr
     assert "work/agent/booking" in r.stdout  # the leaf, not work/agent
+
+
+def test_ci_checks_guards_design_when_spec_absent(tmp_path):
+    # the substance guard must not be keyed to spec.md alone: a design.md substance
+    # change with no sibling spec.md (e.g. spec deleted in the same change) must still
+    # be detected via the design.md member of the triplet.
+    import os
+    import shutil
+
+    design = "---\nversion: 1.0.0\n---\n## Decisions\n- **ADR-1** — installation rate MUST be 45.0.\n"
+    wd = tmp_path / "r"
+    wd.mkdir()
+    shutil.copytree(REPO / "lab" / "engine", wd / "lab" / "engine")
+    shutil.copy(REPO / "justfile", wd / "justfile")
+    (wd / "pyproject.toml").write_text("[project]\nname = 't'\nversion = '0'\n")
+    feat = wd / "work" / "feat"
+    feat.mkdir(parents=True)
+    (feat / "design.md").write_text(design)  # NOTE: no spec.md in this feature
+    _git(wd, "init", "-q", "-b", "base")
+    _git(wd, "add", "-A")
+    _git(wd, "commit", "-qm", "base")
+    _git(wd, "checkout", "-q", "-b", "feature")
+    (feat / "design.md").write_text(design.replace("45.0", "99.0"))
+    _git(wd, "commit", "-qam", "sneaky design change")
+
+    r = subprocess.run(
+        ["bash", "lab/engine/ci_checks.sh"],
+        cwd=wd,
+        env={**os.environ, "BASE": "base"},
+        capture_output=True,
+        text=True,
+    )
+    assert r.returncode == 1, r.stdout + r.stderr
+    assert "work/feat" in r.stdout
