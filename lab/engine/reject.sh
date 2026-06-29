@@ -8,7 +8,11 @@ CP="${1:?usage: reject.sh CP-n <feature_dir> \"reason\" [Tn ...]}"
 FEATURE="${2:?usage: reject.sh CP-n <feature_dir> \"reason\" [Tn ...]}"
 REASON="${3:?give a reason — it is passed verbatim to the agents}"
 shift 3
-DIR="$(cd "$(dirname "$0")/.." && pwd)/$FEATURE/.approvals"
+ROOT="$(cd "$(dirname "$0")" && git rev-parse --show-toplevel)"  # lab repo root (engine lives at lab/engine/)
+# External-project support (see approve.sh): resolve the feature under
+# LAB_PROJECT_ROOT when set; an absolute FEATURE is honored as-is; default = lab repo.
+if [[ "$FEATURE" = /* ]]; then FEATURE_DIR="$FEATURE"; else FEATURE_DIR="${LAB_PROJECT_ROOT:-$ROOT}/$FEATURE"; fi
+DIR="$FEATURE_DIR/.approvals"
 mkdir -p "$DIR"
 {
   echo "reason=$REASON"
