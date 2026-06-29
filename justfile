@@ -12,6 +12,18 @@ run feature supervised="":
     args=""; [ -n "{{supervised}}" ] && args="--supervised"
     caffeinate -i python3 lab/engine/orchestrate.py "{{feature}}" $args
 
+# Plan-lint a feature living in an EXTERNAL project:
+#   just validate-project /path/to/proj work/my-feature
+validate-project project feature:
+    python3 lab/engine/orchestrate.py "{{feature}}" --project "{{project}}" --validate
+
+# Orchestrated run against an EXTERNAL project (work/, code, evals, git live there):
+#   just run-project /path/to/proj work/my-feature [supervised=1]
+run-project project feature supervised="":
+    #!/usr/bin/env bash
+    args=""; [ -n "{{supervised}}" ] && args="--supervised"
+    caffeinate -i python3 lab/engine/orchestrate.py "{{feature}}" --project "{{project}}" $args
+
 # Substance/form guardrail:  just check-content work/my-feature
 # Fails if the SUBSTANCE of spec/design changed without a version bump.
 check-content feature:

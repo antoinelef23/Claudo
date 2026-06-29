@@ -53,9 +53,15 @@ def claude_argv(
     allowed_tools: list[str] | None,
     max_turns: int,
     permission_mode: str,
+    add_dirs: list[str] | None = None,
 ) -> list[str]:
     """Build the `claude -p` argv. Shared by the host and sandbox runners so the
-    agent-facing command is identical in both."""
+    agent-facing command is identical in both.
+
+    add_dirs grants the agent read access to directories outside its cwd — used when
+    the build runs in an external project (cwd=PROJECT) but the agent must read the
+    framework files under the LAB. Empty/None by default, so the in-repo path and every
+    test produce an unchanged argv."""
     cmd = [
         "claude",
         "-p",
@@ -69,6 +75,8 @@ def claude_argv(
         "--output-format",
         "json",
     ]
+    for d in add_dirs or []:
+        cmd += ["--add-dir", d]
     if model:
         cmd += ["--model", model]
     if resume:
@@ -107,6 +115,7 @@ class AgentRunner(abc.ABC):
         permission_mode: str = "acceptEdits",
         timeout: int = 2400,
         env: dict | None = None,
+        add_dirs: list[str] | None = None,
     ) -> RunResult: ...
 
 
@@ -131,6 +140,7 @@ class ClaudeCliRunner(AgentRunner):
         permission_mode: str = "acceptEdits",
         timeout: int = 2400,
         env: dict | None = None,
+        add_dirs: list[str] | None = None,
     ) -> RunResult:
         cmd = claude_argv(
             prompt,
@@ -139,6 +149,7 @@ class ClaudeCliRunner(AgentRunner):
             allowed_tools=allowed_tools,
             max_turns=max_turns,
             permission_mode=permission_mode,
+            add_dirs=add_dirs,
         )
         try:
             p = subprocess.run(

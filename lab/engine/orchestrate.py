@@ -79,8 +79,22 @@ def _repo_root(start: Path | None = None) -> Path:
 
 
 ROOT = Path(os.environ["LAB_ROOT"]) if os.environ.get("LAB_ROOT") else _repo_root()
+# LAB is the framework root (engine, model registry, agent definitions, docs).
+# It is an alias of ROOT — kept distinct in intent so the prompts and the
+# add-dir grant read clearly.
+LAB = ROOT
+# PROJECT is where the BUILD lives: work/<feature>, the code under build, the evals,
+# and the git repo that receives the commits. It defaults to LAB (and every existing
+# test sets only LAB_ROOT) so behaviour is unchanged — unless an external build target
+# is selected via --project <path> or LAB_PROJECT_ROOT. main() may override it after
+# parsing the CLI; the env default keeps it defined for any earlier reference.
+PROJECT = (
+    Path(os.environ["LAB_PROJECT_ROOT"]).resolve()
+    if os.environ.get("LAB_PROJECT_ROOT")
+    else ROOT
+)
 REGISTRY = load_registry(
-    ROOT
+    LAB
 )  # model×role assignment (empty if no lab/models/registry.toml)
 MAX_EVAL_RETRIES = 3
 MAX_PARALLEL = 3
@@ -196,15 +210,21 @@ def run_claude(
     # The approval secret must NEVER be visible to a sub-agent: otherwise
     # it could sign its own checkpoint validation (finding H1).
     child_env = {k: v for k, v in os.environ.items() if k != approvals.ENV_SECRET}
+    # When the build lives in an external project, the agent runs there (cwd=PROJECT)
+    # but must still READ the framework files (agent defs, engineering-rules, …) which
+    # live under the LAB — grant that dir explicitly. When PROJECT==LAB (every test and
+    # the in-repo path) no --add-dir is added, so the argv is unchanged.
+    add_dirs = [str(LAB)] if PROJECT != LAB else None
     r = RUNNER.run(
         prompt,
-        cwd=ROOT,
+        cwd=PROJECT,
         model=model,
         resume=resume,
         allowed_tools=ALLOWED_TOOLS,
         max_turns=MAX_TURNS,
         timeout=TASK_TIMEOUT_S,
         env=child_env,
+        add_dirs=add_dirs,
     )
     with COST_LOCK:
         COST_TOTAL["usd"] += r.cost_usd
@@ -218,7 +238,7 @@ def run_claude(
 
 
 def run_evals() -> tuple[bool, str]:
-    p = subprocess.run(["just", "evals"], cwd=ROOT, capture_output=True, text=True)
+    p = subprocess.run(["just", "evals"], cwd=PROJECT, capture_output=True, text=True)
     return p.returncode == 0, (p.stdout + p.stderr)[-3000:]
 
 
@@ -234,11 +254,11 @@ def evals_collected() -> str:
     if hook:
         p = Path(hook)
         return p.read_text(encoding="utf-8") if p.exists() else ""
-    if not (ROOT / "pyproject.toml").exists():
+    if not (PROJECT / "pyproject.toml").exists():
         return ""
     p = subprocess.run(
         ["uv", "run", "pytest", "-m", "eval", "--collect-only", "-q"],
-        cwd=ROOT,
+        cwd=PROJECT,
         capture_output=True,
         text=True,
     )
@@ -256,14 +276,14 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
     the feature directory (spec/design/tasks), then un-stage any undeclared golden.
     """
     with COMMIT_LOCK:
-        paths = [*node.files, str(feature.relative_to(ROOT))]
+        paths = [*node.files, str(feature.relative_to(PROJECT))]
         for p in paths:
-            subprocess.run(["git", "add", "--", p], cwd=ROOT, capture_output=True)
+            subprocess.run(["git", "add", "--", p], cwd=PROJECT, capture_output=True)
         # Oracle guardrail: a golden is committed only if it is explicitly in
         # files_touched. Otherwise we un-stage it (finding H3, scorecard anti-tamper).
         staged = subprocess.run(
             ["git", "diff", "--cached", "--name-only"],
-            cwd=ROOT,
+            cwd=PROJECT,
             capture_output=True,
             text=True,
         ).stdout.splitlines()
@@ -273,7 +293,7 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
             ):
                 subprocess.run(
                     ["git", "reset", "-q", "HEAD", "--", f],
-                    cwd=ROOT,
+                    cwd=PROJECT,
                     capture_output=True,
                 )
                 print(
@@ -281,7 +301,10 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
                     flush=True,
                 )
         leftover = subprocess.run(
-            ["git", "status", "--porcelain"], cwd=ROOT, capture_output=True, text=True
+            ["git", "status", "--porcelain"],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
         ).stdout
         out_of_scope = [
             line
@@ -295,7 +318,9 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
             )
             for line in out_of_scope[:10]:
                 print(f"     {line}", flush=True)
-        subprocess.run(["git", "commit", "-m", message], cwd=ROOT, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "-m", message], cwd=PROJECT, capture_output=True
+        )
 
 
 def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
@@ -325,7 +350,9 @@ def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
 
 def _build_base_prompt(node: Node, feature: Path) -> str:
     return (
-        f"You act as the implementer agent (.claude/agents/implementer.md). "
+        f"You act as the implementer agent ({LAB}/.claude/agents/implementer.md). "
+        f"Framework references (engineering rules, deployment standard, other agent files) "
+        f"live under {LAB} — resolve any such path there, not under the project. "
         f"Read {feature}/spec.md then {feature}/design.md then {feature}/tasks.md. "
         f"Execute ONLY task {node.id} — {node.title}. "
         f"Respect its files_touched scope and its done_when. "
@@ -348,7 +375,7 @@ def _run_verify(node: Node) -> tuple[bool, str, str]:
         return False, f"\n\n⛔ invalid verify (`{node.verify}`): {e}", "verify INVALID"
     v = subprocess.run(
         argv,
-        cwd=ROOT,
+        cwd=PROJECT,
         capture_output=True,
         text=True,
         env={**os.environ, **venv} if venv else None,
@@ -529,7 +556,7 @@ def run_review(cp: Node, feature: Path, dry: bool) -> tuple[str, Path, bool]:
     for i, mid in enumerate(models):
         lens = REVIEW_LENSES[i % len(REVIEW_LENSES)] if n > 1 else "full review"
         prompt = (
-            f"You act as the reviewer agent (.claude/agents/reviewer.md). Feature: {feature}. "
+            f"You act as the reviewer agent ({LAB}/.claude/agents/reviewer.md). Feature: {feature}. "
             f"Checkpoint {cp.id} — {cp.title}. Tasks covered: {', '.join(cp.depends_on) or 'all'}. "
             f"REVIEW LENS imposed: {lens}. "
             f"Produce the report (✅/⚠️/❌ with file:line) and you MUST end with a "
@@ -611,7 +638,7 @@ def wait_checkpoint(
                 "reviewer",
                 "checkpoint auto-validated (PASS, evals green)",
             )
-            notify(f"{node.id} auto-validated — report: {report.relative_to(ROOT)}")
+            notify(f"{node.id} auto-validated — report: {report.relative_to(PROJECT)}")
             return "approved", {}
         else:
             notify(
@@ -619,9 +646,9 @@ def wait_checkpoint(
             )
 
     notify(
-        f"CHECKPOINT {node.id}: Owner decision → lab/engine/approve.sh {node.id} {feature.relative_to(ROOT)} "
-        f'or lab/engine/reject.sh {node.id} {feature.relative_to(ROOT)} "reason" [Tn …] '
-        f"(reviewer report: {report.relative_to(ROOT)}, verdict {verdict})"
+        f"CHECKPOINT {node.id}: Owner decision → lab/engine/approve.sh {node.id} {feature.relative_to(PROJECT)} "
+        f'or lab/engine/reject.sh {node.id} {feature.relative_to(PROJECT)} "reason" [Tn …] '
+        f"(reviewer report: {report.relative_to(PROJECT)}, verdict {verdict})"
     )
     print(f"⏸  {node.id} — waiting for {approval} (or .rejected)", flush=True)
     while True:
@@ -684,9 +711,18 @@ def main() -> int:
         action="store_true",
         help="ignore status approved + lint errors (not recommended)",
     )
+    ap.add_argument(
+        "--project",
+        help="external project root where work/, code, evals and the git repo live "
+        "(default: the lab repo). Equivalent to LAB_PROJECT_ROOT.",
+    )
     args = ap.parse_args()
 
-    feature = (ROOT / args.feature).resolve()
+    if args.project:
+        global PROJECT
+        PROJECT = Path(args.project).resolve()
+
+    feature = (PROJECT / args.feature).resolve()
     fm, nodes = parse_tasks_md(feature / "tasks.md")
 
     errors, warnings = validate(feature, fm, nodes, REGISTRY)

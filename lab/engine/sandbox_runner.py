@@ -153,7 +153,14 @@ class SandboxedClaudeRunner(AgentRunner):
         permission_mode: str = "acceptEdits",
         timeout: int = 2400,
         env: dict | None = None,
+        add_dirs: list[str] | None = None,
     ) -> RunResult:
+        # NOTE: add_dirs (host paths outside the workspace, e.g. the LAB when building an
+        # external project) is intentionally NOT forwarded — the sandbox bind-mounts ONLY
+        # the workspace, so a host path would not exist inside the container. Driving an
+        # external project from the sandbox would require also mounting the LAB read-only
+        # (operator work, see docs/how-to/use-the-sandbox.md). Accepted here to keep the
+        # AgentRunner interface uniform.
         claude_cmd = claude_argv(
             prompt,
             model=model,
