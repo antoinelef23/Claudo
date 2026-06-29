@@ -30,7 +30,25 @@ import os
 import re
 import subprocess
 import sys
+import unicodedata
 from pathlib import Path
+
+# Separator class for multi-word terms: a space in the denylist also matches a
+# hyphen/dash run (so a two-word brand is caught even when written hyphenated, e.g.
+# the way a brand appears in a domain name) and any whitespace run (nbsp, double
+# space). Soft-hyphen/zero-width are removed by _normalize first, so they don't need
+# to appear here.
+_SEP = r"[\s‐-―\-]+"
+
+
+def _normalize(s: str) -> str:
+    """NFC-fold and drop invisible characters so accent decomposition (an accented
+    letter written as base + combining mark) and zero-width / soft-hyphen injection
+    inside a word can't slip a brand past the denylist."""
+    s = unicodedata.normalize("NFC", s)
+    # category Cf = format chars: soft hyphen U+00AD, zero-width U+200B-200D, U+FEFF…
+    return "".join(c for c in s if unicodedata.category(c) != "Cf")
+
 
 DENYLIST_PATH = Path(
     os.environ.get("LAB_BRAND_DENYLIST")
@@ -57,17 +75,26 @@ EXCLUDE_SUFFIX = (
 )
 
 
+def _term_pattern(term: str) -> re.Pattern[str]:
+    """Word-boundary, case-insensitive pattern for a denylist term. A space in the
+    term matches any separator run (_SEP), so a multi-word brand is caught however it
+    is spaced or hyphenated."""
+    tokens = [re.escape(t) for t in term.split()]
+    body = _SEP.join(tokens) if len(tokens) > 1 else tokens[0]
+    return re.compile(rf"\b{body}\b", re.IGNORECASE)
+
+
 def load_denylist(path: Path = DENYLIST_PATH) -> list[tuple[str, re.Pattern[str]]]:
     """Parse the denylist: one term per line, `#` comments, blank lines ignored.
-    Each term -> a word-boundary, case-insensitive pattern."""
+    Each term -> a separator-tolerant, word-boundary, case-insensitive pattern."""
     terms: list[tuple[str, re.Pattern[str]]] = []
     if not path.exists():
         return terms
     for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.strip()
+        line = _normalize(raw.strip())
         if not line or line.startswith("#"):
             continue
-        terms.append((line, re.compile(rf"\b{re.escape(line)}\b", re.IGNORECASE)))
+        terms.append((line, _term_pattern(line)))
     return terms
 
 
@@ -101,8 +128,9 @@ def scan_file(
         return []
     hits: list[tuple[int, str, str]] = []
     for i, line in enumerate(text.splitlines(), 1):
+        norm = _normalize(line)
         for term, pat in terms:
-            if pat.search(line):
+            if pat.search(norm):
                 hits.append((i, term, line.strip()))
     return hits
 

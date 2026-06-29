@@ -17,13 +17,17 @@ rc=0
 # every commit, not only feature changes). Scope excludes work/ + **/assets/.
 python3 lab/engine/brand_guard.py --staged || rc=1
 
-# Feature dirs with staged changes. Feature dir = nearest ancestor holding a spec.md,
-# so both work/<feature>/ and work/<domain>/<feature>/ are handled (depth-agnostic).
+# Feature dirs with staged changes. Feature dir = nearest ancestor holding ANY triplet
+# member (spec.md / design.md / tasks.md): depth-agnostic (work/<feature>/ and
+# work/<domain>/<feature>/) AND robust to a missing spec.md, so a design.md change is
+# still guarded even when its spec.md is absent or deleted in the same commit.
 features=$(git diff --cached --name-only -- work/ examples/ 2>/dev/null \
   | while IFS= read -r f; do
       d=$(dirname "$f")
       while [ "$d" != "." ] && [ "$d" != "work" ] && [ "$d" != "examples" ]; do
-        [ -f "$d/spec.md" ] && { echo "$d"; break; }
+        if [ -f "$d/spec.md" ] || [ -f "$d/design.md" ] || [ -f "$d/tasks.md" ]; then
+          echo "$d"; break
+        fi
         d=$(dirname "$d")
       done
     done | sort -u)

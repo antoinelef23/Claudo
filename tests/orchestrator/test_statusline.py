@@ -40,7 +40,9 @@ def test_latest_run_none_when_no_run(tmp_path):
     assert sl._latest_run(tmp_path) is None
 
 
-def test_run_segment_renders_nested_label():
+def test_run_segment_echoes_label_and_spotlights_urgent_node():
+    # _run_segment only echoes the label + spotlights the urgent node — it is depth-
+    # agnostic. The nested PATH DERIVATION is covered by test_latest_run_domain_nested.
     seg = sl._run_segment("agent/booking", {"T1": "done", "T2": "running"})
     assert "agent/booking" in seg
     assert "T2" in seg  # running node spotlighted

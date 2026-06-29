@@ -57,6 +57,43 @@ def test_multiword_term(tmp_path):
     assert pat.search("built for Initech Systems today")
 
 
+def test_multiword_separator_variants_are_caught(tmp_path):
+    # a space in the denylist must catch hyphen / double-space / nbsp variants —
+    # otherwise the hyphenated (domain-name) form of a two-word brand slips past.
+    d = tmp_path / "deny.txt"
+    d.write_text("Initech Systems\n")
+    (_, pat) = bg.load_denylist(d)[0]
+    for variant in (
+        "Initech-Systems",
+        "Initech  Systems",  # double space
+        "Initech Systems",  # nbsp
+        "Initech–Systems",  # en dash
+    ):
+        assert pat.search(bg._normalize(variant)), variant
+    assert not pat.search(bg._normalize("Initechsystems"))  # no separator -> not a hit
+
+
+def test_normalize_folds_accents_and_strips_invisibles():
+    # NFD accent (e + combining acute) folds to NFC — synthetic word, no real brand
+    nfd = "Cafe\u0301"
+    assert bg._normalize(nfd) == "Caf\u00e9"
+    # zero-width space (U+200B) and soft hyphen (U+00AD) are removed
+    assert bg._normalize("A\u200bB\u00adC") == "ABC"
+
+
+def test_scan_catches_evasions(tmp_path):
+    d = tmp_path / "deny.txt"
+    d.write_text("Initech Systems\nAcme\n")
+    terms = bg.load_denylist(d)
+    f = tmp_path / "doc.md"
+    # hyphenated multiword, NFD accent-free here, and a zero-width-split single word
+    f.write_text("Ship to Initech-Systems.\nA​cme is the client.\n")
+    hits = bg.scan_file(str(f), terms)
+    found = {t for _, t, _ in hits}
+    assert "Initech Systems" in found  # hyphen variant caught
+    assert "Acme" in found  # zero-width split caught
+
+
 # --------------------------------------------------------------- unit: scope
 
 
