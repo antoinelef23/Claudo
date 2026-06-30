@@ -11,15 +11,15 @@ INPUT=$(cat)
 ACTIVE=$(echo "$INPUT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('stop_hook_active',False))" 2>/dev/null || echo False)
 [ "$ACTIVE" = "True" ] && exit 0
 
-# Nothing to gate as long as the Python project does not exist.
-[ -f pyproject.toml ] || exit 0
+# Nothing to gate unless a gateable project exists (Python or a JS front/).
+[ -f pyproject.toml ] || [ -f front/package.json ] || exit 0
 
 # Only gate if code changed since the last commit (avoids paying for the evals on every turn).
 # --untracked-files=all: a NEW untracked package directory otherwise shows as a
 # single line "?? newpkg/" that the grep would miss — the gate would then skip a feature
 # delivered as a new module (finding H7).
 if git rev-parse --git-dir >/dev/null 2>&1; then
-  git status --porcelain --untracked-files=all | grep -qE '\.(py|toml)$' || exit 0
+  git status --porcelain --untracked-files=all | grep -qE '\.(py|toml|ts|tsx|js|jsx|mjs|cjs)$' || exit 0
 fi
 
 OUT=$(just evals 2>&1)

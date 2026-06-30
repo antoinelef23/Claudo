@@ -242,18 +242,42 @@ def run_evals() -> tuple[bool, str]:
     return p.returncode == 0, (p.stdout + p.stderr)[-3000:]
 
 
+def _just_has_recipe(name: str) -> bool:
+    """True iff PROJECT's justfile defines a recipe `name`. Fail-closed: any
+    error / missing `just` / non-zero exit ⇒ False, so a pytest-only project (or
+    a test sandbox without the recipe) falls back to the pytest path unchanged.
+    `just --summary` prints the recipe names space-separated."""
+    try:
+        p = subprocess.run(
+            ["just", "--summary"], cwd=PROJECT, capture_output=True, text=True
+        )
+    except Exception:
+        return False
+    return p.returncode == 0 and name in p.stdout.split()
+
+
 def evals_collected() -> str:
-    """Raw list of collected evals (`pytest --collect-only`).
+    """Raw list of collected evals (node-ids `path::test_name`).
 
     Serves the anti-empty-gate (empty = nothing to gate) AND ID coverage:
     the convention "test name containing the lowercased ID" makes each
-    EVAL-n in the spec mechanically verifiable.
+    EVAL-n in the spec mechanically verifiable — language-agnostic, as long as
+    the lines are `something::test_name`.
     LAB_EVALS_COLLECTED_FILE: test seam (content read as-is).
     """
     hook = os.environ.get("LAB_EVALS_COLLECTED_FILE")
     if hook:
         p = Path(hook)
         return p.read_text(encoding="utf-8") if p.exists() else ""
+    # Language-agnostic collection: if the project provides an `evals-collect`
+    # recipe, it owns listing its evals (pytest + vitest + playwright + …) as
+    # normalized `path::test_eval_n_…` node-ids. Mirrors the `just evals`
+    # delegation (run path) so the engine stays stack-neutral.
+    if _just_has_recipe("evals-collect"):
+        p = subprocess.run(
+            ["just", "evals-collect"], cwd=PROJECT, capture_output=True, text=True
+        )
+        return p.stdout
     if not (PROJECT / "pyproject.toml").exists():
         return ""
     p = subprocess.run(
@@ -389,6 +413,14 @@ def _run_verify(node: Node) -> tuple[bool, str, str]:
     return True, "", ""
 
 
+# Source files that, when touched, REQUIRE an eval (anti-empty-gate, finding M6).
+# Stack-neutral lists — extend HERE, not in the gate logic — so a JS/TS feature
+# (e.g. front/Button.tsx) is gated exactly like a Python one. Over-matching a
+# config file fails CLOSED (asks for an eval); it never lets ungated code through.
+SOURCE_EXTS = (".py", ".ts", ".tsx", ".js", ".jsx", ".mjs", ".cjs", ".vue", ".svelte")
+SOURCE_DIRS = ("src", "app", "lib", "modules", "front", "back")
+
+
 def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
     """Run evals + anti-empty-gate (M6) + ID coverage (M7). Returns (ok, agent_feedback)."""
     ok, out = run_evals()
@@ -396,12 +428,9 @@ def _eval_gate(node: Node, real_ids: list[str]) -> tuple[bool, str]:
     # implements (finding M6) — otherwise `just evals` green by absence (masked
     # exit-5) would let ungated code through.
     touches_source = any(
-        f.endswith(".py") and not f.startswith(("tests/", "evals/")) for f in node.files
-    ) or any(
-        paths_overlap(f, p)
+        f.endswith(SOURCE_EXTS) and not f.startswith(("tests/", "evals/"))
         for f in node.files
-        for p in ("src", "app", "lib", "modules")
-    )
+    ) or any(paths_overlap(f, p) for f in node.files for p in SOURCE_DIRS)
     if ok and (real_ids or touches_source):
         collected = evals_collected()
         if "::" not in collected:

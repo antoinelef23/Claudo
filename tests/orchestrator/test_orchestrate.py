@@ -420,6 +420,104 @@ def test_eval_id_matching_rejects_substring_collisions(sandbox: Path) -> None:
     assert state(sandbox)["T1"] == "done"
 
 
+# ----------------------------------------- JS (Vitest/Playwright) eval-gate path
+
+
+def test_evals_collect_recipe_used_when_present(sandbox: Path) -> None:
+    # The engine delegates collection to a project `evals-collect` recipe when it
+    # exists; a JS-shaped node-id (front/…::test_eval_1_…) satisfies eval_covers
+    # with NO engine change. Proves the language-agnostic collection seam.
+    (sandbox / "justfile").write_text(
+        "evals:\n"
+        "    #!/usr/bin/env bash\n"
+        '    echo "[stub] evals ok"\n'
+        "\n"
+        "evals-collect:\n"
+        '    @echo "front/eval_1.test.ts::test_eval_1_nominal"\n'
+    )
+    write_tasks(
+        sandbox,
+        """
+### T1 — JS feature implementing EVAL-1
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `front/Button.tsx`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 0, r.stdout + r.stderr
+    assert state(sandbox)["T1"] == "done"
+
+
+def test_evals_collect_fallback_when_recipe_absent(sandbox: Path) -> None:
+    # No `evals-collect` recipe (default stub) + no pyproject → the probe fails
+    # closed and collection falls back to the (empty) pytest path, so a task
+    # implementing a real ID with no eval is still caught. Back-compat preserved.
+    write_tasks(
+        sandbox,
+        """
+### T1 — Implements INV-1 with no eval and no evals-collect recipe
+- **depends_on :** —
+- **implements :** [INV-1]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+
+
+def test_js_source_touches_gate(sandbox: Path) -> None:
+    # finding M6 extended to JS: a task touching a front/*.tsx source file WITHOUT
+    # an implements must still require an eval (the touches_source hole is closed).
+    write_tasks(
+        sandbox,
+        """
+### T1 — Edits a JS/TS source file without declaring an ID
+- **depends_on :** —
+- **implements :** []
+- **files_touched :** `front/Button.tsx`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    r = run_orch(sandbox)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+
+
+def test_js_eval_coverage_via_seam(sandbox: Path) -> None:
+    # eval_covers is unchanged and format-agnostic: a JS node-id satisfies EVAL-1
+    # coverage, and the eval_1/eval_10 collision guard still holds for JS ids.
+    collected = sandbox / "collected.txt"
+    collected.write_text("front/x.test.ts::test_eval_10_other\n")
+    write_tasks(
+        sandbox,
+        """
+### T1 — Implements EVAL-1, only a JS eval_10 collected
+- **depends_on :** —
+- **implements :** [EVAL-1]
+- **files_touched :** `front/x.test.ts`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    env = {"LAB_EVALS_COLLECTED_FILE": str(collected)}
+    r = run_orch(sandbox, env_extra=env)
+    assert r.returncode == 1
+    assert state(sandbox)["T1"] == "failed"
+
+    collected.write_text("front/x.test.ts::test_eval_1_nominal\n")
+    (sandbox / "work" / "feat" / ".runs" / "state.json").unlink()
+    r2 = run_orch(sandbox, env_extra=env)
+    assert r2.returncode == 0, r2.stdout + r2.stderr
+    assert state(sandbox)["T1"] == "done"
+
+
 def test_corrupt_state_json_does_not_crash_resume(sandbox: Path) -> None:
     # finding L9: a truncated state.json (kill mid-write) does not crash the resume.
     (sandbox / ".shim" / "T1.sh").write_text(
