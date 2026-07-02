@@ -145,31 +145,75 @@ PLAN_FILES: set[str] = (
     set()
 )  # union of every node's files_touched (the declared plan scope)
 BASELINE_DIRTY: frozenset[str] = frozenset()  # paths already dirty before the run
-# fd of the inter-process flock kept open for the whole run (released on process
-# exit by the OS). Prevents two orchestrators from racing on the same feature.
+# fds of the inter-process flocks kept open for the whole run (released on process
+# exit by the OS). One guards a single feature, one guards the whole repository.
 _ORCH_LOCK_FD: int | None = None
+_REPO_LOCK_FD: int | None = None
+
+
+def _acquire_flock(lock_path: Path, held_msg: str) -> int:
+    """Exclusive, non-blocking OS flock. Returns the fd (keep it open for the run — the
+    OS releases it at process exit). Raises OSError(held_msg) if already held."""
+    lock_path.parent.mkdir(exist_ok=True, parents=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as e:
+        os.close(fd)
+        raise OSError(held_msg) from e
+    return fd
+
+
+def _git_common_dir(project: Path) -> Path:
+    """The repo's SHARED git dir (--git-common-dir), so every worktree of the repo maps
+    to a single lock file. Fail-safe: any error ⇒ <project>/.git."""
+    try:
+        p = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+        )
+        gd = p.stdout.strip() if p.returncode == 0 else ""
+    except Exception:
+        gd = ""
+    gp = Path(gd or ".git")
+    return gp if gp.is_absolute() else (project / gp)
 
 
 def acquire_orchestrator_lock(feature: Path) -> None:
     """Exclusive OS flock on .runs/orchestrator.lock — fail-fast if already held (finding H6).
 
     Two orchestrate.py processes on the same feature would corrupt state.json, the
-    git index, the journal and the budget (COST_TOTAL is per-process). threading.Lock
-    only protects intra-process. The fd stays open: the OS releases it at process end.
+    journal and the budget (COST_TOTAL is per-process). threading.Lock only protects
+    intra-process. The fd stays open: the OS releases it at process end.
     """
     global _ORCH_LOCK_FD
     lock_path = feature / ".runs" / "orchestrator.lock"
-    lock_path.parent.mkdir(exist_ok=True, parents=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # exclusive, non-blocking
-    except OSError as e:
-        os.close(fd)
-        raise OSError(
-            f"orchestrator lock already held on {lock_path} — another run is active "
-            "on this feature. Wait for it to finish (or delete the .lock if it is stale)."
-        ) from e
-    _ORCH_LOCK_FD = fd
+    _ORCH_LOCK_FD = _acquire_flock(
+        lock_path,
+        f"orchestrator lock already held on {lock_path} — another run is active "
+        "on this feature. Wait for it to finish (or delete the .lock if it is stale).",
+    )
+
+
+def acquire_repo_lock(project: Path) -> None:
+    """Exclusive OS flock on <git-dir>/lab-orchestrator.lock — ONE DRIVER PER REPO.
+
+    The per-feature lock is not enough: git's index and commit history are repo-global,
+    but COMMIT_LOCK only serializes within a single process. Two orchestrators driving
+    DIFFERENT features of the SAME repo would still interleave commits and race the
+    shared index (the duplicate-daemon footgun). Fail-fast so only one driver ever
+    touches a repository at a time. The lock lives in the (never-committed) git dir.
+    """
+    global _REPO_LOCK_FD
+    lock_path = _git_common_dir(project) / "lab-orchestrator.lock"
+    _REPO_LOCK_FD = _acquire_flock(
+        lock_path,
+        f"repo lock already held on {lock_path} — another orchestrator is already "
+        "driving this repository (git commits are repo-global; only one driver at a "
+        "time). Wait for it to finish (or delete the .lock if it is stale).",
+    )
 
 
 def atomic_write_json(path: Path, obj: dict) -> None:
@@ -1018,6 +1062,11 @@ def main() -> int:
     # checkout of HEAD — the terminal "is what we committed actually mergeable?" check.
     cp_ids = [n.id for n in nodes if n.is_checkpoint]
     merge_cp_id = cp_ids[-1] if cp_ids else None
+    # Echo the resolved build root so a run launched from the wrong directory (external
+    # project cwd drift) is obvious immediately — commits/gates land under PROJECT.
+    if PROJECT != LAB:
+        print(f"Project (build + git root): {PROJECT}")
+    print(f"Feature: {feature}")
     print(f"Plan: {len(nodes)} nodes — " + ", ".join(n.id for n in nodes))
     if REGISTRY.models:
         roles_used = {
@@ -1033,9 +1082,12 @@ def main() -> int:
     state_f = feature / ".runs" / "state.json"
     state_f.parent.mkdir(exist_ok=True)
     if not args.dry_run:
-        # Inter-process lock (finding H6): forbids two concurrent runs on the
-        # same feature (race on state.json / git index / journal / budget).
+        # Inter-process locks (finding H6 + duplicate-daemon): the repo lock forbids two
+        # orchestrators from driving the same repository at all (git index/commits are
+        # repo-global); the feature lock forbids two runs on the same feature. Repo lock
+        # first, so a second driver on the repo fails with the clearer message.
         try:
+            acquire_repo_lock(PROJECT)
             acquire_orchestrator_lock(feature)
         except OSError as e:
             print(f"⛔ {e}", file=sys.stderr)

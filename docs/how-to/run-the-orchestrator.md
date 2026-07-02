@@ -151,7 +151,8 @@ Everything for a run lives under `work/<feature>/.runs/` and
 - `.runs/run.log` — the run's stdout/stderr (if you redirected as above).
 - `.runs/journal.jsonl` — one JSON line per event (attempt, duration, per-agent cost, verdict, summary).
 - `.runs/CP-n-review.md` — the reviewer panel report for checkpoint `CP-n`.
-- `.runs/orchestrator.lock` — the OS lock held for the duration of the run.
+- `.runs/orchestrator.lock` — the per-feature OS lock held for the duration of the run.
+- `<git-dir>/lab-orchestrator.lock` — the repo-level OS lock: one orchestrator per repository (git commits are repo-global). Lives in the git dir, never committed.
 - `.approvals/CP-n` — a pending signed approval token; renamed to `.handled-…` once consumed.
 - `.approvals/CP-n.rejected` — a pending rejection; renamed to `.handled-…` once read.
 
@@ -167,6 +168,30 @@ Wait for the active run to finish. If the previous process died without releasin
 the lock, the lock is stale — delete the file and re-run:
 
     rm work/<feature>/.runs/orchestrator.lock
+
+### The run aborts with "repo lock already held … driving this repository"
+
+A different orchestrator is already driving this **repository** (possibly on another
+feature). Only one driver per repo is allowed, because git's index and commit history
+are repo-global and are only serialized within a single process — two drivers would
+interleave commits and race the index. Let the active run finish. If its process died
+without releasing the lock, delete the stale lock (it lives in the git dir) and re-run:
+
+    rm "$(git rev-parse --git-common-dir)/lab-orchestrator.lock"
+
+### Driving an external project: confirm the resolved paths
+
+When you drive a separate repo (`--project <path>` or `just run-project`), the
+orchestrator echoes the resolved build root and feature at startup:
+
+    Project (build + git root): /abs/path/to/project
+    Feature: /abs/path/to/project/work/<feature>
+
+Check these are the repo you meant. A backgrounded `cd … &` does **not** move your
+foreground shell, so it is easy to launch a run — or run a gate by hand — from the wrong
+directory. The orchestrator itself always commits and gates under the resolved `PROJECT`
+(absolute), so the echoed lines are the source of truth; if they are wrong, the launch
+command's `--project`/cwd is wrong.
 
 ### The run refuses to start: "LAB_APPROVAL_SECRET not set"
 
