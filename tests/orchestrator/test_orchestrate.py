@@ -572,3 +572,32 @@ def test_concurrent_orchestrate_fails_fast(sandbox: Path) -> None:
         if orchestrate._ORCH_LOCK_FD is not None:
             os.close(orchestrate._ORCH_LOCK_FD)
             orchestrate._ORCH_LOCK_FD = None
+
+
+def test_concurrent_repo_fails_fast(sandbox: Path) -> None:
+    # One driver per REPO: holding the repo-level lock makes a second orchestrator on the
+    # same repository fail fast (git commits/index are repo-global; COMMIT_LOCK is only
+    # intra-process). The repo lock is checked before the per-feature lock.
+    sys.path.insert(0, str(REPO / "lab" / "engine"))
+    import orchestrate
+
+    write_tasks(
+        sandbox,
+        """
+### T1 — A
+- **depends_on :** —
+- **implements :** [doc]
+- **files_touched :** `t1.txt`
+- **done_when :** ok
+- **verify :** `true`
+""",
+    )
+    orchestrate.acquire_repo_lock(sandbox.resolve())  # this process holds the repo lock
+    try:
+        r = run_orch(sandbox)  # sub-process on the same repo: must fail fast
+        assert r.returncode == 1
+        assert "repo lock" in r.stderr and "driving this repository" in r.stderr
+    finally:
+        if orchestrate._REPO_LOCK_FD is not None:
+            os.close(orchestrate._REPO_LOCK_FD)
+            orchestrate._REPO_LOCK_FD = None

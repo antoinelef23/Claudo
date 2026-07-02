@@ -8,7 +8,10 @@ CP="${1:?usage: reject.sh CP-n <feature_dir> \"reason\" [Tn ...]}"
 FEATURE="${2:?usage: reject.sh CP-n <feature_dir> \"reason\" [Tn ...]}"
 REASON="${3:?give a reason — it is passed verbatim to the agents}"
 shift 3
-ROOT="$(cd "$(dirname "$0")" && git rev-parse --show-toplevel)"  # lab repo root (engine lives at lab/engine/)
+# Lab repo root, resolved from THIS script's real location (engine lives at lab/engine/),
+# independent of cwd and of which git repo we stand in — correct whether invoked by path,
+# by bare name (PATH), or from an external project (see approve.sh: latent ROOT bug).
+ROOT="$(python3 -c 'import pathlib,sys; print(pathlib.Path(sys.argv[1]).resolve().parents[2])' "$0")"
 # External-project support (see approve.sh): resolve the feature under
 # LAB_PROJECT_ROOT when set; an absolute FEATURE is honored as-is; default = lab repo.
 if [[ "$FEATURE" = /* ]]; then FEATURE_DIR="$FEATURE"; else FEATURE_DIR="${LAB_PROJECT_ROOT:-$ROOT}/$FEATURE"; fi

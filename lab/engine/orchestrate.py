@@ -6,8 +6,9 @@ IN PARALLEL via `claude -p` (headless), passes the eval gate after each task
 (max 3 iterations), and handles checkpoints according to their mode:
   - `mode: blocking` (default) — pause + notification, human validation via
         lab/engine/approve.sh CP-1 <feature_dir>
-  - `mode: auto` — auto-validated if and only if evals green AND reviewer PASS;
-        otherwise falls back to blocking. The final (merge) checkpoint is ALWAYS blocking.
+  - `mode: auto` — auto-validated if and only if the FULL gate is green AND reviewer
+        PASS; otherwise falls back to blocking. The final (merge) checkpoint is ALWAYS
+        blocking, and additionally gates a clean checkout of HEAD (see guardrails).
 
 Autonomy levels:
     --dry-run       show the plan, nothing runs
@@ -26,6 +27,13 @@ Autonomy guardrails:
   - scoped commits: we only stage the task's files_touched + the feature
     directory under lock (never `git add -A`, nor `tests`/`evals` wholesale which
     would suck in the files of other tasks and the goldens — findings H3/H5)
+  - fail-closed scope (finding L-1): if the working tree carries changes outside the
+    declared plan scope, the commit is REFUSED (not silently dropped) and the task is
+    routed back — dropping them would ship a merge green in the tree but broken at HEAD
+  - authoritative gate: a checkpoint runs the FULL gate (lint+test+evals+brand), not
+    evals alone, and re-runs it the moment a wave commits a dependency manifest; the
+    merge checkpoint ALSO gates a clean checkout of HEAD (throwaway worktree) so a
+    working-tree≠HEAD divergence cannot slip through as green
 
 Usage:
     python3 lab/engine/orchestrate.py work/my-feature --validate
@@ -43,6 +51,7 @@ import fcntl
 import json
 import os
 import re
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -115,31 +124,96 @@ COMMIT_LOCK = threading.Lock()
 LOG_LOCK = threading.Lock()
 COST_LOCK = threading.Lock()
 COST_TOTAL = {"usd": 0.0}
-# fd of the inter-process flock kept open for the whole run (released on process
-# exit by the OS). Prevents two orchestrators from racing on the same feature.
+# Dependency manifests: when one is committed in a wave, the full gate is re-run
+# immediately. A dep install can silently turn committed evals red (e.g. a PEP-420
+# namespace package shadowing a "no provider import" purity eval) — evals-only per
+# task never sees it, so it goes unnoticed until a late re-validation.
+DEP_MANIFESTS = (
+    "pyproject.toml",
+    "uv.lock",
+    "poetry.lock",
+    "requirements.txt",
+    "package.json",
+    "package-lock.json",
+    "pnpm-lock.yaml",
+    "yarn.lock",
+)
+DEP_LOCK = threading.Lock()
+_DEP_TOUCHED = {"flag": False}  # set when a wave commits a dep manifest
+# Scope-violation context, set once by main() before the first wave.
+PLAN_FILES: set[str] = (
+    set()
+)  # union of every node's files_touched (the declared plan scope)
+BASELINE_DIRTY: frozenset[str] = frozenset()  # paths already dirty before the run
+# fds of the inter-process flocks kept open for the whole run (released on process
+# exit by the OS). One guards a single feature, one guards the whole repository.
 _ORCH_LOCK_FD: int | None = None
+_REPO_LOCK_FD: int | None = None
+
+
+def _acquire_flock(lock_path: Path, held_msg: str) -> int:
+    """Exclusive, non-blocking OS flock. Returns the fd (keep it open for the run — the
+    OS releases it at process exit). Raises OSError(held_msg) if already held."""
+    lock_path.parent.mkdir(exist_ok=True, parents=True)
+    fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o644)
+    try:
+        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+    except OSError as e:
+        os.close(fd)
+        raise OSError(held_msg) from e
+    return fd
+
+
+def _git_common_dir(project: Path) -> Path:
+    """The repo's SHARED git dir (--git-common-dir), so every worktree of the repo maps
+    to a single lock file. Fail-safe: any error ⇒ <project>/.git."""
+    try:
+        p = subprocess.run(
+            ["git", "rev-parse", "--git-common-dir"],
+            cwd=project,
+            capture_output=True,
+            text=True,
+        )
+        gd = p.stdout.strip() if p.returncode == 0 else ""
+    except Exception:
+        gd = ""
+    gp = Path(gd or ".git")
+    return gp if gp.is_absolute() else (project / gp)
 
 
 def acquire_orchestrator_lock(feature: Path) -> None:
     """Exclusive OS flock on .runs/orchestrator.lock — fail-fast if already held (finding H6).
 
     Two orchestrate.py processes on the same feature would corrupt state.json, the
-    git index, the journal and the budget (COST_TOTAL is per-process). threading.Lock
-    only protects intra-process. The fd stays open: the OS releases it at process end.
+    journal and the budget (COST_TOTAL is per-process). threading.Lock only protects
+    intra-process. The fd stays open: the OS releases it at process end.
     """
     global _ORCH_LOCK_FD
     lock_path = feature / ".runs" / "orchestrator.lock"
-    lock_path.parent.mkdir(exist_ok=True, parents=True)
-    fd = os.open(str(lock_path), os.O_CREAT | os.O_WRONLY, 0o644)
-    try:
-        fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)  # exclusive, non-blocking
-    except OSError as e:
-        os.close(fd)
-        raise OSError(
-            f"orchestrator lock already held on {lock_path} — another run is active "
-            "on this feature. Wait for it to finish (or delete the .lock if it is stale)."
-        ) from e
-    _ORCH_LOCK_FD = fd
+    _ORCH_LOCK_FD = _acquire_flock(
+        lock_path,
+        f"orchestrator lock already held on {lock_path} — another run is active "
+        "on this feature. Wait for it to finish (or delete the .lock if it is stale).",
+    )
+
+
+def acquire_repo_lock(project: Path) -> None:
+    """Exclusive OS flock on <git-dir>/lab-orchestrator.lock — ONE DRIVER PER REPO.
+
+    The per-feature lock is not enough: git's index and commit history are repo-global,
+    but COMMIT_LOCK only serializes within a single process. Two orchestrators driving
+    DIFFERENT features of the SAME repo would still interleave commits and race the
+    shared index (the duplicate-daemon footgun). Fail-fast so only one driver ever
+    touches a repository at a time. The lock lives in the (never-committed) git dir.
+    """
+    global _REPO_LOCK_FD
+    lock_path = _git_common_dir(project) / "lab-orchestrator.lock"
+    _REPO_LOCK_FD = _acquire_flock(
+        lock_path,
+        f"repo lock already held on {lock_path} — another orchestrator is already "
+        "driving this repository (git commits are repo-global; only one driver at a "
+        "time). Wait for it to finish (or delete the .lock if it is stale).",
+    )
 
 
 def atomic_write_json(path: Path, obj: dict) -> None:
@@ -289,17 +363,155 @@ def evals_collected() -> str:
     return p.stdout
 
 
-def scoped_commit(node: Node, feature: Path, message: str) -> None:
-    """Stage only the task's scope, under lock (parallel waves).
+def run_full_gate() -> tuple[bool, str]:
+    """Complete merge gate — lint + test + evals + brand — via `just gate-ci`.
 
-    We NO LONGER stage `tests`/`evals` wholesale (findings H3/H5): by convention,
-    files_touched already contains the task's tests/evals paths. Wholesale staging
-    used to suck in the files of other tasks in the wave AND the
-    `evals/golden/**` oracles — an out-of-scope tampered golden ended up
-    auto-committed, corrupting the scorecard ground truth. So we stage node.files +
-    the feature directory (spec/design/tasks), then un-stage any undeclared golden.
+    This is what a checkpoint must run. Green evals ALONE let lint/config/brand drift
+    accumulate on HEAD unnoticed (the ruff/eslint/no-tests drift you only discover at
+    the end). Falls back to evals-only when the project has no `gate-ci` recipe (minimal
+    or test projects) — same fail-closed probe as `evals-collect`, so back-compat holds.
+    """
+    if _just_has_recipe("gate-ci"):
+        p = subprocess.run(
+            ["just", "gate-ci"], cwd=PROJECT, capture_output=True, text=True
+        )
+        return p.returncode == 0, (p.stdout + p.stderr)[-4000:]
+    return run_evals()
+
+
+def _gate_on_committed_head() -> tuple[bool, str]:
+    """Run the full gate against a CLEAN checkout of HEAD, not the dirty working tree.
+
+    The scariest divergence is working-tree-green ≠ HEAD-green (a dropped scoped commit,
+    an uncommitted local fix, a dep that only resolves because of an untracked file): the
+    per-task gate runs on the working tree, so it is structurally blind to it. At the
+    merge checkpoint we materialize HEAD in a throwaway detached worktree and gate THAT.
+    We symlink the parent's resolved deps (.venv / node_modules) so we never reinstall.
+
+    Fail-safe: no `gate-ci` recipe, or any worktree/setup error ⇒ (True, note). A worktree
+    hiccup must never spuriously block a merge — the dirty-tree full gate already ran; this
+    is an additional, best-effort divergence check on top of it.
+    """
+    if not _just_has_recipe("gate-ci"):
+        return True, "clean-HEAD gate skipped: no `gate-ci` recipe"
+    tmp = tempfile.mkdtemp(prefix="lab-head-gate-")
+    try:
+        add = subprocess.run(
+            ["git", "worktree", "add", "--detach", tmp, "HEAD"],
+            cwd=PROJECT,
+            capture_output=True,
+            text=True,
+        )
+        if add.returncode != 0:
+            return (
+                True,
+                f"clean-HEAD gate skipped: worktree add failed: {add.stderr[-500:]}",
+            )
+        # Reuse the parent's resolved deps (never reinstall in the throwaway tree).
+        for dep_dir in (".venv", "node_modules", "front/node_modules"):
+            src = PROJECT / dep_dir
+            if src.exists():
+                dst = Path(tmp) / dep_dir
+                dst.parent.mkdir(parents=True, exist_ok=True)
+                try:
+                    dst.symlink_to(src.resolve())
+                except OSError:
+                    pass
+        p = subprocess.run(["just", "gate-ci"], cwd=tmp, capture_output=True, text=True)
+        return p.returncode == 0, (p.stdout + p.stderr)[-4000:]
+    finally:
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", tmp],
+            cwd=PROJECT,
+            capture_output=True,
+        )
+        shutil.rmtree(tmp, ignore_errors=True)
+
+
+def _is_dep_manifest(path: str) -> bool:
+    return path.rsplit("/", 1)[-1] in DEP_MANIFESTS
+
+
+def _porcelain_paths(feature: Path) -> list[tuple[str, str]]:
+    """(status_xy, path) for every entry in `git status --porcelain`, rename→dest."""
+    out = subprocess.run(
+        ["git", "status", "--porcelain"], cwd=PROJECT, capture_output=True, text=True
+    ).stdout
+    rows: list[tuple[str, str]] = []
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        xy, path = line[:2], line[3:]
+        if " -> " in path:  # rename/copy: consider the destination
+            path = path.split(" -> ", 1)[1]
+        rows.append((xy, path.strip().strip('"')))
+    return rows
+
+
+def _scope_violations(node: Node, feature: Path) -> list[str]:
+    """Working-tree changes that fall OUTSIDE the declared plan scope
+    (the union of every node's files_touched ∪ the feature dir) and were NOT already
+    dirty before the run.
+
+    These are the L-1 footgun: if we committed only this task's scope, the working tree
+    would stay green while HEAD ships without them (dropped edits) — the identity-access
+    class of broken-but-green merges. Scope is the WHOLE plan's files_touched, not just
+    this task's: a file another node declares will be committed by that node, so it is
+    not dropped (and plan-lint forbids two nodes sharing a file). Baseline-dirty paths
+    (the Owner's own uncommitted work, fixtures) are not attributed to any task — the
+    clean-HEAD merge gate is the backstop if that dirt is load-bearing for green.
+
+    Flagged fail-closed: any tracked modification/deletion out of scope (a foreign file
+    — e.g. a prior feature's test — edited), and any untracked SOURCE file out of scope
+    (a foreign new module, finding H7). Untracked non-source noise (logs, scratch) is
+    ignored so the real signal is not drowned. Read BEFORE staging, so the index is
+    untouched for parallel tasks.
+    """
+    feat_rel = str(feature.relative_to(PROJECT))
+    scope = set(node.files) | PLAN_FILES
+    violations: list[str] = []
+    for xy, path in _porcelain_paths(feature):
+        if path in BASELINE_DIRTY:
+            continue
+        if paths_overlap(path, feat_rel) or any(paths_overlap(path, f) for f in scope):
+            continue
+        if xy == "??":  # untracked: flag only if it looks like source/artifact
+            if path.endswith(SOURCE_EXTS) or any(
+                paths_overlap(path, d) for d in SOURCE_DIRS
+            ):
+                violations.append(path)
+        else:  # tracked change out of scope — the dangerous case
+            violations.append(path)
+    return violations
+
+
+def scoped_commit(node: Node, feature: Path, message: str) -> list[str]:
+    """Stage only the task's scope and commit, under lock (parallel waves).
+
+    Fails CLOSED on scope violations (finding L-1): if the working tree carries changes
+    outside files_touched ∪ the feature dir, we commit NOTHING and return the offending
+    paths. Committing the scope alone would DROP those edits and ship a merge that looks
+    green in the working tree but is broken at HEAD. The caller routes the task back to
+    the implementer (restrict scope, or block on a scope conflict so the Owner widens
+    files_touched). Returns [] on a clean commit.
+
+    We do NOT stage `tests`/`evals` wholesale (findings H3/H5): by convention,
+    files_touched already contains the task's tests/evals paths. We still un-stage any
+    undeclared `evals/golden/**` oracle a directory-scoped `git add` may have pulled in
+    (finding H3, scorecard anti-tamper).
     """
     with COMMIT_LOCK:
+        # Detect out-of-scope changes BEFORE staging (worktree state, index untouched):
+        # on a violation we return immediately, leaving a clean index for the other
+        # parallel tasks in the wave (a `git commit` commits the whole index).
+        violations = _scope_violations(node, feature)
+        if violations:
+            print(
+                f"⛔ {node.id}: scope violation — commit REFUSED, changes outside "
+                f"files_touched: {', '.join(violations[:10])}",
+                flush=True,
+            )
+            return violations
         paths = [*node.files, str(feature.relative_to(PROJECT))]
         for p in paths:
             subprocess.run(["git", "add", "--", p], cwd=PROJECT, capture_output=True)
@@ -324,27 +536,10 @@ def scoped_commit(node: Node, feature: Path, message: str) -> None:
                     f"⚠️  {node.id}: golden outside files_touched un-staged (oracle protected): {f}",
                     flush=True,
                 )
-        leftover = subprocess.run(
-            ["git", "status", "--porcelain"],
-            cwd=PROJECT,
-            capture_output=True,
-            text=True,
-        ).stdout
-        out_of_scope = [
-            line
-            for line in leftover.splitlines()
-            if line and not line.startswith(("A ", "M ", "R ", "D "))
-        ]
-        if out_of_scope:
-            print(
-                f"⚠️  {node.id}: changes outside files_touched left uncommitted:",
-                flush=True,
-            )
-            for line in out_of_scope[:10]:
-                print(f"     {line}", flush=True)
         subprocess.run(
             ["git", "commit", "-m", message], cwd=PROJECT, capture_output=True
         )
+    return []
 
 
 def _commit_message(node: Node, feature: Path, real_ids: list[str]) -> str:
@@ -529,8 +724,36 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
 
         ok, out = _eval_gate(node, real_ids)
         if ok:
+            violations = scoped_commit(
+                node, feature, _commit_message(node, feature, real_ids)
+            )
+            if violations:
+                # Fail-closed (finding L-1): shipping the scope alone would drop these
+                # edits and merge code that is green in the working tree but broken at
+                # HEAD. Route back to the implementer instead of committing a lie.
+                extra = (
+                    "\n\n⛔ SCOPE VIOLATION — the commit was REFUSED. You changed files "
+                    f"outside your files_touched: {', '.join(violations)}. Committing the "
+                    "scope alone would DROP these edits and merge code that looks green in "
+                    "the working tree but is broken at HEAD. Fix ONE of two ways: "
+                    "(1) keep your change strictly within files_touched; or (2) if the task "
+                    "genuinely needs them, STOP now with "
+                    "'STATUS: blocked — scope conflict: <files>' so the Owner widens "
+                    "files_touched (implementer rule 1). Do not retry without doing one of these."
+                )
+                run_log(feature, node, "implementer", f"SCOPE VIOLATION (t{attempt})")
+                journal(
+                    feature,
+                    event="task_scope_violation",
+                    id=node.id,
+                    attempt=attempt,
+                    paths=violations[:20],
+                )
+                continue
             run_log(feature, node, "implementer", f"done, evals green (t{attempt})")
-            scoped_commit(node, feature, _commit_message(node, feature, real_ids))
+            if any(_is_dep_manifest(f) for f in node.files):
+                with DEP_LOCK:
+                    _DEP_TOUCHED["flag"] = True
             journal(feature, event="task_done", id=node.id, attempts=attempt)
             return "done"
         extra = f"\n\n⛔ EVAL GATE RED on the previous attempt. Fix:\n{out}"
@@ -628,9 +851,15 @@ def parse_rejection(path: Path) -> dict:
 
 
 def wait_checkpoint(
-    node: Node, feature: Path, dry: bool, supervised: bool
+    node: Node, feature: Path, dry: bool, supervised: bool, is_merge: bool = False
 ) -> tuple[str, dict]:
-    """Returns ("approved", {}) or ("rejected", {reason, tasks})."""
+    """Returns ("approved", {}) or ("rejected", {reason, tasks}).
+
+    The gate here is the FULL gate (lint + test + evals + brand), not evals alone —
+    otherwise lint/config/brand drift accumulates on HEAD unnoticed. At the merge
+    checkpoint (is_merge) we ALSO gate a clean checkout of HEAD, catching any
+    working-tree≠HEAD divergence the working-tree gate is blind to.
+    """
     approval = feature / ".approvals" / node.id
     rejection = feature / ".approvals" / f"{node.id}.rejected"
     if dry:
@@ -640,7 +869,32 @@ def wait_checkpoint(
         return "approved", {}
 
     verdict, report, self_only = run_review(node, feature, dry)
-    evals_ok, _ = run_evals()
+    gate_ok, gate_out = run_full_gate()
+    head_ok, head_out = (True, "")
+    if is_merge:
+        head_ok, head_out = _gate_on_committed_head()
+    gate_green = gate_ok and head_ok
+    journal(
+        feature,
+        event="checkpoint_gate",
+        id=node.id,
+        full_gate="green" if gate_ok else "RED",
+        head_gate=("green" if head_ok else "RED") if is_merge else "n/a",
+    )
+    # On red, drop the gate output next to the review report so the Owner can act.
+    if not gate_green:
+        report.parent.mkdir(exist_ok=True)
+        (feature / ".runs" / f"{node.id}-gate.md").write_text(
+            f"# Gate {node.id} — full_gate={'green' if gate_ok else 'RED'} "
+            f"head_gate={('green' if head_ok else 'RED') if is_merge else 'n/a'}\n\n"
+            f"## just gate-ci (working tree)\n\n```\n{gate_out}\n```\n\n"
+            + (
+                f"## just gate-ci (clean HEAD)\n\n```\n{head_out}\n```\n"
+                if is_merge
+                else ""
+            ),
+            encoding="utf-8",
+        )
 
     if node.mode == "auto" and not supervised:
         if self_only:
@@ -648,7 +902,7 @@ def wait_checkpoint(
                 f"{node.id} (auto): separation of duties impossible (reviewer = implementer's model) "
                 "→ human validation required. Configure a distinct reviewer model in lab/models/registry.toml."
             )
-        elif verdict == "PASS" and evals_ok:
+        elif verdict == "PASS" and gate_green:
             approval.parent.mkdir(exist_ok=True)
             # Signed like a human approval (the orchestrator has the secret) to
             # stay verifiable if the token is re-read; "auto-approved" stays in
@@ -657,7 +911,7 @@ def wait_checkpoint(
                 approvals.sign(
                     feature,
                     node.id,
-                    "auto-approved (evals green + reviewer panel PASS)",
+                    "auto-approved (full gate green + reviewer panel PASS)",
                     datetime.now().isoformat(),
                 )
             )
@@ -665,19 +919,20 @@ def wait_checkpoint(
                 feature,
                 node,
                 "reviewer",
-                "checkpoint auto-validated (PASS, evals green)",
+                "checkpoint auto-validated (PASS, full gate green)",
             )
             notify(f"{node.id} auto-validated — report: {report.relative_to(PROJECT)}")
             return "approved", {}
         else:
             notify(
-                f"{node.id} (auto): panel {verdict} / evals {'green' if evals_ok else 'RED'} → falling back to human validation"
+                f"{node.id} (auto): panel {verdict} / gate {'green' if gate_green else 'RED'} → falling back to human validation"
             )
 
     notify(
         f"CHECKPOINT {node.id}: Owner decision → lab/engine/approve.sh {node.id} {feature.relative_to(PROJECT)} "
         f'or lab/engine/reject.sh {node.id} {feature.relative_to(PROJECT)} "reason" [Tn …] '
-        f"(reviewer report: {report.relative_to(PROJECT)}, verdict {verdict})"
+        f"(reviewer report: {report.relative_to(PROJECT)}, verdict {verdict}, "
+        f"gate {'green' if gate_green else 'RED — see .runs/' + node.id + '-gate.md'})"
     )
     print(f"⏸  {node.id} — waiting for {approval} (or .rejected)", flush=True)
     while True:
@@ -803,6 +1058,15 @@ def main() -> int:
         return 1
 
     by_id = {n.id: n for n in nodes}
+    # The merge checkpoint (last CP in document order) is where we ALSO gate a clean
+    # checkout of HEAD — the terminal "is what we committed actually mergeable?" check.
+    cp_ids = [n.id for n in nodes if n.is_checkpoint]
+    merge_cp_id = cp_ids[-1] if cp_ids else None
+    # Echo the resolved build root so a run launched from the wrong directory (external
+    # project cwd drift) is obvious immediately — commits/gates land under PROJECT.
+    if PROJECT != LAB:
+        print(f"Project (build + git root): {PROJECT}")
+    print(f"Feature: {feature}")
     print(f"Plan: {len(nodes)} nodes — " + ", ".join(n.id for n in nodes))
     if REGISTRY.models:
         roles_used = {
@@ -818,9 +1082,12 @@ def main() -> int:
     state_f = feature / ".runs" / "state.json"
     state_f.parent.mkdir(exist_ok=True)
     if not args.dry_run:
-        # Inter-process lock (finding H6): forbids two concurrent runs on the
-        # same feature (race on state.json / git index / journal / budget).
+        # Inter-process locks (finding H6 + duplicate-daemon): the repo lock forbids two
+        # orchestrators from driving the same repository at all (git index/commits are
+        # repo-global); the feature lock forbids two runs on the same feature. Repo lock
+        # first, so a second driver on the repo fails with the clearer message.
         try:
+            acquire_repo_lock(PROJECT)
             acquire_orchestrator_lock(feature)
         except OSError as e:
             print(f"⛔ {e}", file=sys.stderr)
@@ -839,6 +1106,14 @@ def main() -> int:
         for nid, st in restored.items():
             if nid in by_id and st == "done":
                 by_id[nid].status = "done"
+
+    # Scope-violation context (finding L-1): the whole plan's declared files, and the
+    # tree's dirt at start (not attributable to any task). Snapshot AFTER the resume so
+    # a prior run's leftover is baselined, not blamed on the first resumed task.
+    global PLAN_FILES, BASELINE_DIRTY
+    PLAN_FILES = {f for n in nodes for f in n.files}
+    if not args.dry_run:
+        BASELINE_DIRTY = frozenset(p for _, p in _porcelain_paths(feature))
 
     def save() -> None:
         if not args.dry_run:
@@ -883,8 +1158,31 @@ def main() -> int:
                     if n.status in ("failed", "blocked"):
                         skip_dependents(n, nodes)
                     save()
+            # Dep-change trigger: a dependency install can silently turn committed evals
+            # red (namespace shadowing). Re-run the full gate the moment a wave commits a
+            # manifest, so it surfaces here — not only at the merge checkpoint.
+            with DEP_LOCK:
+                dep_dirty = _DEP_TOUCHED["flag"]
+                _DEP_TOUCHED["flag"] = False
+            if dep_dirty and not args.dry_run:
+                dep_ok, dep_out = run_full_gate()
+                journal(
+                    feature, event="dep_gate", full_gate="green" if dep_ok else "RED"
+                )
+                if not dep_ok:
+                    (feature / ".runs").mkdir(exist_ok=True)
+                    (feature / ".runs" / "dep-gate.md").write_text(
+                        dep_out, encoding="utf-8"
+                    )
+                    notify(
+                        "⛔ Full gate RED after a dependency change this wave — a dep "
+                        "install likely broke committed evals/lint. Fix before the merge "
+                        "checkpoint (detail: .runs/dep-gate.md)."
+                    )
         for cp in cps:
-            outcome, info = wait_checkpoint(cp, feature, args.dry_run, args.supervised)
+            outcome, info = wait_checkpoint(
+                cp, feature, args.dry_run, args.supervised, cp.id == merge_cp_id
+            )
             if outcome == "approved":
                 cp.status = "done"
             else:  # rejected — on_reject: back to the targeted tasks with a comment

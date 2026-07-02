@@ -218,8 +218,11 @@ def test_checkpoint_plan_fails_closed_without_secret(sandbox: Path) -> None:
 
 
 def test_scoped_commit_does_not_commit_out_of_scope_golden(sandbox: Path) -> None:
-    # finding H3/H5: a task must not auto-commit a golden oracle outside its
-    # files_touched (otherwise altered ground truth sneaks into the scorecard).
+    # finding H3/H5, strengthened by L-1: a task that alters a golden oracle outside its
+    # files_touched is now a SCOPE VIOLATION — the commit is REFUSED and the task fails,
+    # instead of silently un-staging the tamper and succeeding. The old lenient path left
+    # the altered ground truth in the working tree (a working-tree≠HEAD divergence); the
+    # scorecard could then be scored against a tampered oracle the merge never captured.
     g = sandbox / "evals" / "golden" / "g"
     g.mkdir(parents=True)
     (g / "check.sh").write_text("echo ok\n")
@@ -245,19 +248,17 @@ def test_scoped_commit_does_not_commit_out_of_scope_golden(sandbox: Path) -> Non
 """,
     )
     r = run_orch(sandbox)
-    assert r.returncode == 0, r.stdout + r.stderr
+    assert r.returncode == 1  # scope violation → task fails, no green-looking merge
+    assert state(sandbox)["T1"] == "failed"
 
-    committed = subprocess.run(
-        ["git", "show", "--name-only", "--format=", "HEAD"],
+    # The tampered golden never reached HEAD (the scorecard oracle is intact).
+    hist = subprocess.run(
+        ["git", "log", "-p", "--", "evals/golden/g/check.sh"],
         cwd=sandbox,
         capture_output=True,
         text=True,
     ).stdout
-    assert "evals/golden/g/check.sh" not in committed, (
-        f"the out-of-scope golden should not have been committed:\n{committed}"
-    )
-    # It stays modified in the tree (left uncommitted, not swallowed).
-    status = subprocess.run(
-        ["git", "status", "--porcelain"], cwd=sandbox, capture_output=True, text=True
-    ).stdout
-    assert "evals/golden/g/check.sh" in status
+    assert "TAMPERED" not in hist
+    # And it was surfaced as a scope violation, not silently swallowed.
+    journal = (sandbox / "work" / "feat" / ".runs" / "journal.jsonl").read_text()
+    assert "task_scope_violation" in journal

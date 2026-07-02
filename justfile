@@ -59,7 +59,31 @@ lint-check:
 
 test:
     #!/usr/bin/env bash
-    if [ -f pyproject.toml ]; then uv run pytest -q -m "not eval"; else echo "[test] no pyproject.toml — skip"; fi
+    if [ -f pyproject.toml ]; then uv run pytest -q -m "not eval and not integration and not live"; else echo "[test] no pyproject.toml — skip"; fi
+
+# Tier-2 integration checks: real adapters against containers/emulators (Postgres,
+# Keycloak, …). Run SEPARATELY from the offline eval gate (Tier 1) — they need Docker and
+# are not part of the fast inner loop. See docs/explanation/two-tier-gate.md. rc=5 (nothing
+# collected) is not an error: a project with no integration tier no-ops cleanly.
+integration:
+    #!/usr/bin/env bash
+    if [ -f pyproject.toml ] && ls tests evals 2>/dev/null | grep -q .; then
+      uv run pytest -q -m "integration and not live"; rc=$?
+      if [ "$rc" -eq 5 ]; then echo "[integration] no integration test collected — skip"; exit 0; fi
+      exit "$rc"
+    else echo "[integration] no project — skip"; fi
+
+# Tier-2 live checks: real services (creds/cost — Vertex, per-user OAuth, staging).
+# Billed and non-deterministic, so REFUSES without LIVE=1 (like `just eval-models` without
+# live). Never part of CI's default gate. See docs/explanation/two-tier-gate.md.
+live:
+    #!/usr/bin/env bash
+    if [ -z "${LIVE:-}" ]; then echo "⛔ live checks hit real services (creds/cost). Re-run: LIVE=1 just live"; exit 1; fi
+    if [ -f pyproject.toml ] && ls tests evals 2>/dev/null | grep -q .; then
+      uv run pytest -q -m live; rc=$?
+      if [ "$rc" -eq 5 ]; then echo "[live] no live test collected — skip"; exit 0; fi
+      exit "$rc"
+    else echo "[live] no project — skip"; fi
 
 # Merge gate: no green eval, no merge (spec.md §7). pytest exits 5 when no eval is
 # collected — not an error here; the orchestrator (anti-empty-gate) decides whether
