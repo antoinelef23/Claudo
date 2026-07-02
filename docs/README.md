@@ -35,6 +35,7 @@ serving a different reader need. Pick by what you're trying to do:
 - [Architecture](explanation/architecture.md) — the orchestrator, the DAG/waves/checkpoints, the 3-artifact contract.
 - [Git as the project memory](explanation/git-as-memory.md) — why the "why" lives in commits, the fusible vs the rationale.
 - [Why the lab does not let an agent edit its own agent](explanation/agent-self-evolution.md) — the self-modification refusal, the authority hierarchy, and putting mechanical rules in the gate.
+- [The two-tier gate](explanation/two-tier-gate.md) — offline evals (Tier 1, the merge gate) vs live/integration checks (Tier 2, run separately); why fakes, and closing the code↔live gap.
 - [OKF evaluation](explanation/okf-evaluation.md) — the knowledge-format spike.
 
 ## Reference

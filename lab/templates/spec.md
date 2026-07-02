@@ -69,9 +69,13 @@ covers: [BHV-1, INV-2]
 
 - **NG-1** — <out of scope + why / where it is handled>
 
-## 7. Evals — merge gate
+## 7. Gate — the merge conditions
 
-*Each eval is executable (`pytest -m eval`). No green eval, no merge. An eval references the BHVs/INVs it covers. Every BHV and every INV must be covered by at least one eval.*
+*The gate has two tiers. **Tier 1 (offline evals)** is the merge gate — fast, fake-backed, cheap. **Tier 2 (live / integration)** exercises the real adapters and runs SEPARATELY (a pre-deploy stage, not the merge gate). See [the two-tier gate](../../docs/explanation/two-tier-gate.md).*
+
+### 7.1 Tier 1 — offline evals (merge gate)
+
+*Each eval is executable (`pytest -m eval`), runs against fakes / in-memory adapters (no live creds), and is a merge condition: no green eval, no merge. An eval references the BHVs/INVs it covers. Every BHV and every INV must be covered by at least one eval.*
 
 *Executable convention: an eval = a pytest test marked `@pytest.mark.eval` whose name contains the ID in lowercase (e.g. `test_eval_1_matching_exact`). This is what lets the orchestrator mechanically verify that an eval exists (anti-empty-gate: a green `just evals` with zero evals collected validates NOTHING) and, eventually, eval ↔ spec coverage.*
 
@@ -80,6 +84,17 @@ covers: [BHV-1, INV-2]
 | EVAL-1 | deterministic | <exact input/output test> | BHV-1, INV-1 | 100% |
 | EVAL-2 | llm-judge | <quality criterion judged by an LLM, rubric in appendix> | BHV-2 | ≥ <n>/10 on <m> cases |
 | EVAL-3 | property-based | <property verified on generated data> | INV-2 | 100% |
+
+### 7.2 Tier 2 — live / integration checks (run separately)
+
+*What the offline evals CANNOT prove: that the real adapter works against the real system. Declare here every integration the feature defers to a live boundary — DB, auth, external API, per-user OAuth — so "validated by the lab" never silently means "the live path is unexercised". These are NOT the merge gate; they run via `just integration` (containers/emulators — deterministic, CI-able) or `just live` (real creds/staging, `LIVE=1`). Convention mirrors the evals: a check is a pytest test marked `@pytest.mark.integration` (or `@pytest.mark.live`) whose name carries the ID in lowercase.*
+
+*Rule: if a non-goal in §6 defers an integration "to deploy" (an NG-n like "the real X adapter is wired at deploy"), it MUST have a Tier-2 check here. Leave the table empty only if the feature has no live boundary at all.*
+
+| ID | Tier | Backing | Description | Covers |
+|---|---|---|---|---|
+| INT-1 | integration | Postgres container | <the real repository adapter round-trips a record> | INV-1 |
+| LIVE-1 | live | staging Vertex | <the real model adapter returns a schema-valid response> | BHV-2 |
 
 ## 8. Open questions
 

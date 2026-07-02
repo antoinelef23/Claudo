@@ -18,5 +18,7 @@ dev = ["pytest", "ruff"]
 [tool.pytest.ini_options]
 pythonpath = ["src"]
 markers = [
-    "eval: eval test derived from spec.md §7 — merge gate (just evals)",
+    "eval: Tier-1 eval derived from spec.md §7.1 — offline merge gate (just evals), fakes only",
+    "integration: Tier-2 check against a container/emulator (Postgres, Keycloak, …) — just integration, run separately from the offline gate",
+    "live: Tier-2 check against a real service (creds/cost — Vertex, OAuth, staging) — just live, refuses without LIVE=1",
 ]
