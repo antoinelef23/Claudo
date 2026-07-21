@@ -30,6 +30,7 @@ Raw client inputs (slides, transcripts, quotes…) that *feed* the triplet go in
 ## Conventions
 
 - Python 3.12+, `uv` for dependencies, `ruff` for lint/format, `pytest` for tests, `pytest -m eval` for evals.
+- **New dependency = allowlist entry** in `lab/engine/dep_allowlist.txt` in the same commit, after a human verified the package on PyPI (`just check-deps`, wired into `gate`/`gate-ci` — anti hallucinated-dependency).
 - FastAPI for services, Pydantic v2 for data contracts.
 - Markdown + Git for every artifact. No Confluence, no Jira: the repo is the memory.
 - Language (**supersedes** the English-only rule that issue #12 originally set): **French and English are both allowed throughout the repo** — code, technical docs, and artifacts alike. Write in whichever language serves the reader best; bilingual is fine, and a French docstring next to English code is acceptable. Two *soft* preferences (never gates): keep public identifiers and user-facing error strings readable to a non-French engineer where that costs nothing, and keep a single artifact internally consistent. The one **hard** rule that stays enforced: **no client or brand proper nouns** anywhere committed — the lab is generic / org-neutral, so the de-branding (client names, internal product names) is permanent even though the language constraint is relaxed.
