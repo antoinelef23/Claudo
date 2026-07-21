@@ -77,10 +77,32 @@ evals:
 check-brand:
     python3 lab/engine/brand_guard.py --all
 
+# Dependency guard: every pyproject dep must be in lab/engine/dep_allowlist.txt
+# (human-reviewed home — anti hallucinated-dependency / slopsquatting).
+check-deps:
+    python3 lab/engine/dep_guard.py
+
+# Run telemetry report across features:  just report [work/my-feature] [json=1]
+# First-pass rate, attempts, cost per role/model, failure clusters (read-only).
+report feature="" json="":
+    #!/usr/bin/env bash
+    args=""; [ -n "{{json}}" ] && args="--json"
+    python3 lab/engine/run_report.py {{feature}} $args
+
+# Trajectory guard: HOW the run happened (journal + git), not what it produced.
+#   just check-trajectory work/my-feature
+check-trajectory feature:
+    python3 lab/engine/trajectory_guard.py "{{feature}}"
+
+# Static-context payload per role. Gates only once [context] max_static_tokens
+# is declared in lab/models/registry.toml (soft budget).
+context-budget:
+    python3 lab/engine/context_budget.py
+
 # Local merge gate (mutating lint).
-gate: lint test evals check-brand
+gate: lint test evals check-brand check-deps
     @echo "✅ gate OK"
 
 # CI merge gate (non-mutating lint — drift fails CI instead of being auto-fixed).
-gate-ci: lint-check test evals check-brand
+gate-ci: lint-check test evals check-brand check-deps
     @echo "✅ gate-ci OK"
