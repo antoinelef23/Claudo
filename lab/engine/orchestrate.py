@@ -525,6 +525,10 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
         if not passed:
             extra = feedback
             run_log(feature, node, "implementer", f"{label} (t{attempt})")
+            # Telemetry for the failure clusters of `just report` (sdlc-rework BHV-1b)
+            journal(
+                feature, event="verify_fail", id=node.id, attempt=attempt, label=label
+            )
             continue
 
         ok, out = _eval_gate(node, real_ids)
@@ -535,6 +539,7 @@ def run_task(node: Node, feature: Path, dry: bool) -> str:
             return "done"
         extra = f"\n\n⛔ EVAL GATE RED on the previous attempt. Fix:\n{out}"
         run_log(feature, node, "eval-runner", f"FAIL (t{attempt})")
+        journal(feature, event="eval_fail", id=node.id, attempt=attempt)
     notify(f"{node.id}: {MAX_EVAL_RETRIES} eval failures — Owner escalation")
     journal(feature, event="task_failed", id=node.id)
     return "failed"
