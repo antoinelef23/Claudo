@@ -1,12 +1,12 @@
 ---
 type: tasks
 feature: sdlc-rework
-version: 1.1.0
+version: 1.2.0
 status: approved
 generated_by: agent (session 2026-07-21)
-approved_by: Owner — 2026-07-21 (in session; final checkpoint = PR review); T6 added on spec amendment 1.1.0 (2026-07-22)
-spec: ./spec.md          # version : 1.1.0
-design: ./design.md      # version : 1.1.0
+approved_by: Owner — 2026-07-21 (in session; final checkpoint = PR review); T6 added on spec amendment 1.1.0, T7 on 1.2.0 (2026-07-22)
+spec: ./spec.md          # version : 1.2.0
+design: ./design.md      # version : 1.2.0
 ---
 
 # Tasks — SDLC rework
@@ -18,7 +18,8 @@ flowchart TD
     T1[T1 Run report] --> T2[T2 Trajectory guard]
     T3[T3 Context budget + ADR doc] --> CP1{{CP-1 PR review}}
     T4[T4 Dependency guard] --> T6[T6 Strict orphan check]
-    T6 --> CP1
+    T6 --> T7[T7 Lockfile hardening — supersedes T4/T6]
+    T7 --> CP1
     T2 --> CP1
     T5[T5 AGENTS.md shim] --> CP1
 ```
@@ -84,9 +85,20 @@ flowchart TD
 - **done_when :** EVAL-6 green
 - **verify :** `uv run pytest -q tests/sdlc_rework`
 
+### T7 — Lockfile hardening (supersedes T4/T6 — CP-1 review outcome)
+- **agent :** implementer · **depends_on :** [T6] · **parallel_group :** C
+- **implements :** [BHV-4, INV-3, EVAL-3]
+- **files_touched :** `lab/engine/dep_guard.py`, `lab/engine/dep_allowlist.txt`, `justfile`, `docs/reference/cli.md`, `CLAUDE.md`, `tests/sdlc_rework/`
+- **prompt :**
+  > Per spec 1.2.0: remove dep_guard.py + dep_allowlist.txt (and their tests),
+  > switch `install` to `uv sync --locked`, add `check-lock` (`uv lock --check`)
+  > to gate and gate-ci, update CLAUDE.md dependency rule and cli.md.
+- **done_when :** EVAL-3 green AND `just gate` green
+- **verify :** `uv run pytest -q tests/sdlc_rework`
+
 ### CP-1 — Final review (human)
 - **type :** checkpoint · **mode :** blocking (human — final checkpoint is always human)
-- **trigger :** when [T1, T2, T3, T4, T5, T6] are done
+- **trigger :** when [T1, T2, T3, T4, T5, T6, T7] are done
 - **reviewer :** Jules RUBIN (GitHub PR review)
 - **done_when :** PR approved and merged by a human
 

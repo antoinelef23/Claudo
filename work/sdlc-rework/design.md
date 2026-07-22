@@ -1,11 +1,11 @@
 ---
 type: design
 feature: sdlc-rework
-version: 1.1.0
+version: 1.2.0
 status: validated
 owner: Antoine (Owner)
-validated_by: Owner — 2026-07-21 (amendment 1.1.0: 2026-07-22)
-spec: ./spec.md          # version : 1.1.0
+validated_by: Owner — 2026-07-21 (amendments 1.1.0, 1.2.0: 2026-07-22)
+spec: ./spec.md          # version : 1.2.0
 ---
 
 # Design — SDLC rework
@@ -23,7 +23,7 @@ guards, plus one shared reader. No new dependency (stdlib only — `tomllib`, `j
 | `lab/engine/run_report.py` | `just report [feature]` | no (read-only inspection) |
 | `lab/engine/trajectory_guard.py` | `just check-trajectory <feature>` | no (feature-scoped, post-run) |
 | `lab/engine/context_budget.py` | `just context-budget` | no (soft budget, fails only if declared) |
-| `lab/engine/dep_guard.py` | `just check-deps` / `check-deps-strict` | **yes** (gate; gate-ci runs strict) |
+| — (uv lockfile, no lab module) | `just check-lock` | **yes** (gate + gate-ci) |
 
 One minimal touch to `lab/engine/orchestrate.py`: journal `verify_fail` / `eval_fail`
 events (one line each) so BHV-1b clustering has data. Event vocabulary stays additive —
@@ -35,8 +35,8 @@ Every choice points to a pattern already in the repo — nothing is invented:
 
 - **Guard shape** (argv → scan → print offenders → rc 0/1, standalone + testable):
   `lab/engine/brand_guard.py`, `lab/engine/content_guard.py`.
-- **Sanctioned-list file**: `lab/engine/brand_denylist.txt` → `dep_allowlist.txt` is the
-  same mechanism inverted (allowlist instead of denylist).
+- **Lockfile enforcement**: `uv sync --locked` / `uv lock --check` — uv's own
+  documented CI pattern; the lockfile was already committed with sha256 hashes.
 - **Git-based diffing** for BHV-2b: `content_guard.py --git` and
   `scoped_commit()`/`paths_overlap` in `orchestrate.py`.
 - **tasks.md parsing**: reuse `lab/engine/plan.py::parse_tasks_md` (shared by
@@ -63,18 +63,21 @@ use is a *relative* budget. The chars/4 heuristic is stable, offline (INV-2), an
 errs consistently. The budget in the registry is calibrated against the same heuristic,
 so absolute accuracy is irrelevant.
 
-### ADR-3 — Dependency guard is allowlist-only, offline (NG-1)
-Querying PyPI at gate time would make the gate non-deterministic (network, package
-takeovers, transient errors). The threat model (whitepaper: hallucinated deps /
-slopsquatting) is defeated by forcing a **human-reviewed** allowlist entry in the same
-commit — the checkpoint reviewer sees the new name explicitly. Resolvability is the
-human's 30-second job at allowlist time.
+### ADR-3 — Supply-chain integrity via the hash-pinned lockfile (supersedes the allowlist, spec 1.2.0)
+Versions 1.0.0/1.1.0 shipped a dependency allowlist (`dep_guard.py`), refuted at
+CP-1 review on three grounds, all verified: a nonexistent hallucinated dep already
+fails mechanically (`uv sync` / test collection); an offline list is structurally
+blind to a *registered* squat, and the agent writes the allowlist line itself — the
+human's real review signal is the `pyproject.toml` diff, which the list merely
+duplicated; an exact mirror of `pyproject.toml` is the second-source-of-truth
+anti-pattern this design's own ADR-5 forbids.
 
-Amendment 1.1.0 (`--strict`, BHV-4a): the plain check is one-directional, so orphan
-allowlist entries (dep removed from pyproject, line left behind) would accumulate —
-and a stale entry lets a later re-add skip human re-review. Strict mode fails on
-orphans and runs in `gate-ci` only: CI enforces the exact mirror, while the local
-`gate` stays warn-only so a mid-refactor worktree isn't blocked.
+The retained mechanism carries information that IS non-derivable: the resolved
+hashes. `uv.lock` (committed, sha256) becomes the only install source —
+`just install` runs `uv sync --locked`, and `just check-lock` (`uv lock --check`)
+gates lockfile freshness in `gate`/`gate-ci`. A dep cannot be added without a
+reviewable `uv.lock` diff, and a package cannot be silently swapped on the index
+without breaking its hash. No lab-side list to maintain (NG-1).
 
 ### ADR-4 — Soft budget, hard only when declared (BHV-3)
 Failing the gate on a budget nobody has calibrated yet would block every commit on day
@@ -101,3 +104,4 @@ restate hard rules).
 |---|---|---|---|
 | 1.0.0 | 2026-07-21 | Owner + agent | Initial design, anchored on existing guard patterns |
 | 1.1.0 | 2026-07-22 | Owner | ADR-3 extended: `--strict` orphan check in gate-ci (spec 1.1.0 / BHV-4a) |
+| 1.2.0 | 2026-07-22 | Owner (CP-1 review) | ADR-3 superseded: allowlist dropped for hash-pinned lockfile enforcement (spec 1.2.0) |
