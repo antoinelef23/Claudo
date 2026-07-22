@@ -82,6 +82,11 @@ check-brand:
 check-deps:
     python3 lab/engine/dep_guard.py
 
+# CI variant: the allowlist must be an EXACT mirror (orphan entries fail too,
+# BHV-4a — a stale entry would let a re-added dep skip human re-review).
+check-deps-strict:
+    python3 lab/engine/dep_guard.py --strict
+
 # Run telemetry report across features:  just report [work/my-feature] [json=1]
 # First-pass rate, attempts, cost per role/model, failure clusters (read-only).
 report feature="" json="":
@@ -104,5 +109,5 @@ gate: lint test evals check-brand check-deps
     @echo "✅ gate OK"
 
 # CI merge gate (non-mutating lint — drift fails CI instead of being auto-fixed).
-gate-ci: lint-check test evals check-brand check-deps
+gate-ci: lint-check test evals check-brand check-deps-strict
     @echo "✅ gate-ci OK"

@@ -9,7 +9,11 @@ brand_denylist.txt, inverted.
 Offline and deterministic (ADR-3): NO PyPI lookup — verifying the package exists
 and is well-spelled is the human's job when allowlisting it.
 
-Usage:  python3 lab/engine/dep_guard.py [--pyproject PATH] [--allowlist PATH]
+`--strict` (BHV-4a, the gate-ci path) also fails on ORPHAN allowlist entries
+(no matching declared dep): the allowlist is an exact human-validated mirror,
+never a superset — a stale entry would let a later re-add skip human re-review.
+
+Usage:  python3 lab/engine/dep_guard.py [--strict] [--pyproject PATH] [--allowlist PATH]
 """
 
 from __future__ import annotations
@@ -65,21 +69,41 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument(
         "--allowlist", type=Path, default=root / "lab" / "engine" / "dep_allowlist.txt"
     )
+    ap.add_argument(
+        "--strict",
+        action="store_true",
+        help="also fail on orphan allowlist entries (BHV-4a, CI path)",
+    )
     args = ap.parse_args(argv)
 
     if not args.pyproject.is_file():
         print("[deps] no pyproject.toml — nothing to check")
         return 0
-    unknown = sorted(declared_deps(args.pyproject) - load_allowlist(args.allowlist))
-    if unknown:
-        for name in unknown:
+    declared = declared_deps(args.pyproject)
+    allowed = load_allowlist(args.allowlist)
+    rc = 0
+    for name in sorted(declared - allowed):
+        print(
+            f"⛔ dependency `{name}` absent from {args.allowlist.name} — "
+            f"verify it on PyPI (exact spelling) then allowlist it in the same commit"
+        )
+        rc = 1
+    for name in sorted(allowed - declared):
+        if args.strict:
             print(
-                f"⛔ dependency `{name}` absent from {args.allowlist.name} — "
-                f"verify it on PyPI (exact spelling) then allowlist it in the same commit"
+                f"⛔ allowlist entry `{name}` matches no declared dependency — "
+                f"remove the stale line (a re-add must go through human review again)"
             )
-        return 1
-    print("[deps] all declared dependencies are allowlisted")
-    return 0
+            rc = 1
+        else:
+            print(f"⚠️  allowlist entry `{name}` matches no declared dependency")
+    if rc == 0:
+        print(
+            "[deps] allowlist and declared dependencies are an exact mirror"
+            if args.strict
+            else "[deps] all declared dependencies are allowlisted"
+        )
+    return rc
 
 
 if __name__ == "__main__":

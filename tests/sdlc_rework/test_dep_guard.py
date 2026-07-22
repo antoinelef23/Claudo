@@ -42,8 +42,34 @@ def test_allowlisted_deps_pass(tmp_path):
 
 @pytest.mark.eval
 def test_repo_pyproject_is_fully_allowlisted():
-    # Integration: the real repo must pass its own gate
+    # Integration: the real repo must pass its own gate, strict included
     assert dep_guard.main([]) == 0
+    assert dep_guard.main(["--strict"]) == 0
+
+
+@pytest.mark.eval
+def test_orphan_entry_fails_only_in_strict(tmp_path, capsys):
+    # EVAL-6 / BHV-4a: allowlist carries `ruff` but pyproject no longer declares it
+    args = write(
+        tmp_path,
+        '[project]\nname = "x"\nversion = "0"\ndependencies = ["pytest"]\n',
+        "pytest\nruff\n",
+    )
+    assert dep_guard.main(args) == 0  # local path: warn only
+    assert "ruff" in capsys.readouterr().out
+    assert dep_guard.main([*args, "--strict"]) == 1  # CI path: exact mirror
+    assert "ruff" in capsys.readouterr().out
+
+
+@pytest.mark.eval
+def test_exact_mirror_passes_in_strict(tmp_path):
+    args = write(
+        tmp_path,
+        '[project]\nname = "x"\nversion = "0"\ndependencies = ["pytest"]\n'
+        '[dependency-groups]\ndev = ["ruff"]\n',
+        "pytest\nruff\n",
+    )
+    assert dep_guard.main([*args, "--strict"]) == 0
 
 
 # ------------------------------------------------------------------ unit
