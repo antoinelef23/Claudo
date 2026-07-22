@@ -34,6 +34,7 @@ serving a different reader need. Pick by what you're trying to do:
 
 - [Architecture](explanation/architecture.md) — the orchestrator, the DAG/waves/checkpoints, the 3-artifact contract.
 - [Git as the project memory](explanation/git-as-memory.md) — why the "why" lives in commits, the fusible vs the rationale.
+- [Static vs dynamic context](explanation/static-vs-dynamic-context.md) — the versioned boundary between what every agent call pays for and what loads on demand.
 - [OKF evaluation](explanation/okf-evaluation.md) — the knowledge-format spike.
 
 ## Reference

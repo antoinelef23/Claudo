@@ -38,6 +38,15 @@ released = "2025-10-01"
 roles = ["eval-runner"]                  # implementer REMOVED: fails COC-merge even in verbose (loop 2026-06-15)
 context_profile = "base"                 # verbose tested, does not lift the eliminatory score → reverted
 
+# ---------------------------------------------------------------- context budget
+# Static-context budget per role (lab/engine/context_budget.py, `just context-budget`;
+# chars/4 heuristic — calibrate against the tool's own output, not a real tokenizer).
+# Soft gate by design: measuring is always on, FAILING starts only when the Owner
+# uncomments max_static_tokens (work/sdlc-rework ADR-4, same fusible philosophy as
+# content_guard).
+# [context]
+# max_static_tokens = 8000
+
 # ------------------------------------------------------- production assignment
 # THE INCUMBENT: which model drives each role today. The scorecard compares
 # the challengers against this baseline. Changed only on quantified proof.

@@ -43,9 +43,10 @@ eval-models layer="all" live="" models="":
     extra=""; [ -n "{{live}}" ] && extra="$extra --live"; [ -n "{{models}}" ] && extra="$extra --models {{models}}"
     python3 lab/engine/eval_models.py --layer "{{layer}}" $extra
 
+# Hash-pinned install: refuses an out-of-sync uv.lock instead of resolving anew.
 install:
     #!/usr/bin/env bash
-    if [ -f pyproject.toml ]; then uv sync; else echo "[install] no pyproject.toml — skip"; fi
+    if [ -f pyproject.toml ]; then uv sync --locked; else echo "[install] no pyproject.toml — skip"; fi
 
 # Dev lint (mutating): auto-fix + format. Local/agent path only.
 lint:
@@ -77,10 +78,34 @@ evals:
 check-brand:
     python3 lab/engine/brand_guard.py --all
 
+# Lockfile guard: pyproject and the committed uv.lock must agree — a dep cannot
+# be added (or swapped on the index: sha256-pinned) without a reviewable uv.lock
+# diff. A nonexistent hallucinated dep fails `uv lock` outright.
+check-lock:
+    #!/usr/bin/env bash
+    if [ -f pyproject.toml ]; then uv lock --check; else echo "[check-lock] no pyproject.toml — skip"; fi
+
+# Run telemetry report across features:  just report [work/my-feature] [json=1]
+# First-pass rate, attempts, cost per role/model, failure clusters (read-only).
+report feature="" json="":
+    #!/usr/bin/env bash
+    args=""; [ -n "{{json}}" ] && args="--json"
+    python3 lab/engine/run_report.py {{feature}} $args
+
+# Trajectory guard: HOW the run happened (journal + git), not what it produced.
+#   just check-trajectory work/my-feature
+check-trajectory feature:
+    python3 lab/engine/trajectory_guard.py "{{feature}}"
+
+# Static-context payload per role. Gates only once [context] max_static_tokens
+# is declared in lab/models/registry.toml (soft budget).
+context-budget:
+    python3 lab/engine/context_budget.py
+
 # Local merge gate (mutating lint).
-gate: lint test evals check-brand
+gate: lint test evals check-brand check-lock
     @echo "✅ gate OK"
 
 # CI merge gate (non-mutating lint — drift fails CI instead of being auto-fixed).
-gate-ci: lint-check test evals check-brand
+gate-ci: lint-check test evals check-brand check-lock
     @echo "✅ gate-ci OK"
