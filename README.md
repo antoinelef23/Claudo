@@ -9,6 +9,7 @@ A single **Owner** drives the app, agents write the code, a human validates. Eve
 ```
 ai-native-lab/
 ├── CLAUDE.md                  # Persistent context loaded by the agents
+├── AGENTS.md                  # Vendor-neutral pointer to CLAUDE.md (never a copy)
 ├── README.md                  # This file: the workflow
 ├── justfile                   # Standard targets (just gate / validate / run …)
 ├── pyproject.toml             # Package + pytest/ruff config
@@ -22,6 +23,10 @@ ai-native-lab/
 │   │   ├── eval_models.py     # Model×role evaluation campaign
 │   │   ├── registry.py        # Reads lab/models/registry.toml
 │   │   ├── ci_checks.sh       # CI content-guard + plan-lint over changed features
+│   │   ├── run_report.py      # Run-telemetry report (first-pass rate, cost/role/model)
+│   │   ├── trajectory_guard.py# HOW a run happened: journal integrity + commit scope
+│   │   ├── context_budget.py  # Static-context payload per role (soft budget)
+│   │   ├── journal_io.py      # Shared .runs/journal.jsonl reader
 │   │   ├── runner.py          # AgentRunner interface (claude-cli | sandbox)
 │   │   └── sandbox_runner.py  # Hardened-container runner (LAB_RUNNER=sandbox)
 │   ├── templates/             # spec.md / design.md / tasks.md templates
@@ -99,6 +104,8 @@ flowchart TD
 8. **Concurrency safety**: an OS `flock` (`.runs/orchestrator.lock`) fails a second run on the same feature fast; `state.json` is written atomically and resume tolerates a truncated file.
 9. **Documented `auto` checkpoints**: before every checkpoint, the `reviewer` report is written to `.runs/CP-n-review.md`. Auto = green evals AND `VERDICT: PASS`; on any doubt it falls back to human validation.
 10. **Session eval gate** (`.claude/settings.json`): `Stop`/`SubagentStop` hooks → an agent can't finish with changed code and red evals; `PostToolUse` → ruff on each edit.
+11. **Hash-pinned dependencies** (`just check-lock`, in `gate`/`gate-ci`): installs run `uv sync --locked` against the committed `uv.lock` (sha256) — a dependency cannot appear without a reviewable lockfile diff, a hallucinated package name fails resolution outright, and a package can't be silently swapped on the index without breaking its hash.
+12. **Trajectory guard** (`just check-trajectory work/<feature>`): checks HOW a run happened from the journal + git history — a `task_done` with no successful attempt (forged/corrupt journal) or a task commit outside its `files_touched` fails; retry-loops warn.
 
 ```bash
 # 0. Configure the approval secret once (required for checkpointed plans)
@@ -123,7 +130,7 @@ Recovery: state lives in `<feature>/.runs/state.json` — re-running the same co
 
 ## Documentation
 
-Full docs live in [`docs/`](docs/README.md), organized by the [Diátaxis](https://diataxis.fr/) method: **[tutorials/](docs/tutorials/)** (learn by doing — start with [getting-started](docs/tutorials/getting-started.md)), **[how-to/](docs/how-to/)** (run the orchestrator, commit with rationale, sandbox, automate, evaluate models), **[explanation/](docs/explanation/)** (architecture, git-as-memory), **[reference/](docs/reference/)** (CLI, environment variables, commit format, status line, agents & skills).
+Full docs live in [`docs/`](docs/README.md), organized by the [Diátaxis](https://diataxis.fr/) method: **[tutorials/](docs/tutorials/)** (learn by doing — start with [getting-started](docs/tutorials/getting-started.md)), **[how-to/](docs/how-to/)** (run the orchestrator, commit with rationale, sandbox, automate, evaluate models), **[explanation/](docs/explanation/)** (architecture, git-as-memory, static vs dynamic context), **[reference/](docs/reference/)** (CLI, environment variables, commit format, status line, agents & skills).
 
 ## Model evaluation
 
@@ -139,7 +146,9 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 
 ## Telemetry and limits
 
-- **Journal**: every run writes `<feature>/.runs/journal.jsonl` — one JSON line per event (attempt, duration, **$ cost per agent**, reviewer verdict, summary). The summary prints the run's total cost.
+- **Journal**: every run writes `<feature>/.runs/journal.jsonl` — one JSON line per event (attempt, duration, **$ cost per agent**, reviewer verdict, verify/eval failures, summary). The summary prints the run's total cost.
+- **Run report**: `just report [feature] [json=1]` aggregates the journals across features — **first-pass success rate**, mean attempts, cost per role and per model, verify/eval failure clusters. This is the quantified proof the registry arbitration (`lab/models/registry.toml`) calls for.
+- **Context budget**: `just context-budget` prints the static-context payload each role pays on every call (CLAUDE.md + role `.md` + profile); it only gates once `[context] max_static_tokens` is declared in the registry (see [static vs dynamic context](docs/explanation/static-vs-dynamic-context.md)).
 - **Retries with memory**: a retry resumes the SAME agent session (`--resume`) — the agent fixes its work instead of starting over.
 - **Per-agent wall clock**: `LAB_TASK_TIMEOUT` (default 2400 s) kills a stuck agent; the task counts as a failed attempt and the wave continues.
 - **Budget per run**: `LAB_BUDGET_USD` (orchestrator) and `--budget` (eval campaign) — the run stops before the next wave if cost exceeds the cap, notifies, and resumes via `.runs/state.json`. Cost is measured (`--output-format json`), not estimated.
@@ -151,7 +160,7 @@ Fairness by construction (same prompts, isolated trials, measured metrics, no ch
 ## CI
 
 `.github/workflows/gate.yml` mirrors the local merge gate:
-- `just gate-ci` — **non-mutating** lint (`ruff check` + `ruff format --check`, so drift fails CI instead of being silently auto-fixed) + tests + evals (the shim orchestrator suite included).
+- `just gate-ci` — **non-mutating** lint (`ruff check` + `ruff format --check`, so drift fails CI instead of being silently auto-fixed) + tests + evals (the shim orchestrator suite included) + brand guard + lockfile guard (`check-lock`).
 - `lab/engine/ci_checks.sh` — runs `content_guard --against <base>` over changed features (the "substance is sacred" rule, enforced vs the base branch, not a clean-checkout HEAD) plus plan-lint (informational). Fail-safe: skips cleanly if the base ref is unavailable.
 
 ## Trust model (read this)
