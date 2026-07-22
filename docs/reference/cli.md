@@ -87,19 +87,18 @@ script; recipes no-op cleanly when `pyproject.toml` is absent.
 | `check-content feature` | `python3 lab/engine/content_guard.py --git "{{feature}}/spec.md"` (and `design.md` if present) | Substance/form guardrail vs `HEAD`; fails if substance changed without a version bump. |
 | `check-content-ci base="origin/main"` | `BASE="{{base}}" bash lab/engine/ci_checks.sh` | CI substance/form guardrail + plan-lint vs a base branch. |
 | `check-brand` | `python3 lab/engine/brand_guard.py --all` | Brand/proper-noun guard: fails if committed framework content contains a denied name. Scope excludes `work/` + `**/assets/`. |
-| `check-deps` | `python3 lab/engine/dep_guard.py` | Dependency guard: every `pyproject.toml` dep must be in `lab/engine/dep_allowlist.txt` (anti hallucinated-dependency). Orphan allowlist entries warn. |
-| `check-deps-strict` | `python3 lab/engine/dep_guard.py --strict` | CI variant: orphan allowlist entries FAIL — the allowlist is an exact human-validated mirror. |
+| `check-lock` | `uv lock --check` | Lockfile guard: fails when `pyproject.toml` and the committed hash-pinned `uv.lock` disagree (anti hallucinated/swapped dependency). |
 | `report feature="" json=""` | `python3 lab/engine/run_report.py [feature] [--json]` | Run-telemetry report: first-pass rate, attempts, cost per role/model, failure clusters. Read-only. |
 | `check-trajectory feature` | `python3 lab/engine/trajectory_guard.py "{{feature}}"` | Trajectory guard: journal integrity + commit scope of a feature run (HOW, not WHAT). |
 | `context-budget` | `python3 lab/engine/context_budget.py` | Static-context payload per role; gates only once `[context] max_static_tokens` is declared in the registry. |
 | `eval-models layer="all" live="" models=""` | `python3 lab/engine/eval_models.py --layer "{{layer}}" [--live] [--models {{models}}]` | Run the model-eval harness; `--live` calls real (billed) models. |
-| `install` | `uv sync` (if `pyproject.toml`) | Install dependencies. |
+| `install` | `uv sync --locked` (if `pyproject.toml`) | Install dependencies, hash-pinned; refuses an out-of-sync `uv.lock`. |
 | `lint` | `uv run ruff check --fix . && uv run ruff format .` | Mutating lint: auto-fix + format. Local/agent path. |
 | `lint-check` | `uv run ruff check . && uv run ruff format --check .` | Non-mutating lint: fails on drift instead of fixing. |
 | `test` | `uv run pytest -q -m "not eval"` | Run unit/integration tests (excludes evals). |
 | `evals` | `uv run pytest -q -m eval` | Merge gate: run evals. Exit 5 (no eval collected) is treated as success. |
-| `gate` | `lint test evals check-brand check-deps` | Local merge gate (mutating lint). |
-| `gate-ci` | `lint-check test evals check-brand check-deps-strict` | CI merge gate (non-mutating lint). |
+| `gate` | `lint test evals check-brand check-lock` | Local merge gate (mutating lint). |
+| `gate-ci` | `lint-check test evals check-brand check-lock` | CI merge gate (non-mutating lint). |
 
 How-to: [evaluate-models.md](../how-to/evaluate-models.md),
 [commit-with-rationale.md](../how-to/commit-with-rationale.md).
