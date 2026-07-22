@@ -1,11 +1,11 @@
 ---
 type: design
 feature: sdlc-rework
-version: 1.0.0
+version: 1.1.0
 status: validated
 owner: Antoine (Owner)
-validated_by: Owner — 2026-07-21
-spec: ./spec.md          # version : 1.0.0
+validated_by: Owner — 2026-07-21 (amendment 1.1.0: 2026-07-22)
+spec: ./spec.md          # version : 1.1.0
 ---
 
 # Design — SDLC rework
@@ -23,7 +23,7 @@ guards, plus one shared reader. No new dependency (stdlib only — `tomllib`, `j
 | `lab/engine/run_report.py` | `just report [feature]` | no (read-only inspection) |
 | `lab/engine/trajectory_guard.py` | `just check-trajectory <feature>` | no (feature-scoped, post-run) |
 | `lab/engine/context_budget.py` | `just context-budget` | no (soft budget, fails only if declared) |
-| `lab/engine/dep_guard.py` | `just check-deps` | **yes** (gate + gate-ci) |
+| `lab/engine/dep_guard.py` | `just check-deps` / `check-deps-strict` | **yes** (gate; gate-ci runs strict) |
 
 One minimal touch to `lab/engine/orchestrate.py`: journal `verify_fail` / `eval_fail`
 events (one line each) so BHV-1b clustering has data. Event vocabulary stays additive —
@@ -70,6 +70,12 @@ slopsquatting) is defeated by forcing a **human-reviewed** allowlist entry in th
 commit — the checkpoint reviewer sees the new name explicitly. Resolvability is the
 human's 30-second job at allowlist time.
 
+Amendment 1.1.0 (`--strict`, BHV-4a): the plain check is one-directional, so orphan
+allowlist entries (dep removed from pyproject, line left behind) would accumulate —
+and a stale entry lets a later re-add skip human re-review. Strict mode fails on
+orphans and runs in `gate-ci` only: CI enforces the exact mirror, while the local
+`gate` stays warn-only so a mid-refactor worktree isn't blocked.
+
 ### ADR-4 — Soft budget, hard only when declared (BHV-3)
 Failing the gate on a budget nobody has calibrated yet would block every commit on day
 one. The tool always *measures*; it only *gates* once the Owner declares
@@ -94,3 +100,4 @@ restate hard rules).
 | Version | Date | By | Change |
 |---|---|---|---|
 | 1.0.0 | 2026-07-21 | Owner + agent | Initial design, anchored on existing guard patterns |
+| 1.1.0 | 2026-07-22 | Owner | ADR-3 extended: `--strict` orphan check in gate-ci (spec 1.1.0 / BHV-4a) |

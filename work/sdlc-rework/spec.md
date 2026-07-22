@@ -1,10 +1,10 @@
 ---
 type: spec
 feature: sdlc-rework
-version: 1.0.0
+version: 1.1.0
 status: validated
 owner: Antoine (Owner)
-validated_by: Owner — 2026-07-21 (plan approved in session, PR review = final checkpoint)
+validated_by: Owner — 2026-07-21 (plan approved in session, PR review = final checkpoint); amendment 1.1.0 approved 2026-07-22
 ---
 
 # Spec — SDLC rework (whitepaper gap closure)
@@ -72,6 +72,10 @@ dependency entering `pyproject.toml` without a human-reviewed allowlist entry.
 - **Given** `pyproject.toml` and `lab/engine/dep_allowlist.txt`
 - **Then** any declared dependency whose canonical name is absent from the allowlist
   fails the gate (rc 1), naming the offending package.
+- **Edge cases:** BHV-4a — with `--strict` (the CI path), an allowlist entry matching
+  no declared dependency ALSO fails (rc 1): the allowlist is an exact human-validated
+  mirror, never a superset — a stale entry would let a later re-add of that package
+  skip human re-review. Without `--strict` (local path), orphans are only warned.
 
 ### BHV-5 — Vendor-neutral context entry point
 - **Given** a coding agent that reads `AGENTS.md` (not `CLAUDE.md`)
@@ -133,6 +137,7 @@ covers: [BHV-4, INV-3]
 | EVAL-3 | deterministic | EX-3 fails rc 1; allowlisted pyproject passes | BHV-4, INV-3 | 100% |
 | EVAL-4 | deterministic | budget exceeded ⇒ rc 1; no declared budget ⇒ rc 0 with table | BHV-3 | 100% |
 | EVAL-5 | deterministic | root `AGENTS.md` exists, references CLAUDE.md, duplicates no hard rule | BHV-5 | 100% |
+| EVAL-6 | deterministic | orphan allowlist entry ⇒ rc 1 with `--strict`, rc 0 (warn) without; exact mirror ⇒ rc 0 in both | BHV-4a | 100% |
 
 ## 8. Open questions
 
@@ -144,3 +149,4 @@ is the PR review.
 | Version | Date | By | Change |
 |---|---|---|---|
 | 1.0.0 | 2026-07-21 | Owner + agent | Initial contract from the whitepaper gap analysis |
+| 1.1.0 | 2026-07-22 | Owner | BHV-4a + EVAL-6: `--strict` orphan check — Owner raised the double-list drift concern (allowlist ∖ pyproject accumulates silently); decision: exact mirror enforced in CI, warn-only locally |

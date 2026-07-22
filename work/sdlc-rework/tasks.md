@@ -1,12 +1,12 @@
 ---
 type: tasks
 feature: sdlc-rework
-version: 1.0.0
+version: 1.1.0
 status: approved
 generated_by: agent (session 2026-07-21)
-approved_by: Owner — 2026-07-21 (in session; final checkpoint = PR review)
-spec: ./spec.md          # version : 1.0.0
-design: ./design.md      # version : 1.0.0
+approved_by: Owner — 2026-07-21 (in session; final checkpoint = PR review); T6 added on spec amendment 1.1.0 (2026-07-22)
+spec: ./spec.md          # version : 1.1.0
+design: ./design.md      # version : 1.1.0
 ---
 
 # Tasks — SDLC rework
@@ -17,7 +17,8 @@ design: ./design.md      # version : 1.0.0
 flowchart TD
     T1[T1 Run report] --> T2[T2 Trajectory guard]
     T3[T3 Context budget + ADR doc] --> CP1{{CP-1 PR review}}
-    T4[T4 Dependency guard] --> CP1
+    T4[T4 Dependency guard] --> T6[T6 Strict orphan check]
+    T6 --> CP1
     T2 --> CP1
     T5[T5 AGENTS.md shim] --> CP1
 ```
@@ -73,9 +74,19 @@ flowchart TD
 - **done_when :** EVAL-5 green
 - **verify :** `uv run pytest -q tests/sdlc_rework`
 
+### T6 — Strict orphan check for the dependency guard
+- **agent :** implementer · **depends_on :** [T4] · **parallel_group :** B
+- **implements :** [BHV-4a, EVAL-6]
+- **files_touched :** `lab/engine/dep_guard.py`, `justfile`, `docs/reference/cli.md`, `tests/sdlc_rework/`
+- **prompt :**
+  > Add `--strict` to dep_guard per spec BHV-4a (orphan allowlist entries fail),
+  > recipe `check-deps-strict`, wire it into `gate-ci` (local `gate` stays non-strict).
+- **done_when :** EVAL-6 green
+- **verify :** `uv run pytest -q tests/sdlc_rework`
+
 ### CP-1 — Final review (human)
 - **type :** checkpoint · **mode :** blocking (human — final checkpoint is always human)
-- **trigger :** when [T1, T2, T3, T4, T5] are done
+- **trigger :** when [T1, T2, T3, T4, T5, T6] are done
 - **reviewer :** Jules RUBIN (GitHub PR review)
 - **done_when :** PR approved and merged by a human
 
