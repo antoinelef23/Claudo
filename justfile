@@ -2,6 +2,21 @@
 # orchestrator reuse them). Tolerant: with no pyproject.toml the targets no-op
 # cleanly so hooks don't break on the empty skeleton.   Run `just` to list.
 
+# Bootstrap a NEW project from the portable framework only — no work/, src/,
+# tests/, evals/golden (this repo's own product content stays behind).
+# dir can be relative or absolute:  just scaffold ../my-new-project
+scaffold dir:
+    #!/usr/bin/env bash
+    set -euo pipefail
+    mkdir -p "{{dir}}/evals"
+    cp -R CLAUDE.md AGENTS.md README.md justfile .gitignore "{{dir}}/"
+    cp -R .githooks .github lab .claude docs "{{dir}}/"
+    cp -R evals/behavioral "{{dir}}/evals/"
+    uv init --bare --vcs none "{{dir}}"
+    uv --directory "{{dir}}" add --dev pytest ruff
+    echo "✅ scaffolded portable framework into {{dir}}"
+    echo "   next: cd {{dir}} && git init && git add -A && git commit -m 'chore: bootstrap AI-native lab skeleton'"
+
 # Plan-lint of a feature:  just validate work/my-feature
 validate feature:
     python3 lab/engine/orchestrate.py "{{feature}}" --validate
